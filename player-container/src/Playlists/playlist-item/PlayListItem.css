@@ -1,0 +1,7 @@
+/* PlayListItem.css because theme overrides */
+
+.PlayListItem .MuiTypography-root {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}

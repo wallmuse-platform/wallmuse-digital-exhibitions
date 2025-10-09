@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playlist Switching Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .test-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Playlist Switching Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Status</h2>
+        <div id="testStatus" class="status info">Ready to test playlist switching</div>
+        <button id="checkStatus" class="test-button">Check Current Status</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Playlist Switching Tests</h2>
+        <button id="testDefaultPlaylist" class="test-button">Switch to Default Playlist</button>
+        <button id="testPlaylist1" class="test-button">Switch to Playlist 1</button>
+        <button id="testPlaylist2" class="test-button">Switch to Playlist 2</button>
+        <button id="testPlaylist3" class="test-button">Switch to Playlist 3</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Montage Navigation Tests</h2>
+        <button id="testMontage0" class="test-button">Go to Montage 0</button>
+        <button id="testMontage1" class="test-button">Go to Montage 1</button>
+        <button id="testMontage2" class="test-button">Go to Montage 2</button>
+        <button id="testMontageById1" class="test-button">Go to Montage ID 1</button>
+        <button id="testMontageById2" class="test-button">Go to Montage ID 2</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Debug Commands</h2>
+        <button id="getPlaybackState" class="test-button">Get Playback State</button>
+        <button id="executePlay" class="test-button">Execute Play</button>
+        <button id="executePause" class="test-button">Execute Pause</button>
+        <button id="executeStop" class="test-button">Execute Stop</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Log</h2>
+        <div id="testLog" class="log"></div>
+        <button id="clearLog" class="test-button">Clear Log</button>
+    </div>
+
+    <script>
+        // Test logging function
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `status ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[TEST] ${message}`);
+        }
+
+        // Check if required functions are available
+        function checkAvailability() {
+            const required = [
+                'window.debugCommands',
+                'window.debugCommands.testPlaylistSwitch',
+                'window.debugCommands.testMontageNavigation',
+                'window.debugCommands.getPlaybackState',
+                'window.debugCommands.executePlay',
+                'window.debugCommands.executePause',
+                'window.debugCommands.executeStop'
+            ];
+            
+            const missing = required.filter(item => {
+                try {
+                    return !eval(item);
+                } catch (e) {
+                    return true;
+                }
+            });
+            
+            if (missing.length > 0) {
+                log(`Missing required functions: ${missing.join(', ')}`, 'error');
+                return false;
+            }
+            
+            log('All required functions are available', 'success');
+            return true;
+        }
+
+        // Wait for page to load and check availability
+        window.addEventListener('load', () => {
+            log('Page loaded, checking function availability...');
+            
+            // Wait a bit for React app to initialize
+            setTimeout(() => {
+                if (checkAvailability()) {
+                    document.getElementById('testStatus').textContent = 'Ready to test playlist switching';
+                    document.getElementById('testStatus').className = 'status success';
+                } else {
+                    document.getElementById('testStatus').textContent = 'Some functions are not available - check console';
+                    document.getElementById('testStatus').className = 'status error';
+                }
+            }, 2000);
+        });
+
+        // Test playlist switching
+        document.getElementById('testDefaultPlaylist').addEventListener('click', () => {
+            log('Testing switch to default playlist...');
+            try {
+                window.debugCommands.testPlaylistSwitch();
+                log('Default playlist switch command sent', 'success');
+            } catch (error) {
+                log(`Error testing default playlist switch: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('testPlaylist1').addEventListener('click', () => {
+            log('Testing switch to playlist 1...');
+            try {
+                window.debugCommands.testPlaylistSwitch('1');
+                log('Playlist 1 switch command sent', 'success');
+            } catch (error) {
+                log(`Error testing playlist 1 switch: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('testPlaylist2').addEventListener('click', () => {
+            log('Testing switch to playlist 2...');
+            try {
+                window.debugCommands.testPlaylistSwitch('2');
+                log('Playlist 2 switch command sent', 'success');
+            } catch (error) {
+                log(`Error testing playlist 2 switch: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('testPlaylist3').addEventListener('click', () => {
+            log('Testing switch to playlist 3...');
+            try {
+                window.debugCommands.testPlaylistSwitch('3');
+                log('Playlist 3 switch command sent', 'success');
+            } catch (error) {
+                log(`Error testing playlist 3 switch: ${error}`, 'error');
+            }
+        });
+
+        // Test montage navigation
+        document.getElementById('testMontage0').addEventListener('click', () => {
+            log('Testing navigation to montage 0...');
+            try {
+                window.debugCommands.testCommand('montage', '0');
+                log('Montage 0 navigation command sent', 'success');
+            } catch (error) {
+                log(`Error testing montage 0 navigation: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('testMontage1').addEventListener('click', () => {
+            log('Testing navigation to montage 1...');
+            try {
+                window.debugCommands.testCommand('montage', '1');
+                log('Montage 1 navigation command sent', 'success');
+            } catch (error) {
+                log(`Error testing montage 1 navigation: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('testMontage2').addEventListener('click', () => {
+            log('Testing navigation to montage 2...');
+            try {
+                window.debugCommands.testCommand('montage', '2');
+                log('Montage 2 navigation command sent', 'success');
+            } catch (error) {
+                log(`Error testing montage 2 navigation: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('testMontageById1').addEventListener('click', () => {
+            log('Testing navigation to montage ID 1...');
+            try {
+                window.debugCommands.testMontageNavigation(1);
+                log('Montage ID 1 navigation command sent', 'success');
+            } catch (error) {
+                log(`Error testing montage ID 1 navigation: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('testMontageById2').addEventListener('click', () => {
+            log('Testing navigation to montage ID 2...');
+            try {
+                window.debugCommands.testMontageNavigation(2);
+                log('Montage ID 2 navigation command sent', 'success');
+            } catch (error) {
+                log(`Error testing montage ID 2 navigation: ${error}`, 'error');
+            }
+        });
+
+        // Debug commands
+        document.getElementById('getPlaybackState').addEventListener('click', () => {
+            log('Getting playback state...');
+            try {
+                const state = window.debugCommands.getPlaybackState();
+                log(`Playback state: ${JSON.stringify(state, null, 2)}`, 'success');
+            } catch (error) {
+                log(`Error getting playback state: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('executePlay').addEventListener('click', () => {
+            log('Executing play command...');
+            try {
+                window.debugCommands.executePlay();
+                log('Play command sent', 'success');
+            } catch (error) {
+                log(`Error executing play command: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('executePause').addEventListener('click', () => {
+            log('Executing pause command...');
+            try {
+                window.debugCommands.executePause();
+                log('Pause command sent', 'success');
+            } catch (error) {
+                log(`Error executing pause command: ${error}`, 'error');
+            }
+        });
+
+        document.getElementById('executeStop').addEventListener('click', () => {
+            log('Executing stop command...');
+            try {
+                window.debugCommands.executeStop();
+                log('Stop command sent', 'success');
+            } catch (error) {
+                log(`Error executing stop command: ${error}`, 'error');
+            }
+        });
+
+        // Check current status
+        document.getElementById('checkStatus').addEventListener('click', () => {
+            log('Checking current status...');
+            try {
+                if (window.debugCommands && window.debugCommands.getPlaybackState) {
+                    const state = window.debugCommands.getPlaybackState();
+                    log(`Current status: ${JSON.stringify(state, null, 2)}`, 'success');
+                } else {
+                    log('Debug commands not available yet', 'error');
+                }
+            } catch (error) {
+                log(`Error checking status: ${error}`, 'error');
+            }
+        });
+
+        // Clear log
+        document.getElementById('clearLog').addEventListener('click', () => {
+            document.getElementById('testLog').innerHTML = '';
+            log('Log cleared');
+        });
+
+        // Log page load
+        log('Test page loaded successfully');
+    </script>
+</body>
+</html> 

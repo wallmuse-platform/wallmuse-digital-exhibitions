@@ -1,0 +1,52 @@
+body.wm-player {
+  /*width: 100%;*/
+  /*height: 100%;*/
+  overflow: hidden;
+  margin: 0;
+}
+
+#root-wm-player {
+  background-color: #000;
+  color: #ccc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
+    'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-size: 10px;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Ensure the web player container fills available space and stays above overlays */
+#root-wm-player {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+}
+
+#wm-player-contents {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  background: #000;
+}
+
+#root-wm-player video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  z-index: 10000;
+}
+
+/* Image and video styles moved to App.css for better organization */

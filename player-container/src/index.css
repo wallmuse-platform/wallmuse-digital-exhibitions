@@ -1,0 +1,14 @@
+/* index.css */
+
+/* @tailwind base;
+@tailwind components;
+@tailwind utilities; */
+
+/* mui changes due to wp overrides */
+.react-root button:not([class*="Mui"]),
+.react-root input[type=button]:not([class*="Mui"]),
+.react-root input[type=submit]:not([class*="Mui"]) 
+
+{
+  all: unset ;
+}

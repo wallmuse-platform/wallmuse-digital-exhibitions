@@ -1,0 +1,95 @@
+#!/bin/sh
+# Production Deployment Script
+# Copy this file to build-ok.sh and configure with your server details
+
+echo "Script started at: $(date)"
+
+DIR=$(dirname "$0")
+DIR=$(cd "$DIR"; pwd)
+cd "$DIR/.."
+
+# Build React app
+if ! npm run build; then
+    echo "Build failed at: $(date)"
+    exit 1
+fi
+
+TIMESTAMP=$(date +%s)
+
+# ===================================
+# CONFIGURATION - Update these values
+# ===================================
+SSH_USER="your-username"
+SSH_HOST="your-server.com"
+SSH_CONNECTION="${SSH_USER}@${SSH_HOST}"
+
+# Remote paths on your server
+REMOTE_PHP_PATH="/path/to/your/wordpress/wp-content/themes/your-theme/wm_v4_player_static.php"
+REMOTE_ASSETS_PATH="/path/to/your/wordpress/wp-content/themes/your-theme/play-v4-assets/"
+
+# Asset URL path in your WordPress site
+ASSET_URL_PATH="/wp-content/themes/your-theme/play-v4-assets"
+
+# ===================================
+
+# Fetch remote PHP file
+rsync -Paq "${SSH_CONNECTION}:${REMOTE_PHP_PATH}" /tmp/
+
+# Extract JS and CSS filenames from index.html
+JS=$(sed 's/.*static.js.//' build/index.html | sed 's/\">.*//')
+CSS=$(sed 's/.*static.css.//' build/index.html | sed 's/\" .*//')
+
+# Extract all chunk filenames and create script tags
+CHUNK_SCRIPTS=""
+echo "Searching for chunks in: build/static/js/"
+
+for chunk_file in build/static/js/*.chunk.js; do
+    if [ -f "$chunk_file" ]; then
+        chunk_name=$(basename "$chunk_file")
+        echo "Found chunk: $chunk_name"
+        CHUNK_SCRIPTS="$CHUNK_SCRIPTS<script src=\"${ASSET_URL_PATH}/js/$chunk_name?v=$TIMESTAMP\" async></script>\\n"
+    fi
+done
+
+# Debugging log
+echo "JS Filename: $JS"
+echo "CSS Filename: $CSS"
+echo "Chunk scripts: $CHUNK_SCRIPTS"
+
+# Modify PHP file with new JS/CSS filenames and timestamp
+perl -pi -e "s#css/main[^\\\"]+#css/$CSS?v=$TIMESTAMP#" /tmp/wm_v4_player_static.php
+perl -pi -e "s#js/main[^\\\"]+#js/$JS?v=$TIMESTAMP#" /tmp/wm_v4_player_static.php
+
+# Remove existing chunk script tags first
+perl -pi -e "s#<script src=\"${ASSET_URL_PATH}/js/[^/]+\\.chunk\\.js[^>]*></script>\\s*##g" /tmp/wm_v4_player_static.php
+
+# Insert chunk script tags BEFORE the main script tag
+if [ -n "$CHUNK_SCRIPTS" ]; then
+    echo "Adding chunk scripts to PHP file..."
+    perl -pi -e "s#(<script src=\"${ASSET_URL_PATH}/js/main[^\\\"]+\")#$CHUNK_SCRIPTS\\$1#" /tmp/wm_v4_player_static.php
+    echo "Chunk scripts added successfully"
+else
+    echo "No chunk scripts to add"
+fi
+
+# View first few lines of the modified PHP file for debugging
+echo "=== Modified PHP file preview ==="
+head -n 20 /tmp/wm_v4_player_static.php
+
+# Upload modified PHP file back to the server
+rsync -Pav /tmp/wm_v4_player_static.php "${SSH_CONNECTION}:${REMOTE_PHP_PATH}"
+
+# Upload static assets - IMPORTANT: This includes all chunks
+rsync -Pav --delete build/static/ "${SSH_CONNECTION}:${REMOTE_ASSETS_PATH}"
+
+echo "All files uploaded"
+
+# Increment service worker versions (if applicable)
+if [ -f "$DIR/increment-sw-version.sh" ]; then
+    echo ""
+    echo "🔄 Incrementing service worker versions..."
+    "$DIR/increment-sw-version.sh"
+fi
+
+echo ""
+echo "Script ended at: $(date)"
