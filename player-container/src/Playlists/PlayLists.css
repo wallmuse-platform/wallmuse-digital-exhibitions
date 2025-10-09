@@ -1,0 +1,57 @@
+.Playlists {
+  text-align: center;
+  min-width: 560px;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.Playlists-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .Playlists-logo {
+    animation: Playlists-logo-spin infinite 20s linear;
+  }
+}
+
+.Playlists-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.Playlists-link {
+  color: #61dafb;
+}
+
+@keyframes Playlists-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.card {
+  background-color: red;
+  width: 50px;
+  height: 50px;
+}
+
+.uniqueContainerClassName button {
+  padding: unset;
+  line-height: 1rem;
+}
+.uniqueContainerClassName {
+  line-height:  1rem;
+  font-size: .8rem;
+}

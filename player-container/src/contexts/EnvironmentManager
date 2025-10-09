@@ -1,0 +1,39 @@
+//EnvironmentManager.js
+
+import React from 'react';
+import { useEnvironments } from './EnvironmentsContext';
+
+const EnvironmentManager = () => {
+    const { environments, setEnvironments, screens, setScreens } = useEnvironments();
+
+    const addEnvironment = () => {
+        const newEnvironment = { id: Date.now(), name: "New Environment", screens: [] };
+        setEnvironments([...environments, newEnvironment]);
+    };
+
+    const addScreenToEnvironment = (environmentId) => {
+        const newScreen = { id: Date.now(), name: "New Screen", width: 1280, height: 720 };
+        const updatedEnvironments = environments.map(env =>
+            env.id === environmentId ? { ...env, screens: [...env.screens, newScreen] } : env
+        );
+        setEnvironments(updatedEnvironments);
+    };
+
+    return (
+        <div>
+            <h1>Manage Environments</h1>
+            {environments.map(env => (
+                <div key={env.id}>
+                    <h2>{env.name}</h2>
+                    <button onClick={() => addScreenToEnvironment(env.id)}>Add Screen</button>
+                    {env.screens.map(screen => (
+                        <p key={screen.id}>{screen.name}</p>
+                    ))}
+                </div>
+            ))}
+            <button onClick={addEnvironment}>Add Environment</button>
+        </div>
+    );
+};
+
+export default EnvironmentManager;

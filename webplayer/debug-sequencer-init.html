@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sequencer Init Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 3px; }
+        .status.true { background-color: #d4edda; color: #155724; }
+        .status.false { background-color: #f8d7da; color: #721c24; }
+        .status.undefined { background-color: #fff3cd; color: #856404; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .log { background: #f8f9fa; padding: 10px; margin: 10px 0; border-radius: 3px; font-family: monospace; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>Sequencer Initialization Debug Tool</h1>
+    
+    <div class="debug-section">
+        <h3>Current Status</h3>
+        <div id="status-display">
+            <div class="status undefined">Loading...</div>
+        </div>
+        <button onclick="checkStatus()">Refresh Status</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+    
+    <div class="debug-section">
+        <h3>Actions</h3>
+        <button onclick="callMarkSequencerInit()">Call markSequencerInitialized()</button>
+        <button onclick="checkWindowObjects()">Check Window Objects</button>
+        <button onclick="simulateItemPlayer()">Simulate ItemPlayer Call</button>
+    </div>
+    
+    <div class="debug-section">
+        <h3>Debug Log</h3>
+        <div id="debug-log" class="log"></div>
+    </div>
+    
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('debug-log');
+            const timestamp = new Date().toISOString();
+            logDiv.textContent += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('debug-log').textContent = '';
+        }
+        
+        function checkStatus() {
+            log('=== Checking Status ===');
+            
+            // Check if window objects exist
+            const hasMarkSequencerInit = typeof window.markSequencerInitialized === 'function';
+            const hasTheApp = typeof window.TheApp !== 'undefined';
+            const hasGetStatus = typeof window.getSequencerInitStatus === 'function';
+            
+            log(`window.markSequencerInitialized: ${hasMarkSequencerInit ? 'EXISTS' : 'MISSING'}`);
+            log(`window.TheApp: ${hasTheApp ? 'EXISTS' : 'MISSING'}`);
+            log(`window.getSequencerInitStatus: ${hasGetStatus ? 'EXISTS' : 'MISSING'}`);
+            
+            // Try to get status if available
+            if (hasGetStatus) {
+                try {
+                    const status = window.getSequencerInitStatus();
+                    log(`Status from getSequencerInitStatus(): ${JSON.stringify(status, null, 2)}`);
+                } catch (error) {
+                    log(`Error calling getSequencerInitStatus(): ${error.message}`);
+                }
+            }
+            
+            // Try to check TheApp directly
+            if (hasTheApp) {
+                try {
+                    log(`TheApp type: ${typeof window.TheApp}`);
+                    if (window.TheApp && typeof window.TheApp.getSequencerInitStatus === 'function') {
+                        const status = window.TheApp.getSequencerInitStatus();
+                        log(`Status from TheApp.getSequencerInitStatus(): ${JSON.stringify(status, null, 2)}`);
+                    }
+                    if (window.TheApp && typeof window.TheApp.isSequencerInitialized !== 'undefined') {
+                        log(`TheApp.isSequencerInitialized: ${window.TheApp.isSequencerInitialized}`);
+                    }
+                } catch (error) {
+                    log(`Error checking TheApp: ${error.message}`);
+                }
+            }
+            
+            // Update status display
+            updateStatusDisplay(hasMarkSequencerInit, hasTheApp, hasGetStatus);
+        }
+        
+        function updateStatusDisplay(hasMarkSequencerInit, hasTheApp, hasGetStatus) {
+            const statusDiv = document.getElementById('status-display');
+            statusDiv.innerHTML = `
+                <div class="status ${hasMarkSequencerInit ? 'true' : 'false'}">
+                    markSequencerInitialized: ${hasMarkSequencerInit ? 'AVAILABLE' : 'MISSING'}
+                </div>
+                <div class="status ${hasTheApp ? 'true' : 'false'}">
+                    TheApp: ${hasTheApp ? 'AVAILABLE' : 'MISSING'}
+                </div>
+                <div class="status ${hasGetStatus ? 'true' : 'false'}">
+                    getSequencerInitStatus: ${hasGetStatus ? 'AVAILABLE' : 'MISSING'}
+                </div>
+            `;
+        }
+        
+        function callMarkSequencerInit() {
+            log('=== Calling markSequencerInitialized() ===');
+            
+            if (typeof window.markSequencerInitialized === 'function') {
+                try {
+                    log('Calling window.markSequencerInitialized()...');
+                    window.markSequencerInitialized();
+                    log('✅ markSequencerInitialized() called successfully');
+                    
+                    // Check status after call
+                    setTimeout(() => {
+                        log('=== Status after markSequencerInitialized() ===');
+                        checkStatus();
+                    }, 100);
+                    
+                } catch (error) {
+                    log(`❌ Error calling markSequencerInitialized(): ${error.message}`);
+                }
+            } else {
+                log('❌ markSequencerInitialized function not available');
+            }
+        }
+        
+        function checkWindowObjects() {
+            log('=== Checking Window Objects ===');
+            
+            // List all window properties that might be related
+            const relevantProps = Object.getOwnPropertyNames(window).filter(name => 
+                name.toLowerCase().includes('sequencer') || 
+                name.toLowerCase().includes('app') || 
+                name.toLowerCase().includes('mark') ||
+                name.toLowerCase().includes('init')
+            );
+            
+            log(`Relevant window properties: ${relevantProps.join(', ')}`);
+            
+            // Check specific properties
+            relevantProps.forEach(prop => {
+                try {
+                    const value = window[prop];
+                    const type = typeof value;
+                    log(`${prop}: ${type} ${type === 'function' ? '(function)' : type === 'object' ? '(object)' : `(${value})`}`);
+                } catch (error) {
+                    log(`${prop}: ERROR - ${error.message}`);
+                }
+            });
+        }
+        
+        function simulateItemPlayer() {
+            log('=== Simulating ItemPlayer Call ===');
+            
+            if (typeof window.TheApp !== 'undefined' && window.TheApp.markSequencerInitialized) {
+                try {
+                    log('Simulating ItemPlayer calling TheApp.markSequencerInitialized()...');
+                    window.TheApp.markSequencerInitialized();
+                    log('✅ Simulated call successful');
+                    
+                    // Check status after call
+                    setTimeout(() => {
+                        log('=== Status after simulated call ===');
+                        checkStatus();
+                    }, 100);
+                    
+                } catch (error) {
+                    log(`❌ Error in simulated call: ${error.message}`);
+                }
+            } else {
+                log('❌ Cannot simulate - TheApp.markSequencerInitialized not available');
+            }
+        }
+        
+        // Auto-check status every 2 seconds
+        setInterval(checkStatus, 2000);
+        
+        // Initial check
+        setTimeout(checkStatus, 1000);
+        
+        log('Debug tool loaded. Status will be checked automatically every 2 seconds.');
+        log('Open this page in the same browser as your React app to debug the sequencer initialization.');
+    </script>
+</body>
+</html> 

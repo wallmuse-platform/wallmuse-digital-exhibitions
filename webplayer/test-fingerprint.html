@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fingerprint Test</title>
+    <script src="https://unpkg.com/fast-sha256@0.10.1/dist/sha256.min.js"></script>
+</head>
+<body>
+    <h1>Fingerprint Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        // Copy the fingerprint functions from your codebase
+        const i2hex = (i) => {
+            return ('0' + i.toString(16)).slice(-2);
+        }
+
+        const getCanvasFP = () => {
+            const canvas = document.createElement('canvas');
+            if (!canvas.getContext || !canvas.getContext('2d')) {
+                return '';
+            }
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return '';
+            }
+            const txt = 'TheQuickBrownFoxJumpsOverTheLazyDog';
+            ctx.textBaseline = 'top';
+            ctx.font = "14px 'Arial'";
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillStyle = '#f60';
+            ctx.fillRect(125, 1, 62, 20);
+            ctx.fillStyle = '#069';
+            ctx.fillText(txt, 2, 15);
+            ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+            ctx.fillText(txt, 4, 17);
+            return canvas.toDataURL();
+        }
+
+        const getUserAgentFP = () => {
+            return navigator.userAgent || '';
+        }
+
+        const getNavigatorPropsFP = () => {
+            let s = '';
+            for(const prop in navigator) {
+                s += prop + '-';
+            }
+            s += navigator.hardwareConcurrency + '-' + navigator.platform;
+            return s;
+        }
+
+        const getScreenFP = () => {
+            const s = screen;
+            return '' + s.width + 'x' + s.height + '-' + s.availWidth + 'x' + s.availHeight  + '-' + s.colorDepth + '-' + s.pixelDepth;
+        }
+
+        const getFingerprint = () => {
+            const s = getCanvasFP() + getUserAgentFP() + getNavigatorPropsFP() + getScreenFP();
+            return Array.from(sha256.hash(new TextEncoder().encode(s))).map(i2hex).join('');
+        };
+
+        // Test the function
+        function testFingerprint() {
+            const results = document.getElementById('results');
+            
+            // Test 1: Generate fingerprint
+            const fingerprint = getFingerprint();
+            results.innerHTML += `<h3>Generated Fingerprint:</h3><p>${fingerprint}</p>`;
+            
+            // Test 2: Check consistency (should be same on same browser)
+            const fingerprint2 = getFingerprint();
+            results.innerHTML += `<h3>Consistency Test:</h3><p>First: ${fingerprint}</p><p>Second: ${fingerprint2}</p><p>Match: ${fingerprint === fingerprint2 ? '✅ YES' : '❌ NO'}</p>`;
+            
+            // Test 3: Show individual components
+            results.innerHTML += `<h3>Individual Components:</h3>`;
+            results.innerHTML += `<p><strong>Canvas:</strong> ${getCanvasFP().substring(0, 50)}...</p>`;
+            results.innerHTML += `<p><strong>User Agent:</strong> ${getUserAgentFP()}</p>`;
+            results.innerHTML += `<p><strong>Navigator:</strong> ${getNavigatorPropsFP().substring(0, 100)}...</p>`;
+            results.innerHTML += `<p><strong>Screen:</strong> ${getScreenFP()}</p>`;
+            
+            // Test 4: Length check
+            results.innerHTML += `<h3>Validation:</h3>`;
+            results.innerHTML += `<p>Length: ${fingerprint.length} characters (should be 64 for SHA-256)</p>`;
+            results.innerHTML += `<p>Valid hex: ${/^[0-9a-f]{64}$/.test(fingerprint) ? '✅ YES' : '❌ NO'}</p>`;
+        }
+        
+        // Run test when page loads
+        window.onload = testFingerprint;
+    </script>
+</body>
+</html> 

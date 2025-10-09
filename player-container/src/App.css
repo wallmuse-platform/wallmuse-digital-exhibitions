@@ -1,0 +1,299 @@
+/**
+ * Base styles for the app
+ */
+
+.App {
+  text-align: center;
+
+}
+
+/* Replace #webPlayer with .wmplayer-container */
+.wm-player-container {
+  position: relative;
+  width: 100%;
+  height: auto;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Styles for the inner content */
+.wm-player-contents {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 36.25vw; /* Minimum height for smaller screens */
+}
+
+/* Video and image styling */
+.wm-player-contents video,
+.wm-player-contents img {
+  /* position: absolute; */
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+/* Aspect ratio variants */
+.wm-player-contents video.square {
+  padding-bottom: 100%; /* For square videos, maintain a 1:1 aspect ratio */
+}
+
+.wm-player-contents video.wide {
+  padding-bottom: 42.857%; /* For videos wider than 16:9, e.g., 21:9 */
+}
+
+.wm-player-contents video.full {
+  padding-bottom: 0;
+  height: 100%; /* Ensures it fills the screen */
+}
+
+/* Progress bar container styles */
+#progess_container {
+  width: 100%;
+  line-height: 2px;
+  margin-top: -11px;
+}
+
+#progess_container progress {
+  background-color: var(--nv-dark-bg);
+  border: none;
+  height: 3px;
+  width: 100%;
+  margin: -10px 0;
+}
+
+/* Timer styling */
+#timer {
+  display: block;
+  font-size: 0.5rem;
+}
+
+/* More specific selectors for stubborn WP themes */
+
+[class*="css-"] .player_commands .tabs_icon,
+[class*="css-"] .player_commands2 .tabs_icon,
+[class*="css-"] .playlists .tabs_icon,
+[class*="css-"] .showmontages .tabs_icon,
+[class*="css-"] .tabbuttons .tabs_icon {
+    fill: currentColor !important;
+    display: inline-block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Base icon size */
+.tabs_icon {
+  font-size: 24px;
+}
+
+/* Device-specific icon sizes */
+.small-icon {
+  font-size: 22px;
+}
+
+.tablet-icon {
+  font-size: 24px;
+}
+
+.hd-icon {
+  font-size: 28px;
+}
+
+.uhd-icon {
+  font-size: 32px;
+}
+
+.large-icon {
+  font-size: 36px;
+}
+
+.xlarge-icon {
+  font-size: 42px;
+}
+
+/* Core player command styles - apply to both rows */
+.player_commands {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  box-sizing: border-box;
+}
+
+/* Make all controls align on a single line */
+.player_commands .MuiGrid-container {
+  align-items: center;
+}
+
+/* Fix volume control alignment */
+.player_commands .MuiStack-root {
+  align-items: center;
+  height: 100%;
+}
+
+
+/* Center the control buttons */
+.player_commands .MuiGrid-item {
+  display: flex;
+  align-items: center;
+}
+
+/* Volume slider alignment */
+.player_commands .MuiSlider-root {
+  margin: 0 4px;
+  padding: 0;
+}
+
+/* Modal styles for larger screens */
+.modal {
+  width: 80%;
+  height: 80%;
+}
+
+/* General styles for grid containers */
+.grid-container {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+               "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+               sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 16px;
+}
+
+/* Specific overrides for unique container */
+.uniqueContainerClassName button {
+  padding: unset;
+  line-height: 1rem;
+}
+
+.uniqueContainerClassName {
+  line-height: 1rem;
+  font-size: 0.8rem;
+}
+
+/* Specific styles for Material UI Slider */
+.css-1v0hrnl-MuiSlider-root {
+  width: 50% ! important;
+}
+
+/* Margin adjustment for icons */
+.tabs_icon {
+  margin: 8px 0;
+}
+
+/* PlayLists */
+
+
+
+/* PlayListItem */
+
+/* .addPlaylistButtonContainer {} */
+
+.numberOfTracksButtonContainer {
+  margin-left: 0 ! important; 
+}
+
+/* Mui overides */
+.react-root button:not([class*="Mui"]) + :not(style) ~ :not(style) {
+  margin: 0;
+}
+
+@media only screen and (max-width: 960px) {
+  body {
+    font-size: 14px;
+  }
+  .tabs_icon {
+    margin-left:0;
+  }
+  .tabs_text {
+    font-size: 0 ! important; 
+  }
+  .tabs_text2 {
+    font-size: 16px ! important; 
+  }
+  /* when solely icons so centred */
+  .MuiButton-endIcon.MuiButton-iconSizeMedium {
+    margin-left: 0 ! important;
+  }
+  /* General player command styles */
+  .player_commands, .player_commands2 {
+    margin: auto 0;
+  }
+
+}
+
+@media tv {
+  body {
+    font-size: 24px;
+  }
+  .tabs_icon {
+    font-size: 40px;
+  }
+  .tabs_text {
+    font-size: 32px;
+  }
+  .tabs_text2 {
+    font-size: 32px;
+  }
+}
+
+
+ /**
+ * Screen permission dialog component
+ */
+
+.screen-permission-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  max-width: 500px;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  text-align: center;
+}
+
+.screen-permission-dialog h3 {
+  margin-top: 0;
+  font-size: 1.5rem;
+}
+
+.screen-permission-dialog p {
+  margin: 10px 0;
+  line-height: 1.5;
+}
+
+.permission-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.permission-accept-button, .permission-decline-button {
+  min-width: 120px;
+}
+
+/* Overlay track, montage, playlist */
+
+@keyframes fadeOut {
+  0% { 
+    opacity: 1; 
+  }
+  70% { 
+    opacity: 1; 
+  }
+  100% { 
+    opacity: 0; 
+  }
+}
+
+.overlay-fade {
+  animation: fadeOut 30s ease-out forwards;
+}
+
