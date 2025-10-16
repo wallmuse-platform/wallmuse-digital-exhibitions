@@ -25,6 +25,9 @@ node_modules/
 *~
 .DS_Store
 
+# Claude Code configuration
+.claude_project_rules
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
