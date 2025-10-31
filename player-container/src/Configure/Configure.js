@@ -14,7 +14,7 @@ import {
     isScreenActive
 } from '../utils/environmentUtils';
 
-export function ConfigureDisplays(t) {
+export function ConfigureDisplays({ t, onClose, handleAction }) {
     console.log('Configure component is called');
 
     const { houses, house, environments, setEnvironments } = useEnvironments();
@@ -243,6 +243,8 @@ export function ConfigureDisplays(t) {
                 handleRemoveEnvironment={handleRemoveEnvironment}
                 handleDeactivateEnvironment={handleDeactivateEnvironment}
                 onEnvironmentGroupUpdate={handleEnvironmentGroupUpdate}
+                onClose={onClose}
+                handleAction={handleAction}
             />
         </div>
     );

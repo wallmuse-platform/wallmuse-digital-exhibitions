@@ -179,21 +179,15 @@ function DontStartBefore() {
     if (!isDemo) {
       checkPermission();
     } else {
-      // For demo accounts, auto-complete all pre-requisites
-      console.log("[DontStartBefore] Demo account - auto-completing prerequisites");
+      // For demo accounts, auto-complete permission check
+      console.log("[DontStartBefore] Demo account - auto-completing permission check");
       setPermissionGranted(granted => {
         if (!granted) {
           console.log("[DontStartBefore] Setting permissionGranted to true");
         }
         return true;
       });
-      setCleanupComplete(complete => {
-        if (!complete) {
-          console.log("[DontStartBefore] Setting cleanupComplete to true");
-        }
-        return true;
-      });
-      // Any other initial states that should be skipped for demos
+      // Cleanup will run normally after this - CleanupTemporaryPlaylists component will handle it
     }
   }, [isDemo]);
 
@@ -304,8 +298,8 @@ export const updatePosition = (newPosition) => {
 };
 
 
-// PlayerIntegration component
-const PlayerIntegration = memo(function PlayerIntegration({ theme, volumeRef, playModeRef }) {
+// PlayerIntegration component - removed memo to allow playlists context updates to propagate
+function PlayerIntegration({ theme, volumeRef, playModeRef }) {
   // console.log("[App PlayerIntegration] Props received with volumeRef:", { house, environments, currentPlaylist, setCurrentPlaylist, volumeRef });
 
   const userId = getUserId();
@@ -1031,8 +1025,8 @@ const PlayerIntegration = memo(function PlayerIntegration({ theme, volumeRef, pl
     }
   };
 
-  // Memoizing the component for performance optimization
-  return useMemo(() => (
+  // Return without useMemo to allow playlists context updates to propagate
+  return (
     <div style={{ minWidth: `${MIN_PLAYER_WIDTH}px` }}>
       <ErrorBoundary>
         <div className="playerIntegration-contents">
@@ -1153,7 +1147,6 @@ const PlayerIntegration = memo(function PlayerIntegration({ theme, volumeRef, pl
                       >
                         <div>Track: {webPlayerOverlayInfo.track}</div>
                         <div>{webPlayerOverlayInfo.montageName}</div>
-                        <div>{webPlayerOverlayInfo.playlistName}</div>
                       </Box>
                     )}
 
@@ -1275,8 +1268,8 @@ const PlayerIntegration = memo(function PlayerIntegration({ theme, volumeRef, pl
         </div>
       </ErrorBoundary>
     </div>
-  ), [theme, t, onPlay, onPause, onStop, onRew, onFwd, onVolumeChange, iconClass, responsiveProps, currentPlaylist]);
-});
+  );
+}
 
 // PropTypes definitions
 App.propTypes = {

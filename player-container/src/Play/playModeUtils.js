@@ -146,14 +146,18 @@ export const handlePlayMontageEnd = async (tempPlaylistId, {
         const previousPlaylistId = getPreviousPlaylistId();
         console.log(`[HPM:${sessionId}] Retrieved previousPlaylistId: ${previousPlaylistId}`);
 
+        // If no previous playlist was saved, it means we were on default playlist
+        // Load default playlist (undefined/empty)
+        const playlistToLoad = previousPlaylistId || undefined;
+        console.log(`[HPM:${sessionId}] Will load playlist: ${playlistToLoad} (${!previousPlaylistId ? 'DEFAULT' : 'SPECIFIC'})`);
+
         if (!previousPlaylistId) {
-            console.log(`[HPM:${sessionId}] No previous playlist ID found, exiting`);
-            return;
+            console.log(`[HPM:${sessionId}] No previous playlist ID found - loading default playlist`);
         }
 
         // Verify if previous playlist exists and what type it is
-        let previousPlaylistDetails = "unknown";
-        if (playlists) {
+        let previousPlaylistDetails = "default playlist";
+        if (previousPlaylistId && playlists) {
             const prevPlaylist = playlists.find(p => p.id === previousPlaylistId);
             if (prevPlaylist) {
                 previousPlaylistDetails = `name: "${prevPlaylist.name}", isTemp: ${prevPlaylist.name?.startsWith('Temp_Playlist_')}`;
@@ -164,36 +168,38 @@ export const handlePlayMontageEnd = async (tempPlaylistId, {
         }
 
         // Log the state before loading the previous playlist
-        console.log(`[HPM:${sessionId}] BEFORE loadPlaylist - CurrentPlaylist: ${currentPlaylist}, About to load: ${previousPlaylistId}`);
+        console.log(`[HPM:${sessionId}] BEFORE loadPlaylist - CurrentPlaylist: ${currentPlaylist}, About to load: ${playlistToLoad}`);
 
-        // Load the previous playlist
-        await loadPlaylist(house, previousPlaylistId);
-        console.log(`[HPM:${sessionId}] loadPlaylist API call completed for playlist: ${previousPlaylistId}`);
+        // Load the previous playlist (or default if undefined)
+        await loadPlaylist(house, playlistToLoad);
+        console.log(`[HPM:${sessionId}] loadPlaylist API call completed for playlist: ${playlistToLoad}`);
 
         // Wait for backend confirmation with detailed logging
-        console.log(`[HPM:${sessionId}] BEFORE handlePlaylistChange - Calling for playlist: ${previousPlaylistId}`);
+        console.log(`[HPM:${sessionId}] BEFORE handlePlaylistChange - Calling for playlist: ${playlistToLoad}`);
         const beforeHandleCurrentPlaylist = currentPlaylist;
-        const syncSuccess = await handlePlaylistChange(previousPlaylistId);
-        console.log(`[HPM:${sessionId}] handlePlaylistChange completed with result: ${syncSuccess}, for playlist: ${previousPlaylistId}`);
+        const syncSuccess = await handlePlaylistChange(playlistToLoad);
+        console.log(`[HPM:${sessionId}] handlePlaylistChange completed with result: ${syncSuccess}, for playlist: ${playlistToLoad}`);
 
         // Check currentPlaylist immediately after sync
         if (syncSuccess) {
             const afterHandleCurrentPlaylist = currentPlaylist;
             const playlistChanged = beforeHandleCurrentPlaylist !== afterHandleCurrentPlaylist;
-            const isCurrent = (previousPlaylistId == afterHandleCurrentPlaylist);
+            const isCurrent = (playlistToLoad == afterHandleCurrentPlaylist);
 
-            console.log(`[HPM:${sessionId}] AFTER handlePlaylistChange - Before: ${beforeHandleCurrentPlaylist}, After: ${afterHandleCurrentPlaylist}, Changed: ${playlistChanged}, Target: ${previousPlaylistId}, IsCorrect: ${isCurrent}`);
+            console.log(`[HPM:${sessionId}] AFTER handlePlaylistChange - Before: ${beforeHandleCurrentPlaylist}, After: ${afterHandleCurrentPlaylist}, Changed: ${playlistChanged}, Target: ${playlistToLoad}, IsCorrect: ${isCurrent}`);
 
             if (!isCurrent) {
-                console.warn(`[HPM:${sessionId}] SYNC ISSUE: currentPlaylist (${afterHandleCurrentPlaylist}) differs from target (${previousPlaylistId}) after sync`);
+                console.warn(`[HPM:${sessionId}] SYNC ISSUE: currentPlaylist (${afterHandleCurrentPlaylist}) differs from target (${playlistToLoad}) after sync`);
             }
         } else {
-            console.warn(`[HPM:${sessionId}] Backend sync failed for playlist ${previousPlaylistId}`);
+            console.warn(`[HPM:${sessionId}] Backend sync failed for playlist ${playlistToLoad}`);
         }
 
-        // Clear the saved previous playlist ID with our own logging
-        console.log(`[HPM:${sessionId}] Clearing previousPlaylistId (${previousPlaylistId}) from localStorage`);
-        clearPreviousPlaylistId();
+        // Clear the saved previous playlist ID with our own logging (if any was saved)
+        if (previousPlaylistId) {
+            console.log(`[HPM:${sessionId}] Clearing previousPlaylistId (${previousPlaylistId}) from localStorage`);
+            clearPreviousPlaylistId();
+        }
         console.log(`[HPM:${sessionId}] COMPLETED handlePlayMontageEnd function`);
     } catch (error) {
         console.error(`[HPM:${sessionId}] ERROR in handlePlayMontageEnd:`, error);
@@ -209,24 +215,40 @@ export const CleanupTemporaryPlaylists = ({ currentPlaylist, setCurrentPlaylist,
     const cleanupAttemptedRef = useRef(false);
     const onCleanupCompleteRef = useRef(onCleanupComplete);
 
-    // Keep ref updated
+    // Keep refs updated
     onCleanupCompleteRef.current = onCleanupComplete;
 
-    console.log(`[playModeUtils cleanupTemporaryPlaylists] start`);
-
     useEffect(() => {
-        // Skip if cleanup was already attempted or no playlists available
-        if (cleanupAttemptedRef.current || !playlists || playlists.length === 0) {
-            if (!cleanupAttemptedRef.current && (!playlists || playlists.length === 0)) {
-                // No playlists to clean, complete immediately
-                console.log('[PlaylistCleanup] No playlists available');
-                onCleanupCompleteRef.current();
-                cleanupAttemptedRef.current = true;
-            }
+        console.log('[PlaylistCleanup] useEffect triggered', {
+            cleanupAttempted: cleanupAttemptedRef.current,
+            hasPlaylists: !!playlists,
+            playlistsLength: playlists?.length,
+            hasHouse: !!house
+        });
+
+        // Skip if cleanup was already attempted
+        if (cleanupAttemptedRef.current) {
+            console.log('[PlaylistCleanup] Cleanup already attempted, skipping');
             return;
         }
 
+        // Wait for playlists to load
+        if (!playlists) {
+            console.log('[PlaylistCleanup] Playlists not loaded yet, waiting...');
+            return;
+        }
+
+        // If playlists array is empty, complete immediately (no cleanup needed)
+        if (playlists.length === 0) {
+            console.log('[PlaylistCleanup] No playlists available, completing immediately');
+            onCleanupCompleteRef.current();
+            cleanupAttemptedRef.current = true;
+            return;
+        }
+
+        // Mark as attempted immediately to prevent multiple runs
         cleanupAttemptedRef.current = true;
+        console.log(`[PlaylistCleanup] Starting cleanup with ${playlists.length} playlists loaded`);
 
         const cleanup = async () => {
             console.log('[PlaylistCleanup] Starting temporary playlist cleanup');
@@ -247,34 +269,63 @@ export const CleanupTemporaryPlaylists = ({ currentPlaylist, setCurrentPlaylist,
             const currentPlaylistObj = playlists.find(p => p?.id === currentPlaylist);
             const isTemporary = currentPlaylistObj?.name?.startsWith('Temp_Playlist_');
 
-            // If current playlist is temporary, first set it to empty
-            if (isTemporary) {
-                console.log(`[PlaylistCleanup] Current playlist is temporary, resetting: ${currentPlaylist}`);
-                // Don't call setCurrentPlaylist directly - let EnvironmentsContext handle it
-                // The cleanup will be handled by the context when it syncs with backend
+            // CRITICAL FIX: If current playlist is temporary, switch away BEFORE deleting
+            if (isTemporary && house) {
+                console.log(`[PlaylistCleanup] CRITICAL: Current playlist ${currentPlaylist} is temporary!`);
+                console.log(`[PlaylistCleanup] Must switch away from it BEFORE deleting to prevent black screen`);
+
+                try {
+                    const previousPlaylistId = getPreviousPlaylistId();
+                    const playlistToLoad = previousPlaylistId || undefined; // undefined = default playlist
+                    console.log(`[PlaylistCleanup] Step 1: Switching to previous/default playlist: ${playlistToLoad || 'DEFAULT'}`);
+
+                    // Load the non-temp playlist FIRST
+                    console.log(`[PlaylistCleanup] Calling loadPlaylist with house: ${house}, playlist: ${playlistToLoad}`);
+                    const loadResult = await loadPlaylist(house, playlistToLoad);
+                    console.log('[PlaylistCleanup] loadPlaylist returned:', loadResult);
+
+                    // CRITICAL: Update React state
+                    // This will trigger DontStartBefore to re-render and handle the sync
+                    if (setCurrentPlaylist) {
+                        console.log(`[PlaylistCleanup] Updating React state: currentPlaylist → ${playlistToLoad || 'undefined'}`);
+                        setCurrentPlaylist(playlistToLoad);
+                    }
+
+                    console.log('[PlaylistCleanup] Step 1 COMPLETE: Switched away from temp playlist');
+                    console.log('[PlaylistCleanup] DontStartBefore will now re-render and sync frontend/backend');
+
+                    // Wait a bit for the loadPlaylist API call and state updates to propagate
+                    // DontStartBefore's natural sync process will ensure frontend/backend alignment
+                    console.log('[PlaylistCleanup] Waiting 1000ms for state propagation...');
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    console.log('[PlaylistCleanup] Wait complete');
+
+                    // Clear localStorage if we had a saved ID
+                    if (previousPlaylistId) {
+                        clearPreviousPlaylistId();
+                        console.log('[PlaylistCleanup] Cleared previousPlaylistId from localStorage');
+                    }
+                } catch (error) {
+                    console.error('[PlaylistCleanup] Error switching away from temp playlist:', error);
+                    console.error('[PlaylistCleanup] Error stack:', error.stack);
+                    // Continue anyway - try to clean up even if switch failed
+                }
             }
 
-            // Delete all temporary playlists
+            // NOW delete all temporary playlists (after switching away)
+            console.log(`[PlaylistCleanup] Step 2: Deleting ${tempPlaylists.length} temp playlists`);
             for (const playlist of tempPlaylists) {
                 try {
+                    console.log(`[PlaylistCleanup] Deleting temp playlist: ${playlist.id} (${playlist.name})`);
                     await deletePlaylist(playlist.id);
-                    console.log(`[PlaylistCleanup] Deleted temporary playlist: ${playlist.id}`);
+                    console.log(`[PlaylistCleanup] Successfully deleted: ${playlist.id}`);
                 } catch (error) {
                     console.error(`[PlaylistCleanup] Failed to delete playlist ${playlist.id}:`, error);
                 }
             }
 
-            // If current playlist was temporary and we have a house ID, load empty playlist
-            if (isTemporary && house) {
-                try {
-                    await loadPlaylist(house, getPreviousPlaylistId());
-                    console.log('[PlaylistCleanup] Reset backend playlist to empty');
-                } catch (error) {
-                    console.error('[PlaylistCleanup] Error resetting backend playlist:', error);
-                }
-            }
-
-            console.log('[PlaylistCleanup] Temporary playlist cleanup complete');
+            console.log('[PlaylistCleanup] Step 2 COMPLETE: All temp playlists deleted');
+            console.log('[PlaylistCleanup] Temporary playlist cleanup FINISHED');
             onCleanupCompleteRef.current();
         };
 
