@@ -13,7 +13,7 @@ import SmartphoneIcon from '@mui/icons-material/Smartphone';
 import Icon from '@mui/material/Icon';
 import { useTranslation } from 'react-i18next';
 import { useResponsive } from '../utils/useResponsive';
-import { wmm_url } from '../utils/Utils.js';
+import { wmm_url, getUserId, isDemoAccount } from '../utils/Utils.js';
 import { activateScreen, deactivateScreen, activateEnvironment, deactivateEnvironment } from '../utils/api';
 
 import {
@@ -26,13 +26,15 @@ import {
 } from '../utils/environmentUtils';
 
 
-export function ConfigureEnvironmentScreen({ 
-  environmentGroup, 
-  handleRemoveScreen, 
+export function ConfigureEnvironmentScreen({
+  environmentGroup,
+  handleRemoveScreen,
   handleRemoveEnvironment,
   handleDeactivateEnvironment,
   onEnvironmentGroupUpdate,
-  ...otherProps 
+  onClose,
+  handleAction,  // Accept handleAction from parent
+  ...otherProps
 }) {
   console.log('ConfigureEnvironmentScreen: environmentGroup:', environmentGroup);
 
@@ -40,10 +42,10 @@ export function ConfigureEnvironmentScreen({
   const themeName = currentTheme();
   const { t } = useTranslation();
   const { isMobile, isTablet, isHD, iconSize } = useResponsive();
-  
+
   // Updated state name for clarity
   const [showOnlyActive, setShowOnlyActive] = useState(true);
-  
+
   let IconSizeMinusTwo = `${parseInt(iconSize) - 2}px`;
   let currentRow = 15;
   let totalScreens = 0;
@@ -107,68 +109,93 @@ export function ConfigureEnvironmentScreen({
   });
 
   const handleScreenToggle = async (screen) => {
-  const isCurrentlyActive = isScreenActive(screen);
-  console.log(`[ConfigureEnvironmentScreen] Toggling screen ${screen.id} from ${isCurrentlyActive ? 'on' : 'off'} to ${isCurrentlyActive ? 'off' : 'on'}`);
-  
-  try {
-    if (isCurrentlyActive) {
-      // Turn screen off
-      await deactivateScreen(screen.id);
-    } else {
-      // Turn screen on
-      await activateScreen(screen.id, 1);
+    console.log("[Configure] handleScreenToggle called for screen:", screen.id);
+    console.log("[Configure] About to call handleAction, userId:", getUserId(), "isDemo:", isDemoAccount(getUserId()));
+    // Close modal before showing popup
+    if (onClose) {
+      console.log("[Configure] Closing modal");
+      onClose();
     }
-    
-    // Update local state immediately for responsive UI
-    const updatedEnvironmentGroup = environmentGroup.map(({ environment, screens }) => ({
-      environment,
-      screens: screens.map(s => 
-        s.id === screen.id 
-          ? { ...s, on: isCurrentlyActive ? "0" : "1" }
-          : s
-      )
-    }));
-    
-    // You'll need to pass a callback from parent to update the state
-    if (onEnvironmentGroupUpdate) {
-      onEnvironmentGroupUpdate(updatedEnvironmentGroup);
-    }
-    
-  } catch (error) {
-    console.error(`[ConfigureEnvironmentScreen] Error toggling screen ${screen.id}:`, error);
-    alert(`Error ${isCurrentlyActive ? 'deactivating' : 'activating'} screen. Please try again.`);
-  }
-};
+    // Use handleAction to check for demo account
+    console.log("[Configure] Calling handleAction");
+    handleAction(
+      async () => {
+        console.log("[Configure] Inside handleAction callback - executing screen toggle");
+        const isCurrentlyActive = isScreenActive(screen);
+        console.log(`[ConfigureEnvironmentScreen] Toggling screen ${screen.id} from ${isCurrentlyActive ? 'on' : 'off'} to ${isCurrentlyActive ? 'off' : 'on'}`);
+
+        try {
+          if (isCurrentlyActive) {
+            // Turn screen off
+            await deactivateScreen(screen.id);
+          } else {
+            // Turn screen on
+            await activateScreen(screen.id, 1);
+          }
+
+          // Update local state immediately for responsive UI
+          const updatedEnvironmentGroup = environmentGroup.map(({ environment, screens }) => ({
+            environment,
+            screens: screens.map(s =>
+              s.id === screen.id
+                ? { ...s, on: isCurrentlyActive ? "0" : "1" }
+                : s
+            )
+          }));
+
+          // You'll need to pass a callback from parent to update the state
+          if (onEnvironmentGroupUpdate) {
+            onEnvironmentGroupUpdate(updatedEnvironmentGroup);
+          }
+
+        } catch (error) {
+          console.error(`[ConfigureEnvironmentScreen] Error toggling screen ${screen.id}:`, error);
+          alert(`Error ${isCurrentlyActive ? 'deactivating' : 'activating'} screen. Please try again.`);
+        }
+      },
+      false // Not premium content
+    );
+  };
 
   const handleEnvironmentToggle = async (environment) => {
-    const isCurrentlyActive = isEnvironmentActive(environment);
-    console.log(`[ConfigureEnvironmentScreen] Toggling environment ${environment.id} from ${isCurrentlyActive ? 'alive' : 'dead'} to ${isCurrentlyActive ? 'dead' : 'alive'}`);
-    
-    try {
-      if (isCurrentlyActive) {
-        // Deactivate environment (you'll need to create activateEnvironment function)
-        await deactivateEnvironment(environment.id);
-      } else {
-        // Activate environment - you'll need to create this API function
-        await activateEnvironment(environment.id);
-      }
-      
-      // Update local state immediately for responsive UI
-      const updatedEnvironmentGroup = environmentGroup.map(({ environment: env, screens }) => ({
-        environment: env.id === environment.id 
-          ? { ...env, alive: isCurrentlyActive ? "0" : "1" }
-          : env,
-        screens
-      }));
-      
-      if (onEnvironmentGroupUpdate) {
-        onEnvironmentGroupUpdate(updatedEnvironmentGroup);
-      }
-      
-    } catch (error) {
-      console.error(`[ConfigureEnvironmentScreen] Error toggling environment ${environment.id}:`, error);
-      alert(`Error ${isCurrentlyActive ? 'deactivating' : 'activating'} environment. Please try again.`);
+    // Close modal before showing popup
+    if (onClose) {
+      onClose();
     }
+    // Use handleAction to check for demo account
+    handleAction(
+      async () => {
+        const isCurrentlyActive = isEnvironmentActive(environment);
+        console.log(`[ConfigureEnvironmentScreen] Toggling environment ${environment.id} from ${isCurrentlyActive ? 'alive' : 'dead'} to ${isCurrentlyActive ? 'dead' : 'alive'}`);
+
+        try {
+          if (isCurrentlyActive) {
+            // Deactivate environment (you'll need to create activateEnvironment function)
+            await deactivateEnvironment(environment.id);
+          } else {
+            // Activate environment - you'll need to create this API function
+            await activateEnvironment(environment.id);
+          }
+
+          // Update local state immediately for responsive UI
+          const updatedEnvironmentGroup = environmentGroup.map(({ environment: env, screens }) => ({
+            environment: env.id === environment.id
+              ? { ...env, alive: isCurrentlyActive ? "0" : "1" }
+              : env,
+            screens
+          }));
+
+          if (onEnvironmentGroupUpdate) {
+            onEnvironmentGroupUpdate(updatedEnvironmentGroup);
+          }
+
+        } catch (error) {
+          console.error(`[ConfigureEnvironmentScreen] Error toggling environment ${environment.id}:`, error);
+          alert(`Error ${isCurrentlyActive ? 'deactivating' : 'activating'} environment. Please try again.`);
+        }
+      },
+      false // Not premium content
+    );
   };
 
   // Enhanced screen status indicator
@@ -222,8 +249,23 @@ export function ConfigureEnvironmentScreen({
             <Switch
               checked={showOnlyActive}
               onChange={(e) => {
-                console.log("Toggle switch clicked:", e.target.checked);
-                setShowOnlyActive(e.target.checked);
+                const newValue = e.target.checked;
+                console.log("[Configure] Toggle switch clicked:", newValue);
+                console.log("[Configure] About to call handleAction, userId:", getUserId(), "isDemo:", isDemoAccount(getUserId()));
+                // Close modal before showing popup
+                if (onClose) {
+                  console.log("[Configure] Closing modal");
+                  onClose();
+                }
+                // Use handleAction to check for demo account
+                console.log("[Configure] Calling handleAction");
+                handleAction(
+                  () => {
+                    console.log("[Configure] Inside handleAction callback - executing setShowOnlyActive");
+                    setShowOnlyActive(newValue);
+                  },
+                  false // Not premium content
+                );
               }}
               sx={{
                 '& .MuiSwitch-switchBase.Mui-checked': {
@@ -395,7 +437,17 @@ export function ConfigureEnvironmentScreen({
                 </Tooltip>
                 <Tooltip title={t("action.delete")}>
                   <IconButton
-                    onClick={() => handleRemoveScreen(screen.id)}
+                    onClick={() => {
+                      // Close modal before showing popup
+                      if (onClose) {
+                        onClose();
+                      }
+                      // Use handleAction to check for demo account
+                      handleAction(
+                        () => handleRemoveScreen(screen.id),
+                        false // Not premium content
+                      );
+                    }}
                   >
                     <DeleteForeverIcon sx={{ fontSize: iconSize }} />
                   </IconButton>
@@ -528,8 +580,18 @@ export function ConfigureEnvironmentScreen({
                   }}
                 >
                   <IconButton
-                    onClick={() => handleRemoveEnvironment(environment.id)}
-                    style={{ marginRight: "0" }} 
+                    onClick={() => {
+                      // Close modal before showing popup
+                      if (onClose) {
+                        onClose();
+                      }
+                      // Use handleAction to check for demo account
+                      handleAction(
+                        () => handleRemoveEnvironment(environment.id),
+                        false // Not premium content
+                      );
+                    }}
+                    style={{ marginRight: "0" }}
                   >
                     <DeleteForeverIcon sx={{ fontSize: iconSize }} />
                   </IconButton>

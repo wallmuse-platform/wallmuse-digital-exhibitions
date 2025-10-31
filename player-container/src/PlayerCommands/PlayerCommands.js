@@ -16,7 +16,7 @@ import VolumeUp from '@mui/icons-material/VolumeUp';
 import VolumeOff from '@mui/icons-material/VolumeOff';
 import SubtitlesOutlinedIcon from '@mui/icons-material/SubtitlesOutlined';
 import SubtitlesOffOutlinedIcon from '@mui/icons-material/SubtitlesOffOutlined';
-import IOSAudioHandler from './IOSAudioHandler';
+import IOSAudioAndroidVideoHandler from './IOSAudioAndroidVideoHandler';
 
 // Internationalization
 import { useTranslation } from "react-i18next";
@@ -128,6 +128,34 @@ function PlayerCommands({
 
   }, [muted, onVolumeChange]);
 
+  // Listen for auto-unmute event from IOSAudioAndroidVideoHandler
+  useEffect(() => {
+    const handleAutoUnmute = (event) => {
+      console.log('[PlayerCommands] Received wallmuse-unmute event:', event.detail);
+      const { muted: newMutedState } = event.detail;
+
+      // Update mute state
+      mutedRef.current = newMutedState;
+      setMuted(newMutedState);
+
+      // If unmuting, send volume to player
+      if (!newMutedState) {
+        if (volumeRef.current === 0) {
+          volumeRef.current = 50;
+          localStorage.setItem('wallmuse-volume', '50');
+          console.log('[PlayerCommands] Auto-unmute: Set volume to 50 for fresh user');
+          onVolumeChange(50);
+        } else {
+          console.log('[PlayerCommands] Auto-unmute: Sending current volume:', volumeRef.current);
+          onVolumeChange(volumeRef.current);
+        }
+      }
+    };
+
+    window.addEventListener('wallmuse-unmute', handleAutoUnmute);
+    return () => window.removeEventListener('wallmuse-unmute', handleAutoUnmute);
+  }, [onVolumeChange]);
+
   // utility function for iOS or when not starting
 
 
@@ -175,10 +203,10 @@ function PlayerCommands({
 
   return useMemo(() => (
     <>
-      {/* iOS Audio Handler - shows only when autoplay is blocked on iOS */}
-      <IOSAudioHandler
+      {/* iOS Audio + Android Video Handler - shows when autoplay is blocked */}
+      <IOSAudioAndroidVideoHandler
         onPlay={onPlay}
-        handlePlayPause={handlePlayPause} 
+        handlePlayPause={handlePlayPause}
         theme={theme}
         variant="banner" // or "alert" - choose your preferred style
       />

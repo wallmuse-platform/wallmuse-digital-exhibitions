@@ -171,15 +171,29 @@ export function shouldShowDemoMode(userId) {
   return isDemo && !wpLoggedIn;
 }
 
-// Modified isDemoAccount to be WordPress-aware
+/**
+ * Checks if the current user is a demo account (UI Layer)
+ *
+ * NOTE: This is intentionally different from api.js isDemoAccount()
+ * - Utils.js version: WordPress-aware, used in UI to show/hide GuestActionPopup
+ * - api.js version: Simple session check, used for backend optimizations
+ *
+ * This function DOES check WordPress login status because:
+ * 1. It's used in UI components to determine whether to show restriction popups
+ * 2. WordPress admins should bypass all demo restrictions to test the sites
+ * 3. This is the first line of defense - filters before any API calls
+ *
+ * @param {string} userId - The user ID to check
+ * @returns {boolean} True if user is demo AND not WordPress logged in, false otherwise
+ */
 export function isDemoAccount(userId) {
   if (!userId) return false;
   const id = userId.toLowerCase();
   const isBasicDemo = id.includes('free') || id.includes('unregistered');
   const wpLoggedIn = getWpLoggedIn();
-  
+
   console.log('[utils] isDemoAccount - basic demo:', isBasicDemo, 'wpLoggedIn:', wpLoggedIn);
-  
+
   // User is considered demo only if they have demo userId AND are not logged into WordPress
   return isBasicDemo && !wpLoggedIn;
 }

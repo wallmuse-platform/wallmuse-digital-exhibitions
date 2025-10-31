@@ -7,7 +7,7 @@ import qs from 'qs';
 import { sendCommand } from '../wsTools';
 
 // Base URLs for API calls
-const baseURL = 'https://wallmuse.com:8443/wallmuse/ws';
+const baseURL = "https://wallmuse.com:8443/wallmuse/ws";
 const RootUrl = 'https://manager.wallmuse.com:8444/wallmuse/ws/'; // From WsTools
 
 // Get the session ID EXACTLY as it appears in the DOM (with spaces intact)
@@ -48,8 +48,18 @@ const serializeParams = params => {
 //--------------------------------------------------------------------------
 
 /**
- * Checks if the current user is a guest account
- * @returns {boolean} True if the user is a guest, false otherwise
+ * Checks if the current user is a guest account (API Layer)
+ *
+ * NOTE: This is intentionally different from Utils.js isDemoAccount()
+ * - Utils.js version: WordPress-aware, used in UI to show/hide GuestActionPopup
+ * - api.js version: Simple session check, used for backend optimizations
+ *
+ * This function does NOT check WordPress login status because:
+ * 1. It's called at the API layer for backend optimization (e.g., house creation)
+ * 2. WordPress admin filtering already happens at UI layer via Utils.js
+ * 3. By design, WordPress admin sessions never reach demo-restricted API calls
+ *
+ * @returns {boolean} True if the sessionId indicates a guest account, false otherwise
  */
 export const isDemoAccount = () => {
   if (!sessionId) return false;
@@ -1289,7 +1299,9 @@ export const updatePlaylist = async (playlistId, name, montageIds, checks) => {
     montageIds
   );
 
-  if (montageIds) {
+  // Always include montages and checks parameters, even if empty
+  // Empty string tells backend to clear the playlist
+  if (montageIds !== undefined) {
     params = { ...params, montages: montageIds };
   }
 
@@ -1341,51 +1353,58 @@ export const addMontageToPlaylist = async (montage, playlistId = '', playlists, 
       is_checked: montage.is_checked || '1',
     };
 
-    const newPlaylists = [...playlists];
-
-    let playlistToUpdate;
+    // Find the target playlist index
+    let playlistToUpdateIndex;
 
     if (playlistId) {
       // If playlistId is provided, find the corresponding playlist
-      playlistToUpdate = newPlaylists.find(playlist => playlist.id === playlistId);
-      if (!playlistToUpdate) {
+      playlistToUpdateIndex = playlists.findIndex(playlist => playlist.id === playlistId);
+      if (playlistToUpdateIndex === -1) {
         console.error(`Playlist with ID ${playlistId} not found; cannot proceed.`);
         return;
       }
     } else {
       // If no playlistId, fall back to the default playlist (i.e., the one with undefined ID)
-      playlistToUpdate = newPlaylists.find(playlist => !playlist.id);
-      if (!playlistToUpdate) {
+      playlistToUpdateIndex = playlists.findIndex(playlist => !playlist.id);
+      if (playlistToUpdateIndex === -1) {
         console.error('Default playlist not found; cannot proceed.');
         return;
       }
     }
 
-    // Initialize montages array if not already present
-    if (!playlistToUpdate.montages) {
-      playlistToUpdate.montages = [];
-    }
+    const playlistToUpdate = playlists[playlistToUpdateIndex];
 
-    // Add the montage to the playlist
-    playlistToUpdate.montages.push(standardizedMontage);
-    playlistToUpdate.changed = true;
+    // Update playlists immutably to avoid state mutation issues
+    const newPlaylists = playlists.map((pl, idx) => {
+      if (idx === playlistToUpdateIndex) {
+        return {
+          ...pl,
+          montages: [...(pl.montages || []), standardizedMontage],
+          changed: true
+        };
+      }
+      return pl;
+    });
 
     // Update the state with the modified playlists array
     setPlaylists(newPlaylists);
 
+    // Get the updated playlist for backend sync
+    const updatedPlaylist = newPlaylists[playlistToUpdateIndex];
+
     // Prepare montage IDs and checks for server update
-    const montageIds = playlistToUpdate.montages.map(m => m.id).join(',');
+    const montageIds = updatedPlaylist.montages.map(m => m.id).join(',');
     console.log(
       '[api] updatePlaylist, before processing montages, Type:',
       typeof montageIds,
       'Value:',
       montageIds
     );
-    const checks = playlistToUpdate.montages.map(m => (m.is_checked ? 1 : 0)).join(',');
+    const checks = updatedPlaylist.montages.map(m => (m.is_checked ? 1 : 0)).join(',');
 
     // Send the updated playlist to the server
-    await updatePlaylist(playlistToUpdate.id, playlistToUpdate.name, montageIds, checks);
-    console.log('[api] updatePlaylist called for:', playlistToUpdate);
+    await updatePlaylist(updatedPlaylist.id, updatedPlaylist.name, montageIds, checks);
+    console.log('[api] updatePlaylist called for:', updatedPlaylist);
 
     return { success: true };
   } catch (error) {

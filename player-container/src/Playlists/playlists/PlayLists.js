@@ -70,7 +70,6 @@ import { selectTheme } from "../../theme/ThemeUtils";
 import { CustomSnackbar, CustomAlert } from '../../CustomComponents';
 import {
     addPlaylist,
-    deleteMontageFromPlaylist,
     loadPlaylist,
     updatePlaylist,
     detailsUser,
@@ -133,6 +132,10 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
     // 🚀 NEW: Guard against multiple simultaneous doLoadPlaylist calls
     const loadInProgressRef = useRef(false);
 
+    // Guard against rapid successive delete operations
+    const deleteInProgressRef = useRef(false);
+    const deleteTimeoutRef = useRef(null);
+
     const { handleAction, popup } = useGuestActionPopup();
 
     const updateSaveStatus = useCallback((saveSuccess, saveError, savedPlaylistIndex) => {
@@ -173,11 +176,9 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
                 setDeleteSuccess(deleteSuccess);
 
                 if (deleteSuccess && deletedPlaylistIndex !== null) {
-                    setPlaylists(prevPlaylists => {
-                        const newPlaylists = [...prevPlaylists];
-                        newPlaylists.splice(deletedPlaylistIndex, 1);
-                        return newPlaylists;
-                    });
+                    setPlaylists(prevPlaylists =>
+                        prevPlaylists.filter((_, idx) => idx !== deletedPlaylistIndex)
+                    );
                 }
             },
             false // Not premium content
@@ -190,12 +191,18 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
         handleAction(
             () => {
                 console.log('[Playlists Fred] playlistIndex:', playlistIndex, ' name:', name);
-                const newPlaylists = [...playlists];
-                if (name) {
-                    newPlaylists[playlistIndex].name = name;
-                    console.log('[Playlists Fred] playlistIndex:', playlistIndex, ' newPlaylists:', newPlaylists);
-                }
-                newPlaylists[playlistIndex].changed = false;
+                // Update playlists immutably
+                const newPlaylists = playlists.map((pl, idx) => {
+                    if (idx === playlistIndex) {
+                        return {
+                            ...pl,
+                            ...(name && { name }), // Only update name if provided
+                            changed: false
+                        };
+                    }
+                    return pl;
+                });
+                console.log('[Playlists Fred] playlistIndex:', playlistIndex, ' newPlaylists:', newPlaylists);
 
                 console.log('[PlayLists] About to call autoSaveUpdates:', {
                     playlistIndex,
@@ -277,51 +284,36 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
     }, [playlists, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, setPlaylists, handleAction]);
 
     const handleMontageReorder = useCallback((montages, playlistIndex) => {
-        // Replace the isDemo check with handleAction
-        handleAction(() => {
-            console.log('[PlayLists] Starting montage reorder:', {
-                playlistIndex,
-                montagesCount: montages.length,
-                currentPlaylistsState: playlists
-            });
+        // Update playlists state with new montage order
+        setPlaylists(prevPlaylists => {
+            const newPlaylists = prevPlaylists.map((playlist, index) =>
+                index === playlistIndex
+                    ? { ...playlist, montages, changed: true }
+                    : playlist
+            );
+            return newPlaylists;
+        });
 
-            // First update the UI
-            setPlaylists(prevPlaylists => {
-                const newPlaylists = prevPlaylists.map((playlist, index) =>
-                    index === playlistIndex
-                        ? { ...playlist, montages, changed: true }
-                        : playlist
-                );
-                console.log('[handleMontageReorder] Updated playlists state:', {
-                    playlistIndex,
-                    newMontages: newPlaylists[playlistIndex].montages.map(m => m.id)
-                });
-                return newPlaylists;
-            });
+        // Save to backend
+        const updatedPlaylist = {
+            ...playlists[playlistIndex],
+            montages,
+            changed: true
+        };
 
-            // Then handle the save separately
-            const updatedPlaylist = {
-                ...playlists[playlistIndex],
-                montages,
-                changed: true
-            };
-
-            // Save without triggering another state update
-            autoSaveUpdates({
-                playlistIndex,
-                playlist: updatedPlaylist,
-                updatePlaylist,
-                setSaveInProgress,
-                updateSaveStatus,
-                handlePlaylistUpdate,
-                t,
-                skipStateUpdate: true, // or false, as needed for your logic
-                currentPlaylistId: currentPlaylist,
-                syncWithBackend: handlePlaylistChange
-            });
-        },
-            false); // Set isPremiumContent to false
-    }, [playlists, setPlaylists, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, handleAction]);
+        autoSaveUpdates({
+            playlistIndex,
+            playlist: updatedPlaylist,
+            updatePlaylist,
+            setSaveInProgress,
+            updateSaveStatus,
+            handlePlaylistUpdate,
+            t,
+            skipStateUpdate: true,
+            currentPlaylistId: currentPlaylist,
+            syncWithBackend: handlePlaylistChange
+        });
+    }, [playlists, setPlaylists, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, currentPlaylist, handlePlaylistChange]);
 
     const removeMontageFromPlaylist = useCallback(async (montageIndex, playlistIndex) => {
         console.log('[Playlists] removeMontageFromPlaylist: montageIndex:', montageIndex, ' playlistIndex:', playlistIndex);
@@ -330,32 +322,54 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
             handleRestrictedAction();  // Show snackbar for restricted action
             return;  // Exit the function early
         }
-        const playlist = playlists[playlistIndex];
-        console.log('[Playlists] playlist = playlists[playlistIndex]:', playlist);
-        if (!playlist || !playlist.montages || !playlist.montages[montageIndex]) {
-            console.error(`[PlayLists] Invalid playlist or montage index: ${playlistIndex}, ${montageIndex}`);
+
+        // Debounce rapid successive deletes (300ms delay)
+        if (deleteInProgressRef.current) {
+            console.log('[Playlists] Delete already in progress, ignoring rapid click');
             return;
         }
 
-        const montageIdToRemove = playlist.montages[montageIndex].id;
-        console.log('[PlayLists] Removing montage with ID:', montageIdToRemove, 'from playlist:', playlist.id);
+        // Use functional update to ensure we have the latest state
+        let updatedPlaylists;
 
         try {
+            deleteInProgressRef.current = true;
             setDeleteInProgress(true);
-            await deleteMontageFromPlaylist(playlist.id, montageIdToRemove);
-            setDeleteInProgress(false);
 
-            console.log('[PlayLists] Montage removal successful:', montageIdToRemove);
+            setPlaylists(currentPlaylists => {
+                const playlist = currentPlaylists[playlistIndex];
+                console.log('[Playlists] playlist = currentPlaylists[playlistIndex]:', playlist);
 
-            // Update local state to reflect this change
-            const updatedPlaylists = [...playlists];
-            updatedPlaylists[playlistIndex].montages.splice(montageIndex, 1);
-            updatedPlaylists[playlistIndex].changed = true;
+                if (!playlist || !playlist.montages || !playlist.montages[montageIndex]) {
+                    console.error(`[PlayLists] Invalid playlist or montage index: ${playlistIndex}, ${montageIndex}`);
+                    return currentPlaylists; // Return unchanged
+                }
 
-            console.log('[PlayLists] Updated playlist after montage removal:', updatedPlaylists[playlistIndex]);
+                console.log('[PlayLists] Removing montage at index:', montageIndex, 'from playlist:', playlist.id);
 
-            setPlaylists(updatedPlaylists);
-            // Optionally, call autoSaveUpdates if needed
+                // Update local state to reflect this change (immutably)
+                // Using index-based removal to support duplicate montages in playlists
+                const newPlaylists = currentPlaylists.map((pl, idx) => {
+                    if (idx === playlistIndex) {
+                        // Create new playlist object with filtered montages array
+                        return {
+                            ...pl,
+                            montages: pl.montages.filter((_, mIdx) => mIdx !== montageIndex),
+                            changed: true
+                        };
+                    }
+                    return pl;
+                });
+
+                console.log('[PlayLists] Updated playlist after montage removal:', newPlaylists[playlistIndex]);
+
+                updatedPlaylists = newPlaylists;
+                return newPlaylists;
+            });
+
+            // Call autoSaveUpdates to sync with backend
+            // This sends the complete updated montages list to backend via updatePlaylist
+            // skipStateUpdate: true because we already updated state above
             autoSaveUpdates({
                 playlistIndex,
                 playlist: updatedPlaylists[playlistIndex],
@@ -364,14 +378,28 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
                 updateSaveStatus,
                 handlePlaylistUpdate,
                 t,
+                skipStateUpdate: true,
                 currentPlaylistId: currentPlaylist,
                 syncWithBackend: handlePlaylistChange
             });
+
+            // Clear the in-progress flag after a 300ms delay to prevent rapid clicks
+            // Clear any existing timeout first
+            if (deleteTimeoutRef.current) {
+                clearTimeout(deleteTimeoutRef.current);
+            }
+            deleteTimeoutRef.current = setTimeout(() => {
+                deleteInProgressRef.current = false;
+                setDeleteInProgress(false);
+            }, 300);
         } catch (error) {
             console.error('[PlayLists] Failed to delete montage from playlist:', error);
+            deleteInProgressRef.current = false;
             setDeleteInProgress(false);
         }
-    }, [setPlaylists, deleteMontageFromPlaylist, setDeleteInProgress, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, t, isDemo]);
+    }, [playlists, isDemo, setPlaylists, setDeleteInProgress, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, currentPlaylist, handlePlaylistChange]);
+    // Note: Keeping all dependencies to ensure the callback always has fresh references.
+    // This may cause more re-renders but ensures correctness.
 
     const handleRestrictedAction = (reason) => {
         if (reason === 'guest') {
@@ -386,40 +414,67 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
     };
     // moveMontageToPlaylist here copies from default to an other playlist
     const moveMontageToPlaylist = useCallback((montage, playlistId) => {
+        console.log('[Playlists] moveMontageToPlaylist CALLED - Entry point');
         if (isDemo) {
             handleRestrictedAction();  // This function should already set showSnackbar
             return;  // Exit the function early
         }
-        const playlistToUpdateIndex = playlists.findIndex(playlist => playlist.id === playlistId);
-        if (playlistToUpdateIndex === -1) {
-            console.error('[PlayLists] Playlist not found:', playlistId);
-            setAddError(t("error.playlist_not_found"));
-            setShowSnackbar(true); // Show error message
-            return;
-        }
-        const playlistToUpdate = playlists[playlistToUpdateIndex];
+        // Use functional update to ensure we have the latest state, even for rapid successive clicks
+        let updatedPlaylists;
+        let playlistToUpdateIndex;
 
-        console.log('[Playlists] moveMontageToPlaylist call autoSaveUpdates', montage, playlistId);
+        setPlaylists(currentPlaylists => {
+            playlistToUpdateIndex = currentPlaylists.findIndex(playlist => playlist.id === playlistId);
+            if (playlistToUpdateIndex === -1) {
+                console.error('[PlayLists] Playlist not found:', playlistId);
+                setAddError(t("error.playlist_not_found"));
+                setShowSnackbar(true);
+                return currentPlaylists; // Return unchanged if playlist not found
+            }
 
-        const newPlaylists = [...playlists];
-        if (!playlistToUpdate.montages) {
-            playlistToUpdate.montages = [];
-        }
+            const playlistToUpdate = currentPlaylists[playlistToUpdateIndex];
 
-        playlistToUpdate.montages.push(montage);
-        playlistToUpdate.changed = true;
-        newPlaylists[playlistToUpdateIndex] = playlistToUpdate;
+            console.log('[Playlists] moveMontageToPlaylist - CURRENT STATE (functional update):', {
+                playlistId,
+                currentMontages: playlistToUpdate.montages?.map(m => m.id).join(','),
+                montageCount: playlistToUpdate.montages?.length,
+                montageToAdd: montage.id
+            });
 
-        setPlaylists(newPlaylists);
+            // Update playlists immutably
+            const newPlaylists = currentPlaylists.map((pl, idx) => {
+                if (idx === playlistToUpdateIndex) {
+                    return {
+                        ...pl,
+                        montages: [...(pl.montages || []), montage],
+                        changed: true
+                    };
+                }
+                return pl;
+            });
 
+            console.log('[Playlists] moveMontageToPlaylist - AFTER STATE UPDATE:', {
+                playlistId,
+                newMontages: newPlaylists[playlistToUpdateIndex].montages?.map(m => m.id).join(','),
+                newMontageCount: newPlaylists[playlistToUpdateIndex].montages?.length,
+                justAdded: montage.id
+            });
+
+            updatedPlaylists = newPlaylists;
+            return newPlaylists;
+        });
+
+        // Call autoSaveUpdates to sync with backend
+        // skipStateUpdate: true because we already updated state above
         autoSaveUpdates({
             playlistIndex: playlistToUpdateIndex,
-            playlist: playlistToUpdate,
+            playlist: updatedPlaylists[playlistToUpdateIndex],
             updatePlaylist: updatePlaylist,
             setSaveInProgress: setSaveInProgress,
             updateSaveStatus: updateSaveStatus,
             handlePlaylistUpdate: handlePlaylistUpdate,
             t: t,
+            skipStateUpdate: true,
             currentPlaylistId: currentPlaylist,
             syncWithBackend: handlePlaylistChange
         }).catch(error => {
@@ -427,7 +482,9 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
             setSaveError(`${t("error.add_montage")}: ${error.message}`);
             setShowSnackbar(true); // Show error message
         });
-    }, [playlists, setPlaylists, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, handleRestrictedAction, isDemo]);
+    }, [playlists, isDemo, t, currentPlaylist, setPlaylists, setAddError, setShowSnackbar, setSaveError, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, handlePlaylistChange]);
+    // Note: Keeping all dependencies to ensure the callback always has fresh references.
+    // This may cause more re-renders but ensures correctness for copy operations.
 
     const handleCloseAsyncOpFeedback = useCallback(() => {
         setShowSnackbar(false);
@@ -451,10 +508,8 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
         return ""; // Ensure a default return
     }, [restrictedActionError, addError, saveError, deleteError, loadError, addSuccess, saveSuccess, deleteSuccess, loadSuccess, t]);
 
+    // Filter and transform playlists with memoization for performance
     const memoizedPlaylists = useMemo(() => {
-        console.log('[PlayLists: Hide] Original playlists:', playlists);
-
-        // Filter playlists
         const filteredPlaylists = playlists.filter(playlist => {
             if (hideTempPlaylist && playlist.name?.startsWith('Temp_Playlist_')) {
                 return false;
@@ -462,7 +517,6 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
             return true;
         });
 
-        // Transform playlists and their montages
         return filteredPlaylists.map(playlist => ({
             ...playlist,
             montages: playlist.montages?.map((montage, index) => ({
@@ -470,7 +524,7 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
                 originalIndex: index + 1
             }))
         }));
-    }, [playlists, hideTempPlaylist]); // Removed setPlaylists from dependencies
+    }, [playlists, hideTempPlaylist]);
 
     const add = async () => {
         // Use handleAction to handle guest account check
@@ -500,9 +554,12 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
                             setAddError(`${t("error")}: ${result.code}: ${result.message}`);
                             setShowSnackbar(true);
                         } else {
-                            const newPlaylist = result;
-                            newPlaylist.montages = [];
-                            newPlaylist.changed = false;
+                            // Create new playlist object immutably
+                            const newPlaylist = {
+                                ...result,
+                                montages: [],
+                                changed: false
+                            };
 
                             // Use an intermediate variable for readability
                             const newPlaylists = [newPlaylist, ...playlists];
@@ -621,7 +678,6 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
         }
     };
 
-    console.log('[PlayLists] playlistsgt...', playlists);
     return (
 
         <ThemeProvider theme={theme} className="playlists">
@@ -733,16 +789,57 @@ Playlists.propTypes = {
   selectedPlaylistPosition: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
+/**
+ * React.memo comparison function for Playlists component
+ *
+ * This custom comparison is critical for proper drag-and-drop functionality.
+ *
+ * IMPORTANT: When reordering montages via drag-and-drop, the montages array length
+ * stays the same, but the ORDER of montages changes. We must compare montage IDs
+ * at each index position to detect reordering.
+ *
+ * Why this matters:
+ * - Delete/Add operations: Change array length → triggers re-render ✓
+ * - Drag-and-drop reorder: Same array length → ONLY detected by comparing IDs at each position
+ *
+ * Without checking montage order (lines 739-741), the component would not re-render
+ * after drag-and-drop, causing the UI to revert to the old order even though the
+ * backend saved correctly.
+ *
+ * @param {Object} prevProps - Previous component props
+ * @param {Object} nextProps - New component props
+ * @returns {boolean} - true if props are equal (skip re-render), false if changed (re-render)
+ */
 export default React.memo(Playlists, (prevProps, nextProps) => {
-  return (
+  // Check if playlists structure has changed
+  const playlistsUnchanged = (
     prevProps.currentPlaylist === nextProps.currentPlaylist &&
     prevProps.selectedPlaylistPosition === nextProps.selectedPlaylistPosition &&
     prevProps.isDemo === nextProps.isDemo &&
     prevProps.playlists.length === nextProps.playlists.length &&
-    prevProps.playlists.every((playlist, index) => 
-      playlist.id === nextProps.playlists[index]?.id &&
-      playlist.name === nextProps.playlists[index]?.name &&
-      playlist.montages?.length === nextProps.playlists[index]?.montages?.length
-    )
+    prevProps.playlists.every((playlist, index) => {
+      const nextPlaylist = nextProps.playlists[index];
+
+      // Check basic playlist properties
+      if (playlist.id !== nextPlaylist?.id || playlist.name !== nextPlaylist?.name) {
+        return false;
+      }
+
+      // Check montages array length
+      if (playlist.montages?.length !== nextPlaylist?.montages?.length) {
+        return false;
+      }
+
+      // Check montage IDs and their order (critical for drag-and-drop)
+      if (playlist.montages && nextPlaylist.montages) {
+        return playlist.montages.every((montage, montageIndex) =>
+          montage.id === nextPlaylist.montages[montageIndex]?.id
+        );
+      }
+
+      return true;
+    })
   );
+
+  return playlistsUnchanged;
 });

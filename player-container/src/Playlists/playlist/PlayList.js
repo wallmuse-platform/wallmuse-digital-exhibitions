@@ -161,16 +161,17 @@ function Playlist({
             const activeId = getOriginalId(active.id);
             const overId = getOriginalId(over.id);
 
-            // console.log('[PlayList] DragEnd Event:', {
-            //     activeId: ensureStringId(active.id),
-            //     overId: ensureStringId(over.id),
-            //     playlistIndex, // from props
-            //     activeData: active.data.current,
-            //     overData: over.data.current
-            // });
+            console.log('[PlayList] DragEnd Event:', {
+                activeFullId: active.id,
+                overFullId: over.id,
+                activeId,
+                overId,
+                playlistIndex,
+                playlistMontageIds: playlist?.montages?.map(m => String(m.id))
+            });
 
             // Validate playlist exists
-            if (!playlist?.montages) { // Use playlist prop directly
+            if (!playlist?.montages) {
                 console.error('[PlayList] Invalid playlist or montages array');
                 return;
             }
@@ -182,6 +183,14 @@ function Playlist({
             const newIndex = playlist.montages.findIndex(
                 (item) => String(item.id) === overId
             );
+
+            console.log('[PlayList] Index search:', {
+                activeId,
+                overId,
+                oldIndex,
+                newIndex,
+                montageIds: playlist.montages.map((m, i) => ({ index: i, id: String(m.id), matches: String(m.id) === activeId || String(m.id) === overId }))
+            });
 
             // console.log('[PlayList] Found indices:', { oldIndex, newIndex });
 
@@ -543,13 +552,25 @@ function Playlist({
 // export default Playlist;
 
 export default memo(Playlist, (prevProps, nextProps) => {
-    return (
+    const montagesChanged = JSON.stringify(prevProps.playlist?.montages) !== JSON.stringify(nextProps.playlist?.montages);
+
+    if (montagesChanged) {
+        console.log('[Playlist memo] Montages changed, will re-render:', {
+            playlistId: nextProps.playlist?.id,
+            prevMontages: prevProps.playlist?.montages?.map(m => m.id),
+            nextMontages: nextProps.playlist?.montages?.map(m => m.id)
+        });
+    }
+
+    const shouldSkipRender = (
         prevProps.playlist?.id === nextProps.playlist?.id &&
         prevProps.playlist?.name === nextProps.playlist?.name &&
         prevProps.playlistIndex === nextProps.playlistIndex &&
         prevProps.currentPlaylist === nextProps.currentPlaylist &&
-        JSON.stringify(prevProps.playlist?.montages) === JSON.stringify(nextProps.playlist?.montages)
+        !montagesChanged
     );
+
+    return shouldSkipRender;
 });
 
 Playlist.propTypes = {

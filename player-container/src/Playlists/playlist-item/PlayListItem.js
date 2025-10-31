@@ -313,15 +313,14 @@ function PlayListItem({
                             />
                         </Tooltip>
                     )}
-                    {/* Add Icon - only default playlist TODO all playlists + Add MontageSelection choice of playlist */}
-                    {
-                        isDefaultPlaylist ?
-                            <Tooltip title={t("component.playlist.exhibitions.add-to-playlist")}>
-                                <PlaylistAddIcon sx={{ cursor: "pointer" }}
-                                    color="primary"
-                                    onClick={openPlaylistSelectionDialog} />
-                            </Tooltip> : null
-                    }
+                    {/* Add Icon - only show on hover + Add MontageSelection choice of playlist + duplicated allowed */}
+                    {isHovered && (
+                        <Tooltip title={t("component.playlist.exhibitions.add-to-playlist")}>
+                            <PlaylistAddIcon sx={{ cursor: "pointer" }}
+                                color="primary"
+                                onClick={openPlaylistSelectionDialog} />
+                        </Tooltip>
+                    )}
                     <div>
                         <Tooltip title={t("component.playlist.exhibitions.associate-displays")}>
                             <SettingsIcon
@@ -399,7 +398,7 @@ function PlayListItem({
                 <DialogTitle>{t("component.playlist.exhibitions.add-montage")}</DialogTitle>
                 <DialogContent>
                     <Box component="form" sx={{ display: 'flex', flexWrap: 'wrap' }}>
-                        <FormControl sx={{ m: 1, minWidth: 120 }}>
+                        <FormControl fullWidth sx={{ m: 1 }}>
                             <InputLabel htmlFor="playlist-dialog-native">{t("component.playlist.exhibitions.playlist")}</InputLabel>
                             <Select
                                 native
@@ -408,9 +407,12 @@ function PlayListItem({
                             >
                                 <option key="-1" value="-1">{t("component.playlist.exhibitions.select-playlist-default")}</option>
                                 {
-                                    playlists.filter(playlist => playlist.id).map(playlist => {
+                                    playlists.map(playlist => {
+                                        // Show all playlists including default (which has no id or empty string id)
+                                        const playlistId = playlist.id || '';
+                                        const playlistName = playlist.name || t("component.playlist.exhibitions.default-name");
                                         return (
-                                            <option key={playlist.id} value={playlist.id}>{playlist.name}</option>
+                                            <option key={playlistId || 'default'} value={playlistId}>{playlistName}</option>
                                         )
                                     })
                                 }

@@ -20,6 +20,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { ConfigureDisplays } from '../Configure/Configure.js';
 import Descriptions from '../Descriptions/Descriptions.js';
 import { useTVNavigation } from '../utils/useTVNavigation';
+import useGuestActionPopup from '../accounts/useGuestActionPopup';
 
 // Style and Utilities
 import '../App.css';
@@ -36,6 +37,9 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
   const theme = useTheme();
 
   const { isMobile, isTablet, isSmartTV, isSmartTVHD, isSmartTVUHD, iconSize } = responsiveProps;
+
+  // Guest action popup hook - Must be here so it persists when modal closes
+  const { handleAction, popup } = useGuestActionPopup();
 
   // For TV navigation, we now only need 2 main buttons
   const mainButtonCount = 2; // The two main buttons always visible
@@ -290,7 +294,7 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
           >
             <CloseIcon />
           </IconButton>
-          <ConfigureDisplays t={t} responsiveProps={responsiveProps} />
+          <ConfigureDisplays t={t} responsiveProps={responsiveProps} onClose={handleCloseConfigureDisplays} handleAction={handleAction} />
         </Box>
       </Modal>
 
@@ -406,6 +410,7 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
           </div>
         </Box>
       </Modal>
+      {popup}
     </ThemeProvider >
   );
 }
