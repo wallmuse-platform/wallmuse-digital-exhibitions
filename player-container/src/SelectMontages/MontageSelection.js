@@ -10,7 +10,7 @@ import CardContent from '@mui/material/CardContent';
 import CardActions from '@mui/material/CardActions';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import { Tooltip, Box, CircularProgress } from "@mui/material";
+import { Tooltip, Box, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, OutlinedInput } from "@mui/material";
 import PlaylistAddIcon from "@mui/icons-material/PlaylistAdd";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -22,6 +22,7 @@ import { monitorPlayback } from '../wsTools';
 import { BaseThumbnailContext } from '../contexts/MontagesContext.js';
 import { getUserId } from "../utils/Utils";
 import FilterBar from "./FilterBar.js";
+import SearchBar from "./SearchBar.js";
 import { sortMontages } from './sortMontages';
 import DescriptionManager from "./DescriptionManager";
 import calculateDuration from "./calculateDuration.js";
@@ -74,7 +75,7 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
     setCurrentPlaylist, 
     backendCurrentPlaylist, 
     handlePlaylistChange,
-    loading, 
+    syncLoading, 
     syncComplete, 
     error 
   } = useEnvironments();
@@ -94,6 +95,7 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
   // State variables
   const [montages, setMontages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [orderBy, setOrderBy] = useState('Most Recent');
   const [displayBy, setDisplayBy] = useState('All Display Types');
   const [qualityBy, setQualityBy] = useState('All Resolutions');
@@ -103,7 +105,14 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
   const [addSuccess, setAddSuccess] = useState(false);
   const [addError, setAddError] = useState(null);
 
-  const { isSmartTV } = useResponsive();
+  // Dialog state for playlist selection
+  const [openPlaylistSelection, setOpenPlaylistSelection] = useState(false);
+  const [selectedMontageForDialog, setSelectedMontageForDialog] = useState(null);
+
+  // Ref to store hover timeout to prevent flickering
+  const hoverTimeoutRef = useRef(null);
+
+  const { isSmartTV, isMobile } = useResponsive();
 
   const handleRestrictedAction = () => {
     setRestrictedActionError(t("error.restricted_action"));
@@ -113,19 +122,54 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
     setRestrictedActionError(null);
   };
 
-  // Effect: Fetch and sort data
+  // Effect: Read search parameter from URL on mount
   useEffect(() => {
-    console.log('[Montage Selection] searchMontages filters');
-    setIsLoading(true);
-    searchMontages().then(data => {
-      const sortedData = sortMontages(data, orderBy, displayBy, qualityBy, orientationBy, commercialBy);
-      setMontages(sortedData);
-      setIsLoading(false);
-    }).catch(error => {
-      console.error('Error fetching montages:', error);
-      setIsLoading(false);
-    });
-  }, [orderBy, displayBy, qualityBy, orientationBy, commercialBy]);
+    const params = new URLSearchParams(window.location.search);
+    const searchword = params.get('searchword') || params.get('search-word') || params.get('search');
+    if (searchword) {
+      console.log('[MontageSelection] URL search parameter detected:', searchword);
+      setSearchTerm(searchword);
+
+      // Scroll to montages section after a short delay to ensure content is loaded
+      setTimeout(() => {
+        scrollToMontages();
+      }, 500);
+    }
+  }, []);
+
+  // Effect: Fetch and sort data (with debounced search)
+  useEffect(() => {
+    console.log('[Montage Selection] searchMontages filters', { searchTerm });
+
+    // Debounce search input - wait 500ms after user stops typing
+    const searchDebounceTimer = setTimeout(() => {
+      setIsLoading(true);
+      searchMontages().then(data => {
+        // Filter by search term BEFORE sorting
+        let filteredData = data;
+        if (searchTerm) {
+          const term = searchTerm.toLowerCase();
+          filteredData = data.filter(m =>
+            m.name?.toLowerCase().includes(term) ||
+            m.author?.toLowerCase().includes(term) ||
+            m.author_fn?.toLowerCase().includes(term) ||
+            m.descriptions?.some(d => d.description?.toLowerCase().includes(term))
+          );
+          console.log(`[MontageSelection] Search filtered ${data.length} montages to ${filteredData.length} results for term: "${searchTerm}"`);
+        }
+
+        const sortedData = sortMontages(filteredData, orderBy, displayBy, qualityBy, orientationBy, commercialBy);
+        setMontages(sortedData);
+        setIsLoading(false);
+      }).catch(error => {
+        console.error('Error fetching montages:', error);
+        setIsLoading(false);
+      });
+    }, searchTerm ? 500 : 0); // 500ms debounce for search, immediate for filters
+
+    // Cleanup timeout on unmount or when dependencies change
+    return () => clearTimeout(searchDebounceTimer);
+  }, [searchTerm, orderBy, displayBy, qualityBy, orientationBy, commercialBy]);
 
   const userId = getUserId();
 
@@ -171,28 +215,47 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
 
   const handleSelectMontage = (montageId) => {
     const montage = getMontageById(montageId);
-    try {
-      console.log('[MontageSelection] PlayMontage Adding montage to default playlist', montage, playlists, setPlaylists);
-      addMontageToPlaylist(montage, '', playlists, setPlaylists)
-        .then(() => {
-          setAddSuccess(true);
-          setAddError(null);
-          console.log('Montage successfully added');
-          
-          // Auto-hide success message after 3 seconds
-          setTimeout(() => {
+    console.log('[MontageSelection] Opening playlist selection dialog for montage:', montage);
+    setSelectedMontageForDialog(montage);
+    setOpenPlaylistSelection(true);
+  };
+
+  const handlePlaylistSelectionDialogClose = () => {
+    setOpenPlaylistSelection(false);
+    setSelectedMontageForDialog(null);
+  };
+
+  const handlePlaylistSelectionChange = (event) => {
+    const playlistId = event.target.value;
+    console.log('[MontageSelection] Playlist selected:', playlistId, 'for montage:', selectedMontageForDialog);
+
+    if (playlistId !== "-1" && selectedMontageForDialog) {
+      try {
+        console.log('[MontageSelection] Adding montage to playlist', selectedMontageForDialog, playlistId);
+        addMontageToPlaylist(selectedMontageForDialog, playlistId, playlists, setPlaylists)
+          .then(() => {
+            setAddSuccess(true);
+            setAddError(null);
+            console.log('Montage successfully added');
+
+            // Close dialog
+            handlePlaylistSelectionDialogClose();
+
+            // Auto-hide success message after 3 seconds
+            setTimeout(() => {
+              setAddSuccess(false);
+            }, 3000);
+          })
+          .catch(error => {
             setAddSuccess(false);
-          }, 3000);
-        })
-        .catch(error => {
-          setAddSuccess(false);
-          setAddError(t("error.add_montage") || "Error adding montage to playlist");
-          console.error('Error in adding montage:', error);
-        });
-    } catch (error) {
-      setAddSuccess(false);
-      setAddError(t("error.add_montage") || "Error adding montage to playlist");
-      console.error('Unexpected error:', error);
+            setAddError(t("error.add_montage") || "Error adding montage to playlist");
+            console.error('Error in adding montage:', error);
+          });
+      } catch (error) {
+        setAddSuccess(false);
+        setAddError(t("error.add_montage") || "Error adding montage to playlist");
+        console.error('Unexpected error:', error);
+      }
     }
   };
 
@@ -200,13 +263,28 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
   const scrollToWebPlayer = () => {
     const webPlayerElement = document.querySelector('.web-player-container');
     if (webPlayerElement) {
-      const isMobile = window.innerWidth <= 768;
       const offset = isMobile ? 80 : 150; // Adjust offset based on header/menu height
       const topPosition = webPlayerElement.getBoundingClientRect().top + window.pageYOffset - offset;
 
       window.scrollTo({ top: topPosition, behavior: 'smooth' });
     } else {
       console.warn('[scrollToWebPlayer] WebPlayer element not found.');
+    }
+  };
+
+  // Function to scroll to the Montages section (shows first results)
+  const scrollToMontages = () => {
+    // Try to find the first montage card to show results, otherwise scroll to section
+    const firstMontageCard = document.querySelector('.showmontages .MuiCard-root');
+    const targetElement = firstMontageCard || document.querySelector('.showmontages');
+
+    if (targetElement) {
+      const offset = isMobile ? 100 : 200; // Larger offset to show search bar + first results
+      const topPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - offset;
+
+      window.scrollTo({ top: topPosition, behavior: 'smooth' });
+    } else {
+      console.warn('[scrollToMontages] Montages section not found.');
     }
   };
 
@@ -243,7 +321,7 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
       console.log('[MontageSelection handlePlayMontage] Temp playlist created:', tempPlaylist);
 
       // Call a callback to inform the parent component
-      onTempPlaylistCreated(tempPlaylist.id); //  Use the destructured prop
+      onTempPlaylistCreated(tempPlaylist.id); // ✅ Use the destructured prop
 
       // Update playlists
       const newPlaylists = [tempPlaylist, ...playlists];
@@ -415,6 +493,15 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
           </div>
         </div>
 
+        {/* Search Bar */}
+        <div style={{ padding: '0 1rem', maxWidth: '800px', margin: '0 auto' }}>
+          <SearchBar
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            onSearch={scrollToMontages}
+          />
+        </div>
+
         {/* Filter Bar */}
         {!isSmartTV && showFilters && (
           <FilterBar
@@ -454,7 +541,7 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
           }
 
           const tooltipPlay = gatewayTooltipAction('_play', userId, montage);
-          const tooltipAdd = gatewayTooltipAction('_add', userId, montage);
+          const tooltipAdd = t("component.playlist.exhibitions.add-to-playlist");
 
           return (
             <div key={montage.id} style={{ flexBasis: '20rem', margin: '1em', position: 'relative' }}
@@ -474,8 +561,19 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
                   transition: 'transform 0.5s ease-out',
                   willChange: 'transform'
                 }}
-                onMouseEnter={() => setIsHovered(prevState => ({ ...prevState, [index]: true }))}
-                onMouseLeave={() => setIsHovered(prevState => ({ ...prevState, [index]: false }))}
+                onMouseEnter={() => {
+                  // Clear any pending timeout
+                  if (hoverTimeoutRef.current) {
+                    clearTimeout(hoverTimeoutRef.current);
+                  }
+                  setIsHovered(prevState => ({ ...prevState, [index]: true }));
+                }}
+                onMouseLeave={() => {
+                  // Add a small delay before removing hover to prevent flickering
+                  hoverTimeoutRef.current = setTimeout(() => {
+                    setIsHovered(prevState => ({ ...prevState, [index]: false }));
+                  }, 100);
+                }}
               >
                 <CardContent style={{ paddingBottom: '0', position: 'relative' }}>
                   {!isPremium && <div
@@ -571,7 +669,7 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
                           variant="outlined"
                           endIcon={<PlayArrowIcon size="small" />}
                           onClick={async () => {
-                            handlePlayMontage(montage.id); // Proceed with playing montage
+                            handlePlayMontage(montage.id); // Proceed with PlayMontage
                           }}
                         >
                           Play
@@ -621,7 +719,7 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
         }}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
       >
-        <CustomAlert          
+        <CustomAlert
           severity={addError ? "error" : "success"}
           onClose={() => {
             setAddSuccess(false);
@@ -632,6 +730,38 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
         </CustomAlert>
       </CustomSnackbar>
       )}
+
+      {/* Playlist selection dialog */}
+      <Dialog disableEscapeKeyDown open={openPlaylistSelection} onClose={handlePlaylistSelectionDialogClose}>
+        <DialogTitle>{t("component.playlist.exhibitions.add-montage")}</DialogTitle>
+        <DialogContent>
+          <Box component="form" sx={{ display: 'flex', flexWrap: 'wrap' }}>
+            <FormControl fullWidth sx={{ m: 1 }}>
+              <InputLabel htmlFor="playlist-dialog-native">{t("component.playlist.exhibitions.playlist")}</InputLabel>
+              <Select
+                native
+                onChange={handlePlaylistSelectionChange}
+                input={<OutlinedInput label="Playlist" id="playlist-dialog-native" />}
+              >
+                <option key="-1" value="-1">{t("component.playlist.exhibitions.select-playlist-default")}</option>
+                {
+                  playlists.map(playlist => {
+                    // Show all playlists including default (which has no id or empty string id)
+                    const playlistId = playlist.id || '';
+                    const playlistName = playlist.name || t("component.playlist.exhibitions.default-name");
+                    return (
+                      <option key={playlistId || 'default'} value={playlistId}>{playlistName}</option>
+                    )
+                  })
+                }
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handlePlaylistSelectionDialogClose}>Ok</Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }
