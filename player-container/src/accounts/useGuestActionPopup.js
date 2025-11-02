@@ -43,6 +43,26 @@ const useGuestActionPopup = () => {
         };
     }, [localUserId]);
 
+    // Detect URL parameter for incoming guest creation requests from other apps (e.g., CreateMontage)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const shouldCreateGuest = params.get('create_guest') === 'true';
+
+        if (shouldCreateGuest) {
+            const currentUserId = getUserId();
+            const isDemo = isDemoAccount(currentUserId);
+
+            if (isDemo) {
+                console.log('[useGuestActionPopup] create_guest parameter detected from external app, auto-showing popup');
+                setShowPopup(true);
+
+                // Clean the URL to remove the parameter (optional, keeps URL clean)
+                const cleanUrl = window.location.pathname + (params.get('lang') ? `?lang=${params.get('lang')}` : '');
+                window.history.replaceState({}, '', cleanUrl);
+            }
+        }
+    }, []); // Run only once on mount
+
     /**
      * Handle an action with guest account checking
      * @param {Function} action - The action to perform
