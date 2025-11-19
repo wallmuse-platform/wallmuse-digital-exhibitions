@@ -100,12 +100,18 @@ export class ChunkManager {
 
     while (attempts <= this.config.retryAttempts) {
       try {
+        // Create timeout with AbortController for browser compatibility (Safari 15, older browsers)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
         const response = await fetch(request.url + '&frag=1', {
           headers: {
             Range: `bytes=${request.startByte}-${request.endByte}`,
           },
-          signal: AbortSignal.timeout(this.config.timeout), // FIXED: Enable timeout to prevent hanging requests
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
