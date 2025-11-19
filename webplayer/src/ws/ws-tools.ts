@@ -1305,12 +1305,17 @@ export class WsTools {
       );
     }
 
+    // Create timeout with AbortController for browser compatibility (Safari 15, older browsers)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     return fetch(baseUrl + finalUrl, {
       headers: {
         Accept: 'text/x-json',
       },
-      signal: AbortSignal.timeout(10000),
+      signal: controller.signal,
     })
+      .finally(() => clearTimeout(timeoutId))
       .then(response => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
