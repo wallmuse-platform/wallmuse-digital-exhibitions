@@ -1332,6 +1332,11 @@ export class WsTools {
         return data;
       })
       .catch(error => {
+        // Handle timeout errors with clear messaging
+        if (error.name === 'AbortError') {
+          console.warn('[WS-TOOLS] Request timed out after 10s:', finalUrl);
+          throw new Error(`Request timeout: ${finalUrl}`);
+        }
         // Also check for 551 in error messages
         if (
           error.message &&
