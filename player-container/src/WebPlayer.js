@@ -24,6 +24,7 @@ const WebPlayer = React.memo(function WebPlayer({
   // Use selectedTrack prop directly - no state needed
   const [currentMontage, setCurrentMontage] = useState(undefined);
   const hasLoadedOnce = useRef(false); // Track if we've loaded once
+  const [reloadTrigger, setReloadTrigger] = useState(0); // Trigger reload when incremented
 
   // Get loading states from useEnvironments hook
   const { initialLoading, syncLoading, playlistLoading } = useEnvironments();
@@ -156,23 +157,52 @@ const WebPlayer = React.memo(function WebPlayer({
           }
         }
 
-        // Add minimal CSS for video visibility
+        // Add CSS overrides to fit child player into 16:9 container
         if (!document.getElementById('webplayer-video-css')) {
           const customStyle = document.createElement('style');
           customStyle.id = 'webplayer-video-css';
           customStyle.textContent = `
-            #root-wm-player {
+            /* Override child player's viewport-based rules to fit 16:9 container */
+            #root-wm-player,
+            #root-wm-player > div,
+            .wm-player-contents,
+            #wm-player-contents {
+              position: absolute !important;
+              top: 0 !important;
+              left: 0 !important;
+              right: 0 !important;
+              bottom: 0 !important;
               width: 100% !important;
               height: 100% !important;
-              min-height: 400px !important;
+              min-height: unset !important;
+              max-height: 100% !important;
+              min-width: unset !important;
+              max-width: 100% !important;
+              overflow: hidden !important;
             }
+            /* Video should fill container and crop to fit */
             #root-wm-player video {
-              width: 100% !important;
-              height: 100% !important;
+              position: absolute !important;
+              top: 50% !important;
+              left: 50% !important;
+              transform: translate(-50%, -50%) !important;
+              min-width: 100% !important;
+              min-height: 100% !important;
+              width: auto !important;
+              height: auto !important;
               object-fit: cover !important;
             }
             #root-wm-player video.hidden {
               display: none !important;
+            }
+            /* Ensure any canvas elements also fit */
+            #root-wm-player canvas {
+              position: absolute !important;
+              top: 0 !important;
+              left: 0 !important;
+              width: 100% !important;
+              height: 100% !important;
+              object-fit: cover !important;
             }
           `;
           document.head.appendChild(customStyle);
@@ -241,7 +271,7 @@ const WebPlayer = React.memo(function WebPlayer({
     };
 
     loadPlayer();
-  }, [house, selectedTrack]); // Only reload if house, or selectedTrack change, environments removed
+  }, [house, selectedTrack, reloadTrigger]); // Reload on house, selectedTrack, or reloadTrigger change
 
   // Handle navigation events (without reloading player)
   useEffect(() => {
@@ -254,21 +284,18 @@ const WebPlayer = React.memo(function WebPlayer({
       if (event.detail?.playlist && isPlayerLoaded) {
         const { playlist, position, isPlaylistChange } = event.detail;
         
-        // Handle playlist changes differently than montage changes
+        // Handle playlist changes - use webPlayerNavigate instead of reloading
         if (isPlaylistChange) {
-          logInfo('📂 Playlist change detected - will trigger reload cycle');
-          
-          // For playlist changes, we need to reload the player
-          // Set flag to reload on next useEffect cycle
-          setIsPlayerLoaded(false);
-          hasLoadedOnce.current = false; // Allow reload
-          
-          // Trigger reload after brief delay
-          setTimeout(() => {
-            // This will trigger the main useEffect to reload the player
-            containerRef.current && (containerRef.current.innerHTML = '');
-          }, 100);
-          
+          logInfo('📂 Playlist change detected - navigating via webPlayerNavigate');
+
+          // Use webPlayerNavigate to switch playlists without reloading
+          if (window.webPlayerNavigate) {
+            logInfo('📂 Calling webPlayerNavigate for playlist:', playlist);
+            window.webPlayerNavigate({ playlist, position: position || { montage: 0 } });
+          } else {
+            logInfo('⚠️ webPlayerNavigate not available, playlist change may not work');
+          }
+
         } else {
           logInfo('🎬 Montage navigation within same playlist');
           
@@ -339,17 +366,31 @@ const WebPlayer = React.memo(function WebPlayer({
 
   return (
     <div
-      className="web-player-content relative w-full h-full flex items-center justify-center bg-black"
-      style={{ minHeight: '36.25vw' }}
+      className="web-player-content"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        backgroundColor: 'black'
+      }}
     >
       {showLoading && <GradientCircularProgress />}
       <div
         ref={containerRef}
-        className="w-full h-full flex items-center justify-center"
         style={{
-          position: 'relative',
-          overflow: 'visible',
-          zIndex: 1
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden'
         }}
       />
     </div>
