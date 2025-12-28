@@ -10009,3 +10009,4 @@ src/utils/triggerClone.js
 
 # Sentry Config File
 .sentryclirc
+.claude

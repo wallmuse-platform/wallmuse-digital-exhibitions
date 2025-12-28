@@ -4,37 +4,57 @@
 import React, { useState, useRef, useEffect, useContext } from "react";
 
 // Material UI components
-import Card from '@mui/material/Card';
-import CardMedia from '@mui/material/CardMedia';
-import CardContent from '@mui/material/CardContent';
-import CardActions from '@mui/material/CardActions';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import { Tooltip, Box, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, InputLabel, Select, OutlinedInput } from "@mui/material";
+import Card from "@mui/material/Card";
+import CardMedia from "@mui/material/CardMedia";
+import CardContent from "@mui/material/CardContent";
+import CardActions from "@mui/material/CardActions";
+import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
+import {
+  Tooltip,
+  Box,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  OutlinedInput,
+} from "@mui/material";
 import PlaylistAddIcon from "@mui/icons-material/PlaylistAdd";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import FilterListIcon from '@mui/icons-material/FilterList';
+import FilterListIcon from "@mui/icons-material/FilterList";
 
 // Custom components and utilities
-import { searchMontages, addMontageToPlaylist, addPlaylist, updatePlaylist, deletePlaylist, loadPlaylist, getPlaylists } from '../utils/api.js';
-import { saveTempPlaylistId } from '../utils/tempPlaylistsUtils.js';
-import { monitorPlayback } from '../wsTools';
-import { BaseThumbnailContext } from '../contexts/MontagesContext.js';
+import {
+  searchMontages,
+  addMontageToPlaylist,
+  addPlaylist,
+  updatePlaylist,
+  deletePlaylist,
+  loadPlaylist,
+  getPlaylists,
+  getOrCreateMonoPlaylist,
+} from "../utils/api.js";
+import { monitorPlayback } from "../wsTools";
+import { BaseThumbnailContext } from "../contexts/MontagesContext.js";
 import { getUserId } from "../utils/Utils";
 import FilterBar from "./FilterBar.js";
 import SearchBar from "./SearchBar.js";
-import { sortMontages } from './sortMontages';
+import { sortMontages } from "./sortMontages";
 import DescriptionManager from "./DescriptionManager";
 import calculateDuration from "./calculateDuration.js";
-import { useGatewayTooltip } from './gatewayTooltips';
-import { useResponsive } from '../utils/useResponsive';
+import { useGatewayTooltip } from "./gatewayTooltips";
+import { useResponsive } from "../utils/useResponsive";
 import { handleSendCommand } from "../App";
 import { CustomSnackbar, CustomAlert } from "../CustomComponents.js";
 
 // Context providers
-import { useSession } from '../contexts/SessionContext.js';
-import { PlaylistsContext } from '../contexts/PlaylistsContext';
-import { useEnvironments } from "../contexts/EnvironmentsContext.js"
+import { useSession } from "../contexts/SessionContext.js";
+import { PlaylistsContext } from "../contexts/PlaylistsContext";
+import { useEnvironments } from "../contexts/EnvironmentsContext.js";
 
 // Internationalization
 import { useTranslation } from "react-i18next";
@@ -43,71 +63,118 @@ import { useTranslation } from "react-i18next";
 import { currentTheme, selectTheme } from "../theme/ThemeUtils.js";
 
 // PropTypes for component properties validation
-import PropTypes from 'prop-types';
+import PropTypes from "prop-types";
 import { handleActionWithGuestCheck } from "../accounts/cloneGuest.js";
 
 // PlayMode
-import { handlePlayMontageEnd, savePreviousPlaylistId, clearPreviousPlaylistId} from "../Play/playModeUtils.js";
+import {
+  handlePlayMontageEnd,
+  savePreviousPlaylistId,
+  clearPreviousPlaylistId,
+} from "../Play/playModeUtils.js";
 
 // Acounts
 import useGuestActionPopup from "../accounts/useGuestActionPopup.js";
 
-
 // Optional comments and checks
-// import i18n from '../i18n.js'; 
-// TOCHECK: import EnvironmentsContext to initiate houses? 
+// import i18n from '../i18n.js';
+// TOCHECK: import EnvironmentsContext to initiate houses?
 
 // Define the ShowMontages component
 
-const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, playModeRef },
-  { access_kind, author, author_fn, author_id, authors, best_description, best_name,
-    cdate, commercial, croppable, deconstructable, descriptions, duration, montage_id,
-    interactive, language, mdate, name, orientation, rating, sd_height, sd_width,
-    selectable, seq_count, splittable, thumbnail, preview, tracks, resolution, video_3d }) => {
-
+const ShowMontages = (
+  { onStop, onPlayStart, onPlayEnd, playModeRef },
+  {
+    access_kind,
+    author,
+    author_fn,
+    author_id,
+    authors,
+    best_description,
+    best_name,
+    cdate,
+    commercial,
+    croppable,
+    deconstructable,
+    descriptions,
+    duration,
+    montage_id,
+    interactive,
+    language,
+    mdate,
+    name,
+    orientation,
+    rating,
+    sd_height,
+    sd_width,
+    selectable,
+    seq_count,
+    splittable,
+    thumbnail,
+    preview,
+    tracks,
+    resolution,
+    video_3d,
+  },
+) => {
   const { playlists, setPlaylists } = useContext(PlaylistsContext);
-  const { userDetails, isPremium, isDemo } = useSession();  // Retrieve user details and guest status
+  const { userDetails, isPremium, isDemo } = useSession(); // Retrieve user details and guest status
 
   // Get all necessary context data from context
-  const { 
-    house, 
-    currentPlaylist, 
-    setCurrentPlaylist, 
-    backendCurrentPlaylist, 
+  const {
+    house,
+    currentPlaylist,
+    setCurrentPlaylist,
+    backendCurrentPlaylist,
     handlePlaylistChange,
-    syncLoading, 
-    syncComplete, 
-    error 
+    syncLoading,
+    syncComplete,
+    error,
   } = useEnvironments();
 
-  console.log('[MontageSelection] userDetails ', userDetails, ' isDemo ', isDemo, ' isPremium', isPremium);
+  console.log(
+    "[MontageSelection] userDetails ",
+    userDetails,
+    " isDemo ",
+    isDemo,
+    " isPremium",
+    isPremium,
+  );
 
   // Using the i18n library for internationalization
   const { t } = useTranslation();
   const theme = selectTheme();
 
-  console.log('[Montage Selection] playlists, setPlaylists', playlists, setPlaylists);
+  console.log(
+    "[Montage Selection] playlists, setPlaylists",
+    playlists,
+    setPlaylists,
+  );
   // Utility function to find montage by ID
   const getMontageById = (id) => {
-    return montages.find(montage => montage.id === id);
+    return montages.find((montage) => montage.id === id);
   };
 
   // State variables
   const [montages, setMontages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [orderBy, setOrderBy] = useState('Most Recent');
-  const [displayBy, setDisplayBy] = useState('All Display Types');
-  const [qualityBy, setQualityBy] = useState('All Resolutions');
-  const [orientationBy, setOrientationBy] = useState('All Orientations');
-  const [commercialBy, setCommercialBy] = useState('All Access Types');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [orderBy, setOrderBy] = useState("Most Recent");
+  const [displayBy, setDisplayBy] = useState("All Display Types");
+  const [qualityBy, setQualityBy] = useState("All Resolutions");
+  const [orientationBy, setOrientationBy] = useState("All Orientations");
+  const [commercialBy, setCommercialBy] = useState("All Access Types");
   const [restrictedActionError, setRestrictedActionError] = useState(null);
   const [addSuccess, setAddSuccess] = useState(false);
   const [addError, setAddError] = useState(null);
 
   // Dialog state for playlist selection
   const [openPlaylistSelection, setOpenPlaylistSelection] = useState(false);
-  const [selectedMontageForDialog, setSelectedMontageForDialog] = useState(null);
+  const [selectedMontageForDialog, setSelectedMontageForDialog] =
+    useState(null);
+
+  // Mono-playlist creation flag (prevent duplicate creation on rapid clicks)
+  const [creatingMonoMid, setCreatingMonoMid] = useState(null);
 
   // Ref to store hover timeout to prevent flickering
   const hoverTimeoutRef = useRef(null);
@@ -125,9 +192,15 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
   // Effect: Read search parameter from URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const searchword = params.get('searchword') || params.get('search-word') || params.get('search');
+    const searchword =
+      params.get("searchword") ||
+      params.get("search-word") ||
+      params.get("search");
     if (searchword) {
-      console.log('[MontageSelection] URL search parameter detected:', searchword);
+      console.log(
+        "[MontageSelection] URL search parameter detected:",
+        searchword,
+      );
       setSearchTerm(searchword);
 
       // Scroll to montages section after a short delay to ensure content is loaded
@@ -139,33 +212,50 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
 
   // Effect: Fetch and sort data (with debounced search)
   useEffect(() => {
-    console.log('[Montage Selection] searchMontages filters', { searchTerm });
+    console.log("[Montage Selection] searchMontages filters", { searchTerm });
 
     // Debounce search input - wait 500ms after user stops typing
-    const searchDebounceTimer = setTimeout(() => {
-      setIsLoading(true);
-      searchMontages().then(data => {
-        // Filter by search term BEFORE sorting
-        let filteredData = data;
-        if (searchTerm) {
-          const term = searchTerm.toLowerCase();
-          filteredData = data.filter(m =>
-            m.name?.toLowerCase().includes(term) ||
-            m.author?.toLowerCase().includes(term) ||
-            m.author_fn?.toLowerCase().includes(term) ||
-            m.descriptions?.some(d => d.description?.toLowerCase().includes(term))
-          );
-          console.log(`[MontageSelection] Search filtered ${data.length} montages to ${filteredData.length} results for term: "${searchTerm}"`);
-        }
+    const searchDebounceTimer = setTimeout(
+      () => {
+        setIsLoading(true);
+        searchMontages()
+          .then((data) => {
+            // Filter by search term BEFORE sorting
+            let filteredData = data;
+            if (searchTerm) {
+              const term = searchTerm.toLowerCase();
+              filteredData = data.filter(
+                (m) =>
+                  m.name?.toLowerCase().includes(term) ||
+                  m.author?.toLowerCase().includes(term) ||
+                  m.author_fn?.toLowerCase().includes(term) ||
+                  m.descriptions?.some((d) =>
+                    d.description?.toLowerCase().includes(term),
+                  ),
+              );
+              console.log(
+                `[MontageSelection] Search filtered ${data.length} montages to ${filteredData.length} results for term: "${searchTerm}"`,
+              );
+            }
 
-        const sortedData = sortMontages(filteredData, orderBy, displayBy, qualityBy, orientationBy, commercialBy);
-        setMontages(sortedData);
-        setIsLoading(false);
-      }).catch(error => {
-        console.error('Error fetching montages:', error);
-        setIsLoading(false);
-      });
-    }, searchTerm ? 500 : 0); // 500ms debounce for search, immediate for filters
+            const sortedData = sortMontages(
+              filteredData,
+              orderBy,
+              displayBy,
+              qualityBy,
+              orientationBy,
+              commercialBy,
+            );
+            setMontages(sortedData);
+            setIsLoading(false);
+          })
+          .catch((error) => {
+            console.error("Error fetching montages:", error);
+            setIsLoading(false);
+          });
+      },
+      searchTerm ? 500 : 0,
+    ); // 500ms debounce for search, immediate for filters
 
     // Cleanup timeout on unmount or when dependencies change
     return () => clearTimeout(searchDebounceTimer);
@@ -174,10 +264,12 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
   const userId = getUserId();
 
   // Context
-  const baseThumbnailURL = useContext(BaseThumbnailContext)
+  const baseThumbnailURL = useContext(BaseThumbnailContext);
 
   //Handlers
-  const [isHovered, setIsHovered] = useState(new Array(montages.length).fill(false));
+  const [isHovered, setIsHovered] = useState(
+    new Array(montages.length).fill(false),
+  );
 
   //Specific Icons
   const TracksIcon = () => (
@@ -185,9 +277,9 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
       src="https://wallmuse.com/wallmuse/v4/tracks_h24px.png"
       alt="Tracks Icon"
       style={{
-        position: 'relative',
-        top: '2px',
-        height: "16px"
+        position: "relative",
+        top: "2px",
+        height: "16px",
       }}
     />
   );
@@ -197,7 +289,7 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
       src="https://wallmuse.com/wallmuse/v4/16+_h24px.png"
       alt="SixteenPlus Icon"
       style={{
-        height: "16px"
+        height: "16px",
       }}
     />
   );
@@ -215,7 +307,10 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
 
   const handleSelectMontage = (montageId) => {
     const montage = getMontageById(montageId);
-    console.log('[MontageSelection] Opening playlist selection dialog for montage:', montage);
+    console.log(
+      "[MontageSelection] Opening playlist selection dialog for montage:",
+      montage,
+    );
     setSelectedMontageForDialog(montage);
     setOpenPlaylistSelection(true);
   };
@@ -227,16 +322,30 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
 
   const handlePlaylistSelectionChange = (event) => {
     const playlistId = event.target.value;
-    console.log('[MontageSelection] Playlist selected:', playlistId, 'for montage:', selectedMontageForDialog);
+    console.log(
+      "[MontageSelection] Playlist selected:",
+      playlistId,
+      "for montage:",
+      selectedMontageForDialog,
+    );
 
     if (playlistId !== "-1" && selectedMontageForDialog) {
       try {
-        console.log('[MontageSelection] Adding montage to playlist', selectedMontageForDialog, playlistId);
-        addMontageToPlaylist(selectedMontageForDialog, playlistId, playlists, setPlaylists)
+        console.log(
+          "[MontageSelection] Adding montage to playlist",
+          selectedMontageForDialog,
+          playlistId,
+        );
+        addMontageToPlaylist(
+          selectedMontageForDialog,
+          playlistId,
+          playlists,
+          setPlaylists,
+        )
           .then(() => {
             setAddSuccess(true);
             setAddError(null);
-            console.log('Montage successfully added');
+            console.log("Montage successfully added");
 
             // Close dialog
             handlePlaylistSelectionDialogClose();
@@ -246,193 +355,177 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
               setAddSuccess(false);
             }, 3000);
           })
-          .catch(error => {
+          .catch((error) => {
             setAddSuccess(false);
-            setAddError(t("error.add_montage") || "Error adding montage to playlist");
-            console.error('Error in adding montage:', error);
+            setAddError(
+              t("error.add_montage") || "Error adding montage to playlist",
+            );
+            console.error("Error in adding montage:", error);
           });
       } catch (error) {
         setAddSuccess(false);
-        setAddError(t("error.add_montage") || "Error adding montage to playlist");
-        console.error('Unexpected error:', error);
+        setAddError(
+          t("error.add_montage") || "Error adding montage to playlist",
+        );
+        console.error("Unexpected error:", error);
       }
     }
   };
 
   // Function to scroll to the WebPlayer
   const scrollToWebPlayer = () => {
-    const webPlayerElement = document.querySelector('.web-player-container');
+    const webPlayerElement = document.querySelector(".web-player-container");
     if (webPlayerElement) {
       const offset = isMobile ? 80 : 150; // Adjust offset based on header/menu height
-      const topPosition = webPlayerElement.getBoundingClientRect().top + window.pageYOffset - offset;
+      const topPosition =
+        webPlayerElement.getBoundingClientRect().top +
+        window.pageYOffset -
+        offset;
 
-      window.scrollTo({ top: topPosition, behavior: 'smooth' });
+      window.scrollTo({ top: topPosition, behavior: "smooth" });
     } else {
-      console.warn('[scrollToWebPlayer] WebPlayer element not found.');
+      console.warn("[scrollToWebPlayer] WebPlayer element not found.");
     }
   };
 
   // Function to scroll to the Montages section (shows first results)
   const scrollToMontages = () => {
     // Try to find the first montage card to show results, otherwise scroll to section
-    const firstMontageCard = document.querySelector('.showmontages .MuiCard-root');
-    const targetElement = firstMontageCard || document.querySelector('.showmontages');
+    const firstMontageCard = document.querySelector(
+      ".showmontages .MuiCard-root",
+    );
+    const targetElement =
+      firstMontageCard || document.querySelector(".showmontages");
 
     if (targetElement) {
       const offset = isMobile ? 100 : 200; // Larger offset to show search bar + first results
-      const topPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - offset;
+      const topPosition =
+        targetElement.getBoundingClientRect().top + window.pageYOffset - offset;
 
-      window.scrollTo({ top: topPosition, behavior: 'smooth' });
+      window.scrollTo({ top: topPosition, behavior: "smooth" });
     } else {
-      console.warn('[scrollToMontages] Montages section not found.');
+      console.warn("[scrollToMontages] Montages section not found.");
     }
   };
 
   const handlePlayMontage = async (montageId) => {
-    console.time("[MontageSelection handlePlayMontage] Execution Timer");
+    console.time("[MonoPlaylist] Total execution time");
+
+    // Prevent duplicate creation if user clicks Play multiple times
+    if (creatingMonoMid === montageId) {
+      console.warn(
+        `[MonoPlaylist] ⚠ Blocked duplicate click for montage ${montageId}`,
+      );
+      return;
+    }
 
     try {
+      setCreatingMonoMid(montageId); // Set flag to prevent duplicate clicks
+
       // Get montage data
       const montage = getMontageById(montageId);
       if (!montage) {
-        console.error('[MontageSelection handlePlayMontage] Montage not found:', montageId);
+        console.error(`[MonoPlaylist] ✗ Montage not found: ${montageId}`);
         return;
       }
 
-      // Calculate duration of the montage for timing purposes
-      const montageDuration = parseFloat(montage.duration || 60);
-      console.log(`[MontageSelection handlePlayMontage] Montage duration: ${montageDuration}s`);
+      console.log(
+        `[MonoPlaylist] ▶ Starting play for montage: "${montage.name}" (ID: ${montageId})`,
+      );
+
+      // Get or create mono-playlist (uses existing API endpoints - no backend changes!)
+      const response = await getOrCreateMonoPlaylist(
+        montageId,
+        montage,
+        playlists,
+        setPlaylists,
+      );
+      if (!response.data || response.status >= 400) {
+        console.error(
+          `[MonoPlaylist] ✗ Failed to get/create mono-playlist:`,
+          response,
+        );
+        return;
+      }
+
+      const monoPlaylistId = response.data.playlist_id;
+      console.log(`[MonoPlaylist] ✓ Using mono-playlist ID: ${monoPlaylistId}`);
+
+      // Save current playlist ONLY if it's not already a mono-playlist
+      // This prevents saving mono-1559 when replaying the same montage
+      const currentPlaylistObj = playlists.find(
+        (p) => p.id === currentPlaylist,
+      );
+      const isCurrentMono = currentPlaylistObj?.name?.startsWith("mono-");
+
+      if (!isCurrentMono) {
+        savePreviousPlaylistId(currentPlaylist);
+        console.log(
+          `[MonoPlaylist] ✓ Saved previous playlist: ${currentPlaylist} ("${currentPlaylistObj?.name || "DEFAULT"}")`,
+        );
+      } else {
+        console.log(
+          `[MonoPlaylist] ⚠ Skipping save - already on mono-playlist: ${currentPlaylist} ("${currentPlaylistObj?.name}")`,
+        );
+      }
 
       // Scroll to WebPlayer
       scrollToWebPlayer();
 
-      // Create temp playlist
-      const now = new Date();
-      const timestamp = now.toISOString().replace(/[-:.]/g, "").slice(0, 15);
-      const playlistName = `Temp_Playlist_${timestamp}`;
-
-      let tempPlaylist = await addPlaylist(playlistName);
-      if (!tempPlaylist.data || tempPlaylist.status >= 400) {
-        console.error('[MontageSelection handlePlayMontage] Failed to create playlist:', tempPlaylist.statusText);
-        return;
-      }
-
-      tempPlaylist = tempPlaylist.data;
-      console.log('[MontageSelection handlePlayMontage] Temp playlist created:', tempPlaylist);
-
-      // Call a callback to inform the parent component
-      onTempPlaylistCreated(tempPlaylist.id); // ✅ Use the destructured prop
-
-      // Update playlists
-      const newPlaylists = [tempPlaylist, ...playlists];
-
-      savePreviousPlaylistId(currentPlaylist);
-
-      setPlaylists(newPlaylists);
-
-      // Add montage to playlist
-      await addMontageToPlaylist(montage, tempPlaylist.id, newPlaylists, setPlaylists);
-      console.log('[MontageSelection handlePlayMontage] Montage added to playlist');
-
-      // Stop current playback
-      // await onStop(house);
-      // console.log("[MontageSelection handlePlayMontage] Current playback stopped l247");
-
       try {
-        // Load the playlist and start playback
-        await loadPlaylist(house, tempPlaylist.id);
-        console.log(`[MontageSelection handlePlayMontage] Loading playlist with house: ${house}, playlist: ${tempPlaylist.id}`);
+        // Load the mono-playlist
+        await loadPlaylist(house, monoPlaylistId);
+        console.log(
+          `[MonoPlaylist] → Loading playlist (house: ${house}, playlist: ${monoPlaylistId})`,
+        );
 
-        // Then, wait for the backend to confirm
-        console.log(`[MontageSelection handlePlayMontage] Now waiting for backend confirmation...`);
-        const syncSuccess = await handlePlaylistChange(tempPlaylist.id);
-        console.log(`[MontageSelection handlePlayMontage] Backend sync completed with result: ${syncSuccess}`);
+        // Wait for backend sync
+        console.log(`[MonoPlaylist] → Waiting for backend sync...`);
+        const syncSuccess = await handlePlaylistChange(monoPlaylistId);
+        console.log(
+          `[MonoPlaylist] ${syncSuccess ? "✓" : "✗"} Backend sync result: ${syncSuccess}`,
+        );
 
         if (syncSuccess) {
           // Signal play start
           onPlayStart();
-          // playModeRef.current=true;
-          // Now check if it's the current playlist AFTER sync is complete
-          const isCurrent = (tempPlaylist.id == currentPlaylist);
-          console.log('[MontageSelection handlePlayMontage] currentPlaylist after sync:', currentPlaylist, 'isCurrent:', isCurrent);
-  
+          console.log(
+            `[MonoPlaylist] ✓ Play started - montage will loop until stopped`,
+          );
+
+          // Check if current playlist matches
+          const isCurrent = monoPlaylistId == currentPlaylist;
+          console.log(
+            `[MonoPlaylist] Current playlist: ${currentPlaylist}, isCurrent: ${isCurrent}`,
+          );
+
+          // NO TIMER - Let montage loop naturally
+          // User will either:
+          //   1. Play another montage (switches mono-playlist)
+          //   2. Play another playlist (switches playlist)
+          //   3. Press Stop (returns to previous playlist via handlePlayMontageEnd)
         } else {
-            console.warn(`[MontageSelection handlePlayMontage] Backend sync failed or timed out for playlist ${playlistId}.`);
-        }
-      } catch (error) {
-        console.error('[MontageSelection handlePlayMontage] Error loading playlist:', error);
-      } finally {
-        setTimeout(() => {
-          console.log(`[MontageSelection handlePlayMontage] Force Play:`);
-          handleSendCommand('<vlc><cmd action="play"/></vlc>', house);
-        }, 500); // 500ms delay
-
-      }
-      // Set a timer to stop playback after the montage duration plus a small buffer
-      // This prevents looping and ensures cleanup
-      // Inside the timeout function in handlePlayMontage
-      // Store the timer reference
-
-      const playbackTimer = setTimeout(async () => {
-        console.log("[MontageSelection handlePlayMontage playbackTimer] Timer fired after", montageDuration, "seconds");
-        console.log("[MontageSelection handlePlayMontage playbackTimer] Current playModeRef:", playModeRef.current);
-        
-        if (!playModeRef.current) {
-          console.log("[MontageSelection handlePlayMontage playbackTimer] Already out of play mode, cleanup already done");
-          return;
-        }
-        
-        console.log(`[MontageSelection handlePlayMontage playbackTimer] Montage playback duration reached, stopping playback. Temp playlist:`, tempPlaylist.id);
-        
-        try {
-          // Stop playback
-          console.log("[MontageSelection handlePlayMontage playbackTimer] Calling onStop with house:", house);
-          await onStop(house);
-          console.log("[MontageSelection handlePlayMontage playbackTimer] Stop command sent successfully");
-          
-          // Clean up - Call handlePlayMontageEnd directly
-          console.log("[MontageSelection handlePlayMontage playbackTimer] Now calling handlePlayMontageEnd with tempPlaylist.id:", tempPlaylist.id);
-          await handlePlayMontageEnd(tempPlaylist.id, {
-            house,
-            handlePlaylistChange, 
-            currentPlaylist,
-            setPlaylists,
-            playModeRef,
-            onPlayEnd: () => {
-              console.log("[MontageSelection handlePlayMontage] onPlayEnd callback executing, setting playModeRef to false");
-              playModeRef.current=false;
-            }
-          });
-          console.log("[MontageSelection handlePlayMontage playbackTimer] handlePlayMontageEnd completed successfully");
-
-          // Scroll back to the montage element
-          const lastMontageElement = document.getElementById(`montage-${montageId}`);
-          if (lastMontageElement) {
-            console.log("[MontageSelection handlePlayMontage playbackTimer] Scrolling to montage element");
-            lastMontageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else {
-            console.log("[MontageSelection handlePlayMontage playbackTimer] Montage element not found for scrolling");
-          }
-        } catch (error) {
-          console.error('[MontageSelection handlePlayMontage playbackTimer] Error in playback end handling:', error);
-          console.log("[MontageSelection handlePlayMontage playbackTimer] Calling onPlayEnd due to error");
+          console.warn(
+            `[MonoPlaylist] ✗ Backend sync failed for playlist: ${monoPlaylistId}`,
+          );
           onPlayEnd();
         }
-      }, (montageDuration * 1000) + 1000);
-
-      console.log(`[MontageSelection handlePlayMontage playbackTimer] Timer set to fire after ${montageDuration} seconds + 500ms`);
-
-      // Return a function to cancel the timer if needed
-      return () => {
-        console.log(`[MontageSelection handlePlayMontage playbackTimer] Cleanup function called, clearing timeout`);
-        clearTimeout(playbackTimer);
-      };
-
+      } catch (error) {
+        console.error(`[MonoPlaylist] ✗ Error loading playlist:`, error);
+        onPlayEnd();
+      } finally {
+        // Force play command after short delay
+        setTimeout(() => {
+          console.log(`[MonoPlaylist] → Force Play command`);
+          handleSendCommand('<vlc><cmd action="play"/></vlc>', house);
+        }, 500);
+      }
     } catch (error) {
-      console.error('[MontageSelection handlePlayMontage] Error:', error);
+      console.error(`[MonoPlaylist] ✗ Error:`, error);
       onPlayEnd();
     } finally {
-      console.timeEnd("[MontageSelection handlePlayMontage] Execution Timer");
+      setCreatingMonoMid(null); // Clear flag
+      console.timeEnd("[MonoPlaylist] Total execution time");
     }
   };
 
@@ -453,318 +546,428 @@ const ShowMontages = ({ onStop, onPlayStart, onPlayEnd, onTempPlaylistCreated, p
           <em>Loading...</em>
         </div>
       </Box>
-    )
-  } else return (
-    <div className="showmontages">
-      <div>
-        {/* Header Section with Centered Title and Right-aligned Button */}
-        <div style={{
-          position: 'relative',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '0 1rem',
-          marginBottom: '1rem'
-        }}>
-          <h2 style={{
-            textTransform: 'uppercase',
-            margin: '2em',
-            textAlign: 'center'
-          }}>
-            {t("show_exhibitions." + currentTheme())}
-          </h2>
-
-          <div style={{
-            position: 'absolute',
-            right: '1rem',
-            top: '50%',
-            transform: 'translateY(-50%)'
-          }}>
-            <Tooltip title={showFilters ? t("hide_filters.tip") : t("show_filters.tip")}>
-              <Button
-                onClick={toggleFilters}
-                variant="contained"
-                className="tabs_text"
-              >
-                {showFilters ? t('hide_filters') : t('show_filters')}
-                <FilterListIcon sx={{ marginLeft: 1 }} className="tabs_icon" />
-              </Button>
-            </Tooltip>
-          </div>
-        </div>
-
-        {/* Search Bar */}
-        <div style={{ padding: '0 1rem', maxWidth: '800px', margin: '0 auto' }}>
-          <SearchBar
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            onSearch={scrollToMontages}
-          />
-        </div>
-
-        {/* Filter Bar */}
-        {!isSmartTV && showFilters && (
-          <FilterBar
-            orderBy={orderBy}
-            setOrderBy={setOrderBy}
-            displayBy={displayBy}
-            setDisplayBy={setDisplayBy}
-            qualityBy={qualityBy}
-            setQualityBy={setQualityBy}
-            orientationBy={orientationBy}
-            setOrientationBy={setOrientationBy}
-            commercialBy={commercialBy}
-            setCommercialBy={setCommercialBy}
-          />
-        )}
-      </div>
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        width: '100%'
-      }}>
-
-        {sortMontages(montages, orderBy, displayBy, splittable, deconstructable, qualityBy, resolution, orientationBy, orientation, commercialBy, commercial).map((montage, index) => {
-          const { id } = montage;
-          // console.log ('id for ESLint', id);
-
-          let ratio;
-          if (montage.sd_width) {
-            ratio = parseInt(montage.sd_width, 10) / parseInt(montage.sd_height, 10);
-          } else if (montage.orientation === 'L') {
-            ratio = 16 / 9;
-          } else if (montage.orientation === 'P') {
-            ratio = 9 / 16;
-          } else {
-            ratio = 16 / 9;
-          }
-
-          const tooltipPlay = gatewayTooltipAction('_play', userId, montage);
-          const tooltipAdd = t("component.playlist.exhibitions.add-to-playlist");
-
-          return (
-            <div key={montage.id} style={{ flexBasis: '20rem', margin: '1em', position: 'relative' }}
+    );
+  } else
+    return (
+      <div className="showmontages">
+        <div>
+          {/* Header Section with Centered Title and Right-aligned Button */}
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: "0 1rem",
+              marginBottom: "1rem",
+            }}
+          >
+            <h2
+              style={{
+                textTransform: "uppercase",
+                margin: "2em",
+                textAlign: "center",
+              }}
             >
-              <Card
-                style={{
-                  display: 'grid',
-                  gridTemplateRows: 'auto 1fr auto',
-                  border: '1px solid',
-                  borderColor: theme.palette.primary.main,
-                  borderRadius: '1em',
-                  margin: '2em',
-                  position: isHovered[index] === true ? 'absolute' : 'static',
-                  transform: isHovered[index] === true ? 'scale(1.5)' : 'scale(1)',
-                  transformOrigin: 'center',
-                  zIndex: isHovered[index] === true ? 1 : 0,
-                  transition: 'transform 0.5s ease-out',
-                  willChange: 'transform'
-                }}
-                onMouseEnter={() => {
-                  // Clear any pending timeout
-                  if (hoverTimeoutRef.current) {
-                    clearTimeout(hoverTimeoutRef.current);
-                  }
-                  setIsHovered(prevState => ({ ...prevState, [index]: true }));
-                }}
-                onMouseLeave={() => {
-                  // Add a small delay before removing hover to prevent flickering
-                  hoverTimeoutRef.current = setTimeout(() => {
-                    setIsHovered(prevState => ({ ...prevState, [index]: false }));
-                  }, 100);
-                }}
+              {t("show_exhibitions." + currentTheme())}
+            </h2>
+
+            <div
+              style={{
+                position: "absolute",
+                right: "1rem",
+                top: "50%",
+                transform: "translateY(-50%)",
+              }}
+            >
+              <Tooltip
+                title={
+                  showFilters ? t("hide_filters.tip") : t("show_filters.tip")
+                }
               >
-                <CardContent style={{ paddingBottom: '0', position: 'relative' }}>
-                  {!isPremium && <div
-                    style={{
-                      borderRadius: '16px',
-                      padding: '0 4px',
-                      position: 'absolute',
-                      top: '0',
-                      right: '0',
-                      fontSize: '0.75rem',
-                      color: theme.palette.primary.main,
-                    }}
-                  >
-                    {montage.selectable === "N" ?
-                      <span style={{ color: '#1556ED' }}>Premium</span> :
-                      <span style={{ color: '#0EE6AC' }}>Free</span>
-                    }
-                  </div>}
-
-                  <Typography
-                    variant="div"
-                    color="text.secondary"
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      position: 'sticky',
-                      top: 0
-                    }}
-                  >
-                    <span style={{ verticalAlign: 'middle' }}>
-                      <TracksIcon />
-                      <span style={{ position: 'absolute', zIndex: '2', marginLeft: '-20px' }}>{montage.tracks}</span>
-                    </span>
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <span style={{ verticalAlign: 'middle' }}>
-                        {t("_duration")} {calculateDuration(montage.duration)}
-                      </span>
-                    </div>
-                    <span style={{ verticalAlign: 'middle' }}>
-                      {montage.rating === "NC-17" && <SixteenPlusIcon />}
-                    </span>
-                  </Typography>
-                  <Typography
-                    variant="h5"
-                    component="div"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'auto',
-                      height: '6rem',
-                      textOverflow: 'ellipsis'
-                    }}
-                  >
-                    {montage.name}
-                  </Typography>
-                  <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '10px', paddingBottom: '10px' }}>
-                    <CardMedia
-                      component="img"
-                      style={{
-                        height: '140px',
-                        width: `${140 * ratio}px` // Calculate the width based on the aspect ratio
-                      }}
-                      image={baseThumbnailURL + "&session:" + userId + "&artwork=" + montage.thumbnail_url}
-                      alt={montage.name}
-                    />
-                  </div>
-                  {(montage.author || montage.author_fn) && (
-                    <Typography variant="body2" color="text.secondary"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        height: '2rem',
-                        textOverflow: 'ellipsis',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      {t(("_curator.") + currentTheme())} {montage.author ? montage.author : ''} {montage.author_fn ? montage.author_fn : ''}
-                    </Typography>
-                  )}
-
-                  <div id={`montage-${montage.id}`} key={montage.id}>
-
-                    <CardActions style={{ justifyContent: 'center' }} key={montage.id}>
-                      <Tooltip title={tooltipPlay}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          endIcon={<PlayArrowIcon size="small" />}
-                          onClick={async () => {
-                            handlePlayMontage(montage.id); // Proceed with PlayMontage
-                          }}
-                        >
-                          Play
-                        </Button>
-                      </Tooltip>
-                      <Tooltip title={tooltipAdd}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          endIcon={<PlaylistAddIcon size="small" />}
-                          onClick={() => handleAction(
-                            () => handleSelectMontage(montage.id),
-                            montage.selectable === "N" // Pass whether this is premium content
-                          )}
-                        >
-                          Add
-                        </Button>
-                      </Tooltip>
-                    </CardActions>
-                  </div>
-                  {isHovered[index] && (
-                    <span style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      height: '100%'
-                    }}>
-                      <Typography variant="body2" color="text.secondary" style={{ textAlign: 'justify', marginBottom: '1em' }}>
-                        <DescriptionManager descs={montage.descriptions} bestDescription={montage.best_description} bestName={montage.best_name} />
-                      </Typography>
-                    </span>
-                  )}
-                </CardContent>
-              </Card>
+                <Button
+                  onClick={toggleFilters}
+                  variant="contained"
+                  className="tabs_text"
+                >
+                  {showFilters ? t("hide_filters") : t("show_filters")}
+                  <FilterListIcon
+                    sx={{ marginLeft: 1 }}
+                    className="tabs_icon"
+                  />
+                </Button>
+              </Tooltip>
             </div>
-          );
-        }
-        )}
-        {popup}
-      </div>
-      {(addSuccess || addError) && (
-        <CustomSnackbar
-        open={addSuccess || addError !== null}
-        autoHideDuration={6000}
-        onClose={() => {
-          setAddSuccess(false);
-          setAddError(null);
-        }}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <CustomAlert
-          severity={addError ? "error" : "success"}
-          onClose={() => {
-            setAddSuccess(false);
-            setAddError(null);
+          </div>
+
+          {/* Search Bar */}
+          <div
+            style={{ padding: "0 1rem", maxWidth: "800px", margin: "0 auto" }}
+          >
+            <SearchBar
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              onSearch={scrollToMontages}
+            />
+          </div>
+
+          {/* Filter Bar */}
+          {!isSmartTV && showFilters && (
+            <FilterBar
+              orderBy={orderBy}
+              setOrderBy={setOrderBy}
+              displayBy={displayBy}
+              setDisplayBy={setDisplayBy}
+              qualityBy={qualityBy}
+              setQualityBy={setQualityBy}
+              orientationBy={orientationBy}
+              setOrientationBy={setOrientationBy}
+              commercialBy={commercialBy}
+              setCommercialBy={setCommercialBy}
+            />
+          )}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            width: "100%",
           }}
         >
-          {addError ? addError : t("success.montage.added")}
-        </CustomAlert>
-      </CustomSnackbar>
-      )}
+          {sortMontages(
+            montages,
+            orderBy,
+            displayBy,
+            splittable,
+            deconstructable,
+            qualityBy,
+            resolution,
+            orientationBy,
+            orientation,
+            commercialBy,
+            commercial,
+          ).map((montage, index) => {
+            const { id } = montage;
+            // console.log ('id for ESLint', id);
 
-      {/* Playlist selection dialog */}
-      <Dialog disableEscapeKeyDown open={openPlaylistSelection} onClose={handlePlaylistSelectionDialogClose}>
-        <DialogTitle>{t("component.playlist.exhibitions.add-montage")}</DialogTitle>
-        <DialogContent>
-          <Box component="form" sx={{ display: 'flex', flexWrap: 'wrap' }}>
-            <FormControl fullWidth sx={{ m: 1 }}>
-              <InputLabel htmlFor="playlist-dialog-native">{t("component.playlist.exhibitions.playlist")}</InputLabel>
-              <Select
-                native
-                onChange={handlePlaylistSelectionChange}
-                input={<OutlinedInput label="Playlist" id="playlist-dialog-native" />}
+            let ratio;
+            if (montage.sd_width) {
+              ratio =
+                parseInt(montage.sd_width, 10) /
+                parseInt(montage.sd_height, 10);
+            } else if (montage.orientation === "L") {
+              ratio = 16 / 9;
+            } else if (montage.orientation === "P") {
+              ratio = 9 / 16;
+            } else {
+              ratio = 16 / 9;
+            }
+
+            const tooltipPlay = gatewayTooltipAction("_play", userId, montage);
+            const tooltipAdd = t(
+              "component.playlist.exhibitions.add-to-playlist",
+            );
+
+            return (
+              <div
+                key={montage.id}
+                style={{
+                  flexBasis: "20rem",
+                  margin: "1em",
+                  position: "relative",
+                }}
               >
-                <option key="-1" value="-1">{t("component.playlist.exhibitions.select-playlist-default")}</option>
-                {
-                  playlists.map(playlist => {
+                <Card
+                  style={{
+                    display: "grid",
+                    gridTemplateRows: "auto 1fr auto",
+                    border: "1px solid",
+                    borderColor: theme.palette.primary.main,
+                    borderRadius: "1em",
+                    margin: "2em",
+                    position: isHovered[index] === true ? "absolute" : "static",
+                    transform:
+                      isHovered[index] === true ? "scale(1.5)" : "scale(1)",
+                    transformOrigin: "center",
+                    zIndex: isHovered[index] === true ? 1 : 0,
+                    transition: "transform 0.5s ease-out",
+                    willChange: "transform",
+                  }}
+                  onMouseEnter={() => {
+                    // Clear any pending timeout
+                    if (hoverTimeoutRef.current) {
+                      clearTimeout(hoverTimeoutRef.current);
+                    }
+                    setIsHovered((prevState) => ({
+                      ...prevState,
+                      [index]: true,
+                    }));
+                  }}
+                  onMouseLeave={() => {
+                    // Add a small delay before removing hover to prevent flickering
+                    hoverTimeoutRef.current = setTimeout(() => {
+                      setIsHovered((prevState) => ({
+                        ...prevState,
+                        [index]: false,
+                      }));
+                    }, 100);
+                  }}
+                >
+                  <CardContent
+                    style={{ paddingBottom: "0", position: "relative" }}
+                  >
+                    {!isPremium && (
+                      <div
+                        style={{
+                          borderRadius: "16px",
+                          padding: "0 4px",
+                          position: "absolute",
+                          top: "0",
+                          right: "0",
+                          fontSize: "0.75rem",
+                          color: theme.palette.primary.main,
+                        }}
+                      >
+                        {montage.selectable === "N" ? (
+                          <span style={{ color: "#1556ED" }}>Premium</span>
+                        ) : (
+                          <span style={{ color: "#0EE6AC" }}>Free</span>
+                        )}
+                      </div>
+                    )}
+
+                    <Typography
+                      variant="div"
+                      color="text.secondary"
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        position: "sticky",
+                        top: 0,
+                      }}
+                    >
+                      <span style={{ verticalAlign: "middle" }}>
+                        <TracksIcon />
+                        <span
+                          style={{
+                            position: "absolute",
+                            zIndex: "2",
+                            marginLeft: "-20px",
+                          }}
+                        >
+                          {montage.tracks}
+                        </span>
+                      </span>
+                      <div
+                        style={{ display: "flex", justifyContent: "center" }}
+                      >
+                        <span style={{ verticalAlign: "middle" }}>
+                          {t("_duration")} {calculateDuration(montage.duration)}
+                        </span>
+                      </div>
+                      <span style={{ verticalAlign: "middle" }}>
+                        {montage.rating === "NC-17" && <SixteenPlusIcon />}
+                      </span>
+                    </Typography>
+                    <Typography
+                      variant="h5"
+                      component="div"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "auto",
+                        height: "6rem",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {montage.name}
+                    </Typography>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        paddingTop: "10px",
+                        paddingBottom: "10px",
+                      }}
+                    >
+                      <CardMedia
+                        component="img"
+                        style={{
+                          height: "140px",
+                          width: `${140 * ratio}px`, // Calculate the width based on the aspect ratio
+                        }}
+                        image={
+                          baseThumbnailURL +
+                          "&session:" +
+                          userId +
+                          "&artwork=" +
+                          montage.thumbnail_url
+                        }
+                        alt={montage.name}
+                      />
+                    </div>
+                    {(montage.author || montage.author_fn) && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                          height: "2rem",
+                          textOverflow: "ellipsis",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {t("_curator." + currentTheme())}{" "}
+                        {montage.author ? montage.author : ""}{" "}
+                        {montage.author_fn ? montage.author_fn : ""}
+                      </Typography>
+                    )}
+
+                    <div id={`montage-${montage.id}`} key={montage.id}>
+                      <CardActions
+                        style={{ justifyContent: "center" }}
+                        key={montage.id}
+                      >
+                        <Tooltip title={tooltipPlay}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            endIcon={<PlayArrowIcon size="small" />}
+                            onClick={async () => {
+                              handlePlayMontage(montage.id); // Proceed with PlayMontage
+                            }}
+                          >
+                            Play
+                          </Button>
+                        </Tooltip>
+                        <Tooltip title={tooltipAdd}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            endIcon={<PlaylistAddIcon size="small" />}
+                            onClick={() =>
+                              handleAction(
+                                () => handleSelectMontage(montage.id),
+                                montage.selectable === "N", // Pass whether this is premium content
+                              )
+                            }
+                          >
+                            Add
+                          </Button>
+                        </Tooltip>
+                      </CardActions>
+                    </div>
+                    {isHovered[index] && (
+                      <span
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          height: "100%",
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          style={{ textAlign: "justify", marginBottom: "1em" }}
+                        >
+                          <DescriptionManager
+                            descs={montage.descriptions}
+                            bestDescription={montage.best_description}
+                            bestName={montage.best_name}
+                          />
+                        </Typography>
+                      </span>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            );
+          })}
+          {popup}
+        </div>
+        {(addSuccess || addError) && (
+          <CustomSnackbar
+            open={addSuccess || addError !== null}
+            autoHideDuration={6000}
+            onClose={() => {
+              setAddSuccess(false);
+              setAddError(null);
+            }}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          >
+            <CustomAlert
+              severity={addError ? "error" : "success"}
+              onClose={() => {
+                setAddSuccess(false);
+                setAddError(null);
+              }}
+            >
+              {addError ? addError : t("success.montage.added")}
+            </CustomAlert>
+          </CustomSnackbar>
+        )}
+
+        {/* Playlist selection dialog */}
+        <Dialog
+          disableEscapeKeyDown
+          open={openPlaylistSelection}
+          onClose={handlePlaylistSelectionDialogClose}
+        >
+          <DialogTitle>
+            {t("component.playlist.exhibitions.add-montage")}
+          </DialogTitle>
+          <DialogContent>
+            <Box component="form" sx={{ display: "flex", flexWrap: "wrap" }}>
+              <FormControl fullWidth sx={{ m: 1 }}>
+                <InputLabel htmlFor="playlist-dialog-native">
+                  {t("component.playlist.exhibitions.playlist")}
+                </InputLabel>
+                <Select
+                  native
+                  onChange={handlePlaylistSelectionChange}
+                  input={
+                    <OutlinedInput
+                      label="Playlist"
+                      id="playlist-dialog-native"
+                    />
+                  }
+                >
+                  <option key="-1" value="-1">
+                    {t(
+                      "component.playlist.exhibitions.select-playlist-default",
+                    )}
+                  </option>
+                  {playlists.map((playlist) => {
                     // Show all playlists including default (which has no id or empty string id)
-                    const playlistId = playlist.id || '';
-                    const playlistName = playlist.name || t("component.playlist.exhibitions.default-name");
+                    const playlistId = playlist.id || "";
+                    const playlistName =
+                      playlist.name ||
+                      t("component.playlist.exhibitions.default-name");
                     return (
-                      <option key={playlistId || 'default'} value={playlistId}>{playlistName}</option>
-                    )
-                  })
-                }
-              </Select>
-            </FormControl>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handlePlaylistSelectionDialogClose}>Ok</Button>
-        </DialogActions>
-      </Dialog>
-    </div>
-  );
-}
+                      <option key={playlistId || "default"} value={playlistId}>
+                        {playlistName}
+                      </option>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handlePlaylistSelectionDialogClose}>Ok</Button>
+          </DialogActions>
+        </Dialog>
+      </div>
+    );
+};
 
 ShowMontages.propTypes = {
   commercial: PropTypes.string.isRequired, // added isRequired
@@ -835,4 +1038,3 @@ export default ShowMontages;
 // |                           |-- Play Button
 // |                           |-- Add Button
 // |                       |-- Typography (Description, if hovered)
-
