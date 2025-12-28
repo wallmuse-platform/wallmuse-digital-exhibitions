@@ -29,6 +29,7 @@ import AssociateDisplays from "../associate-displays/AssociateDisplays";
 import { useResponsive } from '../../utils/useResponsive';
 import { getCurrentPosition, updatePosition } from '../../App';
 import PropTypes from 'prop-types'; // Added missing import
+import useGuestActionPopup from '../../accounts/useGuestActionPopup';
 
 //overrides of wp theme 
 const NumberOfTracksButtonContainer = styled('div')(({ theme }) => ({
@@ -112,6 +113,9 @@ function PlayListItem({
     const [openPlaylistSelection, setOpenPlaylistSelection] = React.useState(false);
     const [openAssociateDisplays, setOpenAssociateDisplays] = useState(false);
 
+    // Use guest action popup hook
+    const { handleAction, popup } = useGuestActionPopup();
+
     const handleOpenAssociateDisplays = () => setOpenAssociateDisplays(true);
     const handleCloseAssociateDisplays = () => setOpenAssociateDisplays(false);
 
@@ -150,9 +154,10 @@ function PlayListItem({
             console.log(`[MONTAGE_NAVIGATION] Loading different playlist: ${currentPlaylist} → ${selectedPlaylistId}`);
             await doLoadPlaylist(selectedPlaylistId, selectedPlaylistPosition);
         } else {
-            // Same playlist, different montage
-            console.log(`[MONTAGE_NAVIGATION] Same playlist, changing montage: ${selectedPlaylistPosition}`);
-            onMontageNavigation(selectedPlaylistId, selectedPlaylistPosition);
+            // Same playlist, different montage (or same montage - user wants to jump there)
+            console.log(`[MONTAGE_NAVIGATION] Same playlist, navigating to montage: ${selectedPlaylistPosition}`);
+            // Pass force=true to override duplicate detection (user explicitly clicked goMontage)
+            onMontageNavigation(selectedPlaylistId, selectedPlaylistPosition, true);
         }
 
         } catch (error) {
@@ -360,6 +365,7 @@ function PlayListItem({
                                     montageId={montage.id}
                                     playlistIndex={playlistIndex}
                                     onClose={handleCloseAssociateDisplays}
+                                    handleAction={handleAction}
                                 />
                                 <IconButton
                                     aria-label="close"
@@ -424,6 +430,7 @@ function PlayListItem({
                     <Button onClick={handlePlaylistSelectionDialogClose}>Ok</Button>
                 </DialogActions>
             </Dialog>
+            {popup}
         </div>
     );
 }

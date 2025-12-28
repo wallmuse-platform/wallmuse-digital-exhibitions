@@ -8,7 +8,7 @@ const BaseLine = ({ currentTheme, theme, isDemo }) => {
     const { t } = useTranslation();
     const themeName=currentTheme();
     
-    console.log('[BaseLine] themeName, t:', themeName, t);
+    // console.log('[BaseLine] themeName:', themeName);
 
     return (
         <div 

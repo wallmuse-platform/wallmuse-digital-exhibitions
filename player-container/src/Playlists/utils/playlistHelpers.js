@@ -57,7 +57,8 @@ export const autoSaveUpdates = async ({
             if (!skipStateUpdate) {
                 handlePlaylistUpdate(playlistIndex, playlist.name);
             } else {
-                updateSaveStatus(true, null, playlistIndex);
+                // When skipping state update, only update success flags, not the playlists
+                updateSaveStatus(true, null, undefined); // Pass undefined to prevent state update
             }
             console.log("[playlistHelpers] Playlist update successful for:", playlist.name);
 

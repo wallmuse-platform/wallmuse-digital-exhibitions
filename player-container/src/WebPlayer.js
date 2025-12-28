@@ -93,9 +93,11 @@ const WebPlayer = React.memo(function WebPlayer({
         const anticache = Date.now();
 
         // Set up global variables for the player
-        window.SELECTED_TRACK = selectedTrack || '1';
+        // Convert track to number (it comes as string from parent)
+        const trackNumber = parseInt(selectedTrack, 10) || 1;
+        window.SELECTED_TRACK = trackNumber;
         window.SELECTED_MONTAGE = currentMontage;
-        
+
         const wallmuseParams = {
           house: house.toString(),
           environ: environmentId.toString(),
@@ -107,17 +109,18 @@ const WebPlayer = React.memo(function WebPlayer({
           createEnvironment: false,
           timestamp: Date.now()
         };
-        
+
         window.WALLMUSE_PARAMS = wallmuseParams;
-        
-        logInfo(`Set globals - track: ${selectedTrack || '1'}, montage: ${currentMontage}`);
+
+        logInfo(`Set globals - track: ${trackNumber}, montage: ${currentMontage}`);
 
         // Build the player URL
-        const baseUrl = `/wp-content/themes/neve-child-master/wm-player/index.html`;
+        // const baseUrl = `/wp-content/themes/neve-child-master/wm-player/index.html`;
+         const baseUrl = `/wp-content/themes/neve-child-master/wm-playerB/index.html`;
         const params = new URLSearchParams({
           session: wallmuseParams.session,
           anticache: anticache.toString(),
-          track: selectedTrack || '1',
+          track: trackNumber.toString(),
           house: wallmuseParams.house,
           environ: wallmuseParams.environ,
           screen: wallmuseParams.screen
@@ -231,24 +234,24 @@ const WebPlayer = React.memo(function WebPlayer({
           logInfo('✅ Player is ready');
           setInternalLoading(false);
           setIsChildPlayerReady(true);
-        };
 
-        // ADDED: Notify NavigationManager that WebPlayer is ready
-        if (window.navigationManager) {
-          window.navigationManager.setPlayerReady(true);
-          logInfo('🎮 NavigationManager notified that WebPlayer is ready');
-        } else {
-          logInfo('⚠️ NavigationManager not found - will retry in 100ms');
-          // Retry after a short delay in case NavigationManager isn't loaded yet
-          setTimeout(() => {
-            if (window.navigationManager) {
-              window.navigationManager.setPlayerReady(true);
-              logInfo('🎮 NavigationManager notified that WebPlayer is ready (delayed)');
-            } else {
-              logInfo('❌ NavigationManager still not found after delay');
-            }
-          }, 100);
-        }
+          // CRITICAL FIX: Notify NavigationManager that WebPlayer is ready AFTER React app initializes
+          if (window.navigationManager) {
+            window.navigationManager.setPlayerReady(true);
+            logInfo('🎮 NavigationManager notified that WebPlayer is ready');
+          } else {
+            logInfo('⚠️ NavigationManager not found - will retry in 100ms');
+            // Retry after a short delay in case NavigationManager isn't loaded yet
+            setTimeout(() => {
+              if (window.navigationManager) {
+                window.navigationManager.setPlayerReady(true);
+                logInfo('🎮 NavigationManager notified that WebPlayer is ready (delayed)');
+              } else {
+                logInfo('❌ NavigationManager still not found after delay');
+              }
+            }, 100);
+          }
+        };
 
         logInfo('Player loaded successfully (will not reload again)');
 
@@ -325,13 +328,27 @@ const WebPlayer = React.memo(function WebPlayer({
     };
   }, [isPlayerLoaded]);
 
-  // Handle montage order changes (without reloading)
+  // Handle montage order changes (trigger playlist refetch)
   useEffect(() => {
-    if (montageOrderSignature && isPlayerLoaded) {
+    if (montageOrderSignature && isPlayerLoaded && currentPlaylist) {
       logInfo('Montage order signature changed:', montageOrderSignature);
-      // Just log - don't reload player
+      logInfo('🔄 Triggering playlist data refetch for:', currentPlaylist);
+
+      if (window.Sequencer && window.Sequencer.reloadPlaylist) {
+        window.Sequencer.reloadPlaylist(currentPlaylist);
+        logInfo('✅ Playlist reload triggered via Sequencer.reloadPlaylist()');
+      } else if (window.webPlayerNavigate) {
+        window.webPlayerNavigate({
+          playlist: currentPlaylist,
+          position: { montage: currentMontage || 0 },
+          forceReload: true
+        });
+        logInfo('✅ Playlist reload triggered via webPlayerNavigate()');
+      } else {
+        logInfo('⚠️ No reload mechanism available - montage order change not applied');
+      }
     }
-  }, [montageOrderSignature, isPlayerLoaded]);
+  }, [montageOrderSignature, isPlayerLoaded, currentPlaylist, currentMontage]);
 
   // Helper functions (unchanged)
   const getEnvironmentId = () => {

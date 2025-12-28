@@ -11,10 +11,11 @@ This React application integrates into WordPress as a custom page template, allo
 ```
 WordPress Site
 ├── Theme: Neve Child (neve-child-master)
-│   ├── Page Template: wm_v4_player_static.php (production)
-│   ├── Page Template: wm_v4B_player_static.php (test)
-│   ├── Assets Directory: play-v4-assets/ (production)
-│   └── Assets Directory: play-v4B-assets/ (test)
+│   ├── Templates: wm_v4_player.php, wm_v4_player_static.php (prod)
+│   ├── Templates: wm_v4B_player.php, wm_v4B_player_static.php (test)
+│   ├── Assets: play-v4-assets/ (prod), play-v4B-assets/ (test)
+│   ├── WebPlayer: wm-player/ (prod), wm-playerB/ (test)
+│   └── Service Workers: service-worker.js (wallmuse, ooo2, sharex)
 └── React App Build Output
     ├── index.html (processed for asset paths)
     ├── static/css/main.*.css
@@ -96,24 +97,74 @@ All files include `?v=TIMESTAMP` query parameter for cache busting on deployment
 
 ### Directory Structure
 
-| Environment | Assets Directory | PHP Template | Build Script |
-|------------|-----------------|--------------|--------------|
-| **Test** | `play-v4B-assets/` | `wm_v4B_player_static.php` | `test-ok.sh` |
-| **Production** | `play-v4-assets/` | `wm_v4_player_static.php` | `build-ok.sh` |
+| Environment | Assets Directory | PHP Template | Build Script | WebPlayer Path |
+|------------|-----------------|--------------|--------------|----------------|
+| **Test** | `play-v4B-assets/` | `wm_v4B_player_static.php` | `test-ok.sh` | `wm-playerB/` |
+| **Production** | `play-v4-assets/` | `wm_v4_player_static.php` | `build-ok.sh` | `wm-player/` |
+
+### Testing Workflow
+
+1. **Create Test Page in WordPress**
+   ```php
+   Template Name: WM V4B Player
+   ```
+   - Uses `wm_v4B_player.php` template
+   - Points to test assets in `play-v4B-assets/`
+   - React root: `<div id="root" data-user="<?=$sessionId?>" data-theme="<?=$theme?>" data-house="<?=$user->houses[0]->id?>"></div>`
+
+2. **WebPlayer Fork**
+   In `WebPlayer.js`, the player path is switched based on environment:
+   ```javascript
+   // Production
+   const baseUrl = `/wp-content/themes/neve-child-master/wm-player/index.html`;
+
+   // Test (uncomment for testing)
+   // const baseUrl = `/wp-content/themes/neve-child-master/wm-playerB/index.html`;
+   ```
+
+3. **Deploy to Test**
+   ```bash
+   ./scripts/test-ok.sh
+   ```
+   - Builds React app
+   - Updates `wm_v4B_player_static.php` with new asset hashes
+   - Deploys to `play-v4B-assets/` directory
+   - Does NOT increment service worker versions
+
+4. **Test Verification**
+   - Access test page in WordPress
+   - Verify all features work correctly
+   - Check browser console for errors
+   - Test with different themes (wallmuse, sharex, ooo2)
+
+5. **Deploy to Production**
+   ```bash
+   ./scripts/build-ok.sh
+   ```
+   - Same build process as test
+   - Updates `wm_v4_player_static.php`
+   - Deploys to `play-v4-assets/` directory
+   - **Increments service worker versions** across all sites
 
 ### Key Differences
 
 **Test Environment:**
-- Uses `play-v4B-assets` directory
-- Separate from production for safe testing
-- Deployed via `test-ok.sh` script
-- Does NOT increment service worker versions
+- Safe testing without affecting live users
+- Separate WebPlayer fork (`wm-playerB/`)
+- No service worker version changes
 
 **Production Environment:**
-- Uses `play-v4-assets` directory
 - Live environment for end users
-- Deployed via `build-ok.sh` script
-- Automatically increments service worker versions across all sites
+- Production WebPlayer (`wm-player/`)
+- Automatic service worker cache invalidation
+
+### Parallel Development
+
+Both test and production environments can coexist:
+- **React Container**: Separate codebases (`play C 3` vs `play C`)
+- **WebPlayer Child**: Separate builds (`wm-playerB/` vs `wm-player/`)
+- **WordPress Templates**: Separate PHP files (v4B vs v4)
+- **Assets**: Separate directories (play-v4B-assets vs play-v4-assets)
 
 ## Deployment Scripts
 

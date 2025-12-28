@@ -284,50 +284,55 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
     }, [playlists, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, setPlaylists, handleAction]);
 
     const handleMontageReorder = useCallback((montages, playlistIndex) => {
-        // Update playlists state with new montage order
-        setPlaylists(prevPlaylists => {
-            const newPlaylists = prevPlaylists.map((playlist, index) =>
-                index === playlistIndex
-                    ? { ...playlist, montages, changed: true }
-                    : playlist
-            );
-            return newPlaylists;
-        });
+        // Use handleAction to show GuestActionPopup for demo accounts
+        handleAction(
+            () => {
+                // Update playlists state with new montage order
+                setPlaylists(prevPlaylists => {
+                    const newPlaylists = prevPlaylists.map((playlist, index) =>
+                        index === playlistIndex
+                            ? { ...playlist, montages, changed: true }
+                            : playlist
+                    );
+                    return newPlaylists;
+                });
 
-        // Save to backend
-        const updatedPlaylist = {
-            ...playlists[playlistIndex],
-            montages,
-            changed: true
-        };
+                // Save to backend
+                const updatedPlaylist = {
+                    ...playlists[playlistIndex],
+                    montages,
+                    changed: true
+                };
 
-        autoSaveUpdates({
-            playlistIndex,
-            playlist: updatedPlaylist,
-            updatePlaylist,
-            setSaveInProgress,
-            updateSaveStatus,
-            handlePlaylistUpdate,
-            t,
-            skipStateUpdate: true,
-            currentPlaylistId: currentPlaylist,
-            syncWithBackend: handlePlaylistChange
-        });
-    }, [playlists, setPlaylists, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, currentPlaylist, handlePlaylistChange]);
+                autoSaveUpdates({
+                    playlistIndex,
+                    playlist: updatedPlaylist,
+                    updatePlaylist,
+                    setSaveInProgress,
+                    updateSaveStatus,
+                    handlePlaylistUpdate,
+                    t,
+                    skipStateUpdate: true,
+                    currentPlaylistId: currentPlaylist,
+                    syncWithBackend: handlePlaylistChange
+                });
+            },
+            false // Not premium content
+        );
+    }, [playlists, setPlaylists, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, currentPlaylist, handlePlaylistChange, handleAction]);
 
     const removeMontageFromPlaylist = useCallback(async (montageIndex, playlistIndex) => {
         console.log('[Playlists] removeMontageFromPlaylist: montageIndex:', montageIndex, ' playlistIndex:', playlistIndex);
-
-        if (isDemo) {
-            handleRestrictedAction();  // Show snackbar for restricted action
-            return;  // Exit the function early
-        }
 
         // Debounce rapid successive deletes (300ms delay)
         if (deleteInProgressRef.current) {
             console.log('[Playlists] Delete already in progress, ignoring rapid click');
             return;
         }
+
+        // Use handleAction to show GuestActionPopup for demo accounts
+        handleAction(
+            async () => {
 
         // Use functional update to ensure we have the latest state
         let updatedPlaylists;
@@ -397,7 +402,10 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
             deleteInProgressRef.current = false;
             setDeleteInProgress(false);
         }
-    }, [playlists, isDemo, setPlaylists, setDeleteInProgress, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, currentPlaylist, handlePlaylistChange]);
+            },
+            false // Not premium content
+        );
+    }, [playlists, setPlaylists, setDeleteInProgress, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t, currentPlaylist, handlePlaylistChange, handleAction]);
     // Note: Keeping all dependencies to ensure the callback always has fresh references.
     // This may cause more re-renders but ensures correctness.
 
@@ -415,15 +423,15 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
     // moveMontageToPlaylist here copies from default to an other playlist
     const moveMontageToPlaylist = useCallback((montage, playlistId) => {
         console.log('[Playlists] moveMontageToPlaylist CALLED - Entry point');
-        if (isDemo) {
-            handleRestrictedAction();  // This function should already set showSnackbar
-            return;  // Exit the function early
-        }
-        // Use functional update to ensure we have the latest state, even for rapid successive clicks
-        let updatedPlaylists;
-        let playlistToUpdateIndex;
 
-        setPlaylists(currentPlaylists => {
+        // Use handleAction to show GuestActionPopup for demo accounts
+        handleAction(
+            () => {
+                // Use functional update to ensure we have the latest state, even for rapid successive clicks
+                let updatedPlaylists;
+                let playlistToUpdateIndex;
+
+                setPlaylists(currentPlaylists => {
             playlistToUpdateIndex = currentPlaylists.findIndex(playlist => playlist.id === playlistId);
             if (playlistToUpdateIndex === -1) {
                 console.error('[PlayLists] Playlist not found:', playlistId);
@@ -482,7 +490,10 @@ function Playlists({ currentTheme, house, currentPlaylist, setCurrentPlaylist, p
             setSaveError(`${t("error.add_montage")}: ${error.message}`);
             setShowSnackbar(true); // Show error message
         });
-    }, [playlists, isDemo, t, currentPlaylist, setPlaylists, setAddError, setShowSnackbar, setSaveError, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, handlePlaylistChange]);
+            },
+            false // Not premium content
+        );
+    }, [playlists, t, currentPlaylist, setPlaylists, setAddError, setShowSnackbar, setSaveError, autoSaveUpdates, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, handlePlaylistChange, handleAction]);
     // Note: Keeping all dependencies to ensure the callback always has fresh references.
     // This may cause more re-renders but ensures correctness for copy operations.
 

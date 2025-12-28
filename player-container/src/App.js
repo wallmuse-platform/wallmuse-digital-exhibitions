@@ -607,15 +607,25 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
 
   // 3. Consolidated navigation handler - FIXED VERSION
   // Fixed handleMontageNavigation function in App.js
-  const handleMontageNavigation = useCallback((selectedPlaylistId, selectedPlaylistPosition) => {
-    console.log('[NAV] handleMontageNavigation:', { selectedPlaylistId, selectedPlaylistPosition });
-    
+  const handleMontageNavigation = useCallback((selectedPlaylistId, selectedPlaylistPosition, force = false) => {
+    console.log('[NAV] handleMontageNavigation:', { selectedPlaylistId, selectedPlaylistPosition, force });
+
     // Set global reference for NavigationManager to the target playlist
     window.currentPlaylistForNav = selectedPlaylistId;
-    
+
+    // CRITICAL FIX: Ensure window.currentPlaylist has the full playlist object
+    // This is needed for child iframe's parent-child communication
+    const targetPlaylistObject = playlists.find(p => String(p.id) === String(selectedPlaylistId));
+    if (targetPlaylistObject) {
+      window.currentPlaylist = targetPlaylistObject;
+      console.log('[NAV] Updated window.currentPlaylist for child iframe access:', targetPlaylistObject.name || targetPlaylistObject.id);
+    } else {
+      console.warn('[NAV] Could not find playlist object for ID:', selectedPlaylistId);
+    }
+
     // ADDED: Mark that we're doing a navigation update
     window.recentNavigationUpdate = Date.now();
-    
+
     // Handle position normalization
     let normalizedPosition;
     if (selectedPlaylistPosition === null || selectedPlaylistPosition === undefined) {
@@ -625,18 +635,18 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
       normalizedPosition = selectedPlaylistPosition;
       console.log('[NAV] Using specified position:', normalizedPosition);
     }
-    
-    // Prevent duplicate calls
+
+    // Prevent duplicate calls (unless force=true)
     const currentState = { playlist: selectedPlaylistId, position: normalizedPosition };
     const lastState = window.lastNavigationState;
-    
-    if (lastState && 
-        lastState.playlist === currentState.playlist && 
+
+    if (!force && lastState &&
+        lastState.playlist === currentState.playlist &&
         lastState.position === currentState.position) {
-      console.log('[NAV] Skipping duplicate call');
+      console.log('[NAV] Skipping duplicate call (use force=true to override)');
       return;
     }
-    
+
     window.lastNavigationState = currentState;
     
     // Detect playlist changes
@@ -690,8 +700,8 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
       playlist: selectedPlaylistId, // Always use the target playlist
       position: { montage: normalizedPosition, track: calculatedTrack }
     });
-    
-  }, [getTrackForMontageIndex, calculateOverlayInfo, updateCurrentMontageIndex, currentPlaylist, setCurrentPlaylist]);
+
+  }, [playlists, getTrackForMontageIndex, calculateOverlayInfo, updateCurrentMontageIndex, currentPlaylist, setCurrentPlaylist]);
     
   //  5. Optional: Listen for playback events to update current montage index
   useEffect(() => {
@@ -789,15 +799,53 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
     const currentMontageIndex = currentMontageIndexState;
     const currentTrack = getTrackForMontageIndex(currentPlaylist, currentMontageIndex);
     const overlayInfo = calculateOverlayInfo(currentPlaylist, currentMontageIndex, currentTrack);
-    
+
     setWebPlayerOverlayInfo(overlayInfo);
     setSelectedPlaylistPositionForWebPlayer(currentMontageIndex);
     selectedPlaylistPositionForWebPlayerRef.current = currentMontageIndex;
-    
+
     // NO NAVIGATION HERE - only UI updates
   }, [currentMontageIndexState, currentPlaylist, playlists, getTrackForMontageIndex, calculateOverlayInfo, isPlaylistChanging]);
 
   console.log('[App PlayerIntegration NAV] Selected track for screen:', selectedTrackForScreen, 'Screen ID:', currentScreenId);
+
+  // Send ALL track mappings when playlist loads
+  useEffect(() => {
+    if (!currentPlaylist || !playlists || !currentScreenId) return;
+
+    const playlist = playlists.find(p => p.id === currentPlaylist);
+    if (!playlist?.montages) return;
+
+    // CRITICAL: Use montage ID as key (not position) so mappings persist across reordering
+    const trackMappings = {};
+    playlist.montages.forEach((montage, index) => {
+      const montageScreenDetail = montage.screens?.find(s => String(s.id) === String(currentScreenId));
+      const track = montageScreenDetail?.seq || '1';
+      // Use montage ID as key to make mappings stable across reordering
+      trackMappings[montage.id] = track;
+    });
+
+    console.log('[App] Sending all track mappings for playlist:', currentPlaylist, trackMappings);
+
+    const sendTrackMappings = (retryCount = 0) => {
+      if (window.webPlayerSetTrackMappings) {
+        console.log('[App] ✅ Calling webPlayerSetTrackMappings with:', trackMappings);
+        window.webPlayerSetTrackMappings(trackMappings);
+
+        // NOTE: Do NOT trigger navigation here when montage order changes
+        // The WebPlayer's peer synchronization system will handle montage reordering
+        // Triggering navigation here causes issues because selectedPlaylistPositionForWebPlayer
+        // is position-based and becomes stale after reordering
+      } else if (retryCount < 5) {
+        console.log(`[App] ⏳ WebPlayer not ready yet, retrying in 200ms (attempt ${retryCount + 1}/5)`);
+        setTimeout(() => sendTrackMappings(retryCount + 1), 200);
+      } else {
+        console.warn('[App] ⚠️ WebPlayer function not available after 5 retries');
+      }
+    };
+
+    sendTrackMappings();
+  }, [currentPlaylist, playlists, currentScreenId]);
 
   // Send navigation command when track changes
   useEffect(() => {
@@ -807,7 +855,7 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
         montage: selectedPlaylistPositionForWebPlayer,
         track: selectedTrackForScreen
       });
-      
+
       useNavigationManager(currentPlaylist, selectedPlaylistPositionForWebPlayer, selectedTrackForScreen);
     }
   }, [selectedTrackForScreen, currentPlaylist, selectedPlaylistPositionForWebPlayer, useNavigationManager]);

@@ -359,7 +359,7 @@ function Playlist({
 
             // Then, wait for the backend to confirm
             console.log(`[Playlist] Now waiting for backend confirmation...`);
-            const syncSuccess = await handlePlaylistChange(playlistId);
+            const syncSuccess = await handlePlaylistChange(playlistId, playlist);
             console.log(`[Playlist] Backend sync completed with result: ${syncSuccess}`);
 
             if (syncSuccess) {

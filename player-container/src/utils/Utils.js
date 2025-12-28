@@ -21,9 +21,9 @@ export const getUserId = () => {
   if (!rawUserId) return null;
   
   // For debugging: Log the HTML attribute to see exactly what's in the DOM
-  if (rootElement.dataset.user) {
-    console.log("[Utils] DOM dataset full:", JSON.stringify(rootElement.dataset));
-  }
+  // if (rootElement.dataset.user) {
+  //   console.log("[Utils] DOM dataset full:", JSON.stringify(rootElement.dataset));
+  // }
   
   // Store the original ID for later use (important!)
   localStorage.setItem('wp_original_session_id', rawUserId);
