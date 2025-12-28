@@ -65,8 +65,13 @@ export class VideoStreamManager {
     this.chunkManager.cancelRequestsForUrl(videoUrl);
 
     try {
+      console.log('[VideoStreamManager] Getting video size...');
       // Get video size first
       await this.getVideoSize();
+
+      console.log(
+        `[VideoStreamManager] Video size: ${this.streamState.totalBytes} bytes, ${this.streamState.totalChunks} chunks`
+      );
 
       // Start streaming
       this.streamState.isStreaming = true;
@@ -75,11 +80,27 @@ export class VideoStreamManager {
 
       // LogHelper.log('VideoStreamManager', `Starting stream: ${this.streamState.totalChunks} chunks, ${this.streamState.totalBytes} bytes`);
 
+      console.log('[VideoStreamManager] Loading initial chunks...');
       // Start with first few chunks
       await this.loadInitialChunks();
+
+      console.log('[VideoStreamManager] Initial chunks loaded successfully');
     } catch (error) {
-      LogHelper.error('VideoStreamManager', 'Failed to start streaming:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+
+      // Progressive MP4 is expected - use warning, not error
+      if (errorMsg.includes('Progressive MP4')) {
+        console.warn(
+          '[VideoStreamManager] Progressive MP4 detected - falling back to direct streaming'
+        );
+        LogHelper.log('VideoStreamManager', 'Using direct streaming for progressive MP4');
+      } else {
+        console.error('[VideoStreamManager] ERROR in startStreaming:', error);
+        LogHelper.error('VideoStreamManager', 'Failed to start streaming:', error);
+      }
+
       this.callbacks.onStreamError?.(error as Error);
+      throw error; // Re-throw so video.tsx can handle it
     }
   }
 
@@ -88,8 +109,9 @@ export class VideoStreamManager {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(this.videoUrl + '&frag=1', {
-      headers: { Range: 'bytes=0-1' },
+    // Fetch first 100KB to check MP4 structure
+    const response = await fetch(this.videoUrl, {
+      headers: { Range: 'bytes=0-102399' },
       signal: controller.signal,
     });
 
@@ -109,23 +131,96 @@ export class VideoStreamManager {
       this.streamState.totalBytes / this.chunkManager.getStats().config.chunkSize
     );
 
-    // LogHelper.log('VideoStreamManager', `Video size: ${this.streamState.totalBytes} bytes, ${this.streamState.totalChunks} chunks`);
+    // Check MP4 structure to detect if fragmented
+    const buffer = await response.arrayBuffer();
+    const isFragmented = this.detectFragmentedMP4(new Uint8Array(buffer));
+
+    if (!isFragmented) {
+      console.warn(
+        '[VideoStreamManager] Progressive MP4 detected - will use direct streaming (expected for HandBrake baseline)'
+      );
+      throw new Error('Progressive MP4 format - not compatible with MediaSource streaming');
+    }
+
+    console.log(
+      '[VideoStreamManager] Fragmented MP4 detected - proceeding with MediaSource streaming'
+    );
+  }
+
+  private detectFragmentedMP4(data: Uint8Array): boolean {
+    // Parse MP4 boxes to detect if it's fragmented
+    let offset = 0;
+    let hasMoof = false;
+
+    while (offset < Math.min(data.length - 8, 100000)) {
+      // Read box size (4 bytes, big-endian)
+      const size =
+        (data[offset] << 24) |
+        (data[offset + 1] << 16) |
+        (data[offset + 2] << 8) |
+        data[offset + 3];
+
+      // Read box type (4 bytes, ASCII)
+      const type = String.fromCharCode(
+        data[offset + 4],
+        data[offset + 5],
+        data[offset + 6],
+        data[offset + 7]
+      );
+
+      if (type === 'moof') {
+        hasMoof = true;
+        break;
+      }
+
+      // Move to next box
+      if (size === 0 || size === 1 || size > data.length) break;
+      offset += size;
+    }
+
+    return hasMoof;
   }
 
   private async loadInitialChunks(): Promise<void> {
-    const initialChunks = Math.min(3, this.streamState.totalChunks); // Load first 3 chunks
+    // For progressive MP4, we need to load enough to get the moov atom (initialization segment)
+    // This is typically in the first 1-5MB. Let's load first 5MB to be safe.
+    const initSegmentSize = 5 * 1024 * 1024; // 5MB - increased to capture full moov atom
+    const chunkSize = this.chunkManager.getStats().config.chunkSize;
+    const initialChunks = Math.min(
+      Math.ceil(initSegmentSize / chunkSize),
+      this.streamState.totalChunks
+    );
+
+    console.log(
+      `[VideoStreamManager] Loading ${initialChunks} initial chunks (${initSegmentSize} bytes for init segment)...`
+    );
 
     for (let i = 0; i < initialChunks; i++) {
-      if (this.isDestroyed) return;
+      if (this.isDestroyed) {
+        console.log(`[VideoStreamManager] Destroyed during initial chunk loading at chunk ${i}`);
+        return;
+      }
+      console.log(`[VideoStreamManager] About to load chunk ${i}...`);
       await this.loadChunk(i);
+      console.log(`[VideoStreamManager] Chunk ${i} loaded`);
     }
 
+    console.log(
+      `[VideoStreamManager] All ${initialChunks} initial chunks loaded, starting background streaming...`
+    );
     // Start background loading
     this.continueStreaming();
   }
 
   private async loadChunk(chunkIndex: number): Promise<void> {
+    console.log(
+      `[VideoStreamManager.loadChunk] ENTRY: chunk ${chunkIndex}, destroyed=${this.isDestroyed}, hasSourceBuffer=${!!this.sourceBuffer}, mediaSourceState=${this.mediaSource?.readyState}`
+    );
+
     if (this.isDestroyed || !this.sourceBuffer || this.mediaSource?.readyState !== 'open') {
+      console.log(
+        `[VideoStreamManager.loadChunk] Skipping chunk ${chunkIndex} - conditions not met`
+      );
       return;
     }
 
@@ -134,6 +229,10 @@ export class VideoStreamManager {
     const endByte = Math.min(startByte + chunkSize - 1, this.streamState.totalBytes - 1);
 
     try {
+      console.log(
+        `[VideoStreamManager.loadChunk] Requesting chunk ${chunkIndex}: bytes ${startByte}-${endByte}`
+      );
+
       const chunkResponse = await this.chunkManager.requestChunk(
         this.videoUrl,
         startByte,
@@ -141,22 +240,83 @@ export class VideoStreamManager {
         'normal'
       );
 
-      if (this.isDestroyed) return;
+      console.log(
+        `[VideoStreamManager.loadChunk] Chunk ${chunkIndex} received: ${chunkResponse.data.byteLength} bytes`
+      );
+
+      if (this.isDestroyed) {
+        console.log(
+          `[VideoStreamManager.loadChunk] Destroyed after receiving chunk ${chunkIndex}, aborting`
+        );
+        return;
+      }
 
       // Append to source buffer
       if (this.sourceBuffer && this.mediaSource?.readyState === 'open') {
-        this.sourceBuffer.appendBuffer(chunkResponse.data);
+        console.log(
+          `[VideoStreamManager.loadChunk] Appending chunk ${chunkIndex} to SourceBuffer...`
+        );
+        // Wait for SourceBuffer to finish processing before calling callback
+        await new Promise<void>((resolve, reject) => {
+          const onUpdateEnd = () => {
+            console.log(
+              `[VideoStreamManager.loadChunk] SourceBuffer updateend event fired for chunk ${chunkIndex}`
+            );
+            this.sourceBuffer!.removeEventListener('updateend', onUpdateEnd);
+            this.sourceBuffer!.removeEventListener('error', onError);
+            resolve();
+          };
+          const onError = (e: Event) => {
+            console.error(
+              `[VideoStreamManager.loadChunk] SourceBuffer error event fired for chunk ${chunkIndex}:`,
+              e
+            );
+            this.sourceBuffer!.removeEventListener('updateend', onUpdateEnd);
+            this.sourceBuffer!.removeEventListener('error', onError);
+            reject(new Error('SourceBuffer update failed'));
+          };
+
+          this.sourceBuffer!.addEventListener('updateend', onUpdateEnd, { once: true });
+          this.sourceBuffer!.addEventListener('error', onError, { once: true });
+
+          console.log(
+            `[VideoStreamManager.loadChunk] Calling appendBuffer for chunk ${chunkIndex}...`
+          );
+          this.sourceBuffer.appendBuffer(chunkResponse.data);
+          console.log(
+            `[VideoStreamManager.loadChunk] appendBuffer called for chunk ${chunkIndex}, waiting for updateend...`
+          );
+        });
+
+        console.log(
+          `[VideoStreamManager.loadChunk] SourceBuffer processing complete for chunk ${chunkIndex}`
+        );
 
         this.streamState.downloadedBytes += chunkResponse.data.byteLength;
         this.streamState.currentChunk = chunkIndex + 1;
 
         // LogHelper.log('VideoStreamManager', `Chunk ${chunkIndex} loaded: ${chunkResponse.data.byteLength} bytes`);
 
+        console.log(
+          `[VideoStreamManager.loadChunk] Calling onChunkLoaded callback for chunk ${chunkIndex}`
+        );
+        // Call callback AFTER SourceBuffer has finished processing
         this.callbacks.onChunkLoaded?.(chunkIndex, chunkResponse.data);
+        console.log(`[VideoStreamManager.loadChunk] Callback completed for chunk ${chunkIndex}`);
+      } else {
+        console.log(
+          `[VideoStreamManager.loadChunk] Skipping append for chunk ${chunkIndex} - SourceBuffer not ready`
+        );
       }
     } catch (error) {
+      console.error(`[VideoStreamManager.loadChunk] ERROR loading chunk ${chunkIndex}:`, error);
       LogHelper.error('VideoStreamManager', `Failed to load chunk ${chunkIndex}:`, error);
-      // Don't throw - let background loading continue
+
+      // If this is an init chunk (first few chunks), this is fatal - re-throw
+      if (chunkIndex < 4) {
+        throw error;
+      }
+      // Otherwise, don't throw - let background loading continue
     }
   }
 
