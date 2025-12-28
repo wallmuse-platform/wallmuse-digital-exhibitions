@@ -179,26 +179,38 @@ function PlayerCommands({
 
   // Stop use case in Play Mode
   const handleStopPlayMode = async () => {
+    console.log("[PlayerCommands handleStopPlayMode] START - playModeRef.current:", playModeRef.current, "currentTempPlaylistId:", currentTempPlaylistId);
+
     try {
+      // First, stop playback
+      console.log("[PlayerCommands handleStopPlayMode] Calling onStop to stop playback");
+      onStop();
+      setIsPlaying(false); // Update UI state
+
       // Then do cleanup if we were in Play Mode
       if (playModeRef.current && currentTempPlaylistId) {
+        console.log("[PlayerCommands handleStopPlayMode] Calling handlePlayMontageEnd with tempPlaylistId:", currentTempPlaylistId);
+
         await handlePlayMontageEnd(currentTempPlaylistId, {
           house,
-          handlePlaylistChange, //playlist change 
+          handlePlaylistChange, //playlist change
           currentPlaylist,
           setPlaylists,
           playModeRef,
-          // Don't need to stop again since we already did it
           onPlayEnd,
         });
+
+        console.log("[PlayerCommands handleStopPlayMode] handlePlayMontageEnd completed");
       } else {
-        console.log("[PlayerCommands] Not in Play Mode or no temp playlist, stop only");
+        console.log("[PlayerCommands handleStopPlayMode] Not in Play Mode or no temp playlist - playModeRef:", playModeRef.current, "tempPlaylistId:", currentTempPlaylistId);
         playModeRef.current = false;
       }
     } catch (error) {
-      console.error("[PlayerCommands] Error in stop handling:", error);
+      console.error("[PlayerCommands handleStopPlayMode] Error in stop handling:", error);
       playModeRef.current = false;
     }
+
+    console.log("[PlayerCommands handleStopPlayMode] END - playModeRef.current:", playModeRef.current);
   };
 
   return useMemo(() => (
@@ -267,36 +279,66 @@ function PlayerCommands({
         </Grid>
 
         {/* Playback controls - take more space on mobile */}
+        {/* Play Mode behavior: Play/Pause/Forward/Backward disabled, Stop active for termination, Volume/Mute remain functional */}
         <Grid item xs={isMobile ? 8 : 6} style={{ display: 'flex', textAlign: 'centre', justifyContent: 'centre', flexBasis: 'auto' }}>
-          <Tooltip title={t("backward_")}>
-            <IconButton onClick={onRew} disabled={playModeRef.current}>
-              <FastRewindIcon
-                className={`tabs_icon ${iconClass}`}
-                style={iconStyle}
-              />
-            </IconButton>
+          <Tooltip title={playModeRef.current ? t("disabled_in_play_mode") : t("backward_")}>
+            <span> {/* Wrapper span needed for tooltip to work on disabled button */}
+              <IconButton
+                onClick={onRew}
+                disabled={playModeRef.current}
+                sx={{ opacity: playModeRef.current ? 0.3 : 1 }} // Grey out when disabled
+              >
+                <FastRewindIcon
+                  className={`tabs_icon ${iconClass}`}
+                  style={iconStyle}
+                />
+              </IconButton>
+            </span>
           </Tooltip>
-          <Tooltip title={isPlaying ? t("pause_") : t("play_")}>
-            <IconButton onClick={handlePlayPause} disabled={playModeRef.current}>
-              {isPlaying ? (
-                <PauseIcon className={`tabs_icon ${iconClass}`} style={iconStyle} />
-              ) : (
-                <PlayArrowIcon className={`tabs_icon ${iconClass}`} style={iconStyle} />
-              )}
-            </IconButton>
+          <Tooltip title={playModeRef.current ? t("disabled_in_play_mode") : (isPlaying ? t("pause_") : t("play_"))}>
+            <span> {/* Wrapper span needed for tooltip to work on disabled button */}
+              <IconButton
+                onClick={handlePlayPause}
+                disabled={playModeRef.current}
+                sx={{ opacity: playModeRef.current ? 0.3 : 1 }} // Grey out when disabled
+              >
+                {isPlaying ? (
+                  <PauseIcon className={`tabs_icon ${iconClass}`} style={iconStyle} />
+                ) : (
+                  <PlayArrowIcon className={`tabs_icon ${iconClass}`} style={iconStyle} />
+                )}
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title={t("stop_")}>
-            <IconButton onClick={playModeRef.current ? handleStopPlayMode : handleStopWithIconUpdate} >
+            <IconButton
+              onClick={() => {
+                console.log("[PlayerCommands Stop Button] Clicked - playModeRef.current:", playModeRef.current);
+                if (playModeRef.current) {
+                  console.log("[PlayerCommands Stop Button] Routing to handleStopPlayMode");
+                  handleStopPlayMode();
+                } else {
+                  console.log("[PlayerCommands Stop Button] Routing to handleStopWithIconUpdate");
+                  handleStopWithIconUpdate();
+                }
+              }}
+            >
               <StopIcon className={`tabs_icon ${iconClass}`} style={iconStyle} />
             </IconButton>
           </Tooltip>
-          <Tooltip title={t("forward_")}>
-            <IconButton onClick={onFwd} disabled={playModeRef.current}>
-              <FastForwardIcon
-                className={`tabs_icon ${iconClass}`}
-                style={iconStyle}
-              />
-            </IconButton>
+          <Tooltip title={playModeRef.current ? t("disabled_in_play_mode") : t("forward_")}>
+            <span> {/* Wrapper span needed for tooltip to work on disabled button */}
+              <IconButton
+                onClick={onFwd}
+                disabled={playModeRef.current}
+                sx={{ opacity: playModeRef.current ? 0.3 : 1 }} // Grey out when disabled
+              >
+                <FastForwardIcon
+                  className={`tabs_icon ${iconClass}`}
+                  style={iconStyle}
+                />
+              </IconButton>
+            </span>
           </Tooltip>
         </Grid>
         {/* TODO place on Line 2 */}

@@ -39,7 +39,7 @@ import { useEnvironments } from "../../contexts/EnvironmentsContext.js";
 import { usePlaylists } from '../../contexts/PlaylistsContext';
 import { selectTheme } from "../../theme/ThemeUtils";
 
-const AssociateDisplays = ({ montageId, playlistIndex, onClose }) => {
+const AssociateDisplays = ({ montageId, playlistIndex, onClose, handleAction }) => {
     const theme = selectTheme();
     const iconColor = theme.palette.primary.main;
     const { t } = useTranslation();
@@ -104,9 +104,38 @@ const AssociateDisplays = ({ montageId, playlistIndex, onClose }) => {
             console.error("[AssociateDisplays] Montage not found after index lookup:", { montageId, montageIndex });
             return;
         }
-    
-        // Check if the screen exists in the montage
+
+        // Check if the screen exists in the montage and get current track
         let screenIndex = montage.screens?.findIndex(s => s.id === screenId) ?? -1;
+        const currentTrack = screenIndex !== -1 ? montage.screens[screenIndex]?.seq : "";
+
+        // Check if track is actually changing
+        const isTrackChanging = currentTrack !== (trackNumber?.toString() || "");
+
+        console.log("[AssociateDisplays] Track change check:", {
+            currentTrack,
+            newTrack: trackNumber?.toString() || "",
+            isChanging: isTrackChanging
+        });
+
+        // If track is not changing, or if handleAction is not provided, proceed directly
+        if (!isTrackChanging || !handleAction) {
+            console.log("[AssociateDisplays] No track change or no handleAction, proceeding directly");
+            return;
+        }
+
+        // Track is changing - close dialog immediately before showing popup
+        console.log("[AssociateDisplays] Closing dialog before showing popup");
+        if (onClose) {
+            onClose();
+        }
+
+        // Use handleAction to check for demo account
+        handleAction(
+            async () => {
+                console.log("[AssociateDisplays] Executing track change after guest check");
+                // Original track change logic below
+                let screenIndex = montage.screens?.findIndex(s => s.id === screenId) ?? -1;
         if (screenIndex === -1) {
             // Screen doesn't exist, retrieve it from environments and add it
             const environment = environments?.find(e => e?.screens?.some(s => s.id === screenId));
@@ -150,17 +179,15 @@ const AssociateDisplays = ({ montageId, playlistIndex, onClose }) => {
             const response = await setTrackScreen(montageId, seqNumberInt, screenId, session);
             console.log("[AssociateDisplays] Server updated successfully");
             setSaveSuccess(true);
-
-            // Add this to force webplayer reload
-            if (typeof window.reloadWebplayer === 'function') {
-                window.reloadWebplayer();
-            }
         } catch (error) {
             console.error("[AssociateDisplays] Failed to update server", error);
             setSaveError(error.message);
         } finally {
             setSaveInProgress(false);
         }
+            },
+            false // Not premium content
+        );
     };
 
     // Handler for toggle change
@@ -456,7 +483,8 @@ const AssociateDisplays = ({ montageId, playlistIndex, onClose }) => {
 AssociateDisplays.propTypes = {
     montageId: PropTypes.string.isRequired,
     playlistIndex: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
-    onClose: PropTypes.func
+    onClose: PropTypes.func,
+    handleAction: PropTypes.func
 };
 
 export default AssociateDisplays;

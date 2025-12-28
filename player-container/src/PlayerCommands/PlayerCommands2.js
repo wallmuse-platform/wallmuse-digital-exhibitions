@@ -115,7 +115,7 @@ export function SocialShare({ responsiveProps, iconClass }) {
                     className={`tabs_icon ${iconClass}`}
                 >
                     <ShortcutIcon
-                        color="secondary.text"
+                        color="primary"
                         style={{ zIndex: 3 }}
                     />
                 </IconButton>

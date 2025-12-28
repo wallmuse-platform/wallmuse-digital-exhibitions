@@ -191,7 +191,7 @@ export const SessionProvider = ({ children }) => {
                                     newAccountHouseId: localStorage.getItem('newAccountHouseId')
                                 }
                             };
-                            localStorage.setItem('accountProcess_' + Date.now(), JSON.stringify(accountCreationProcess));
+                            // localStorage.setItem('accountProcess_' + Date.now(), JSON.stringify(accountCreationProcess));
 
                             // Dispatch house created event for other components
                             window.dispatchEvent(new CustomEvent('house-created', {

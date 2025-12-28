@@ -1,390 +1,230 @@
-# WallMuse Player Container (React)
-
-The main React application that provides the web interface and orchestration layer for the WallMuse digital exhibition platform.
-
-## Overview
-
-The Player Container is a React-based web application that manages multi-environment playback, handles user sessions, and provides the primary interface for displaying digital exhibitions across various devices.
-
-## Key Features
-
-### Multi-Environment Management
-- Manage multiple display environments from a single account
-- Support for web players, PC desktop apps, and mobile devices
-- Real-time synchronization across all connected environments
-- Environment activation/deactivation controls
-
-### Session Orchestration
-- Guest accounts (browser-only, no signup)
-- Personal accounts (cloud-saved, multi-device sync)
-- Automatic session recovery and state management
-- WordPress user integration
-
-### WebSocket Communication
-- Real-time bidirectional communication with backend
-- Live playlist and montage synchronization
-- Multi-display coordination
-- Automatic reconnection handling
-
-### WordPress Integration
-- Custom page templates for seamless CMS embedding
-- Compatible with any WordPress theme (tested with Neve)
-- Separate test and production deployment workflows
-- Automatic cache busting and service worker versioning
-
-### Internationalization
-- 12 language support (EN, DE, ES, FR, IT, HR, NL, NO, PL, PT, UA, JP)
-- Dynamic language switching
-- Localized UI components and messages
-
-### Responsive Design
-- Desktop, tablet, and mobile layouts
-- Touch-optimized controls
-- Adaptive component sizing
-- Progressive Web App (PWA) support
-
-## Technology Stack
-
-- **React 18** - Core UI framework
-- **Material-UI (MUI) v5** - Component library
-- **i18next** - Internationalization
-- **WebSocket API** - Real-time communication
-- **Context API** - State management
-- **React Router** - Navigation
-
-## Project Structure
-
-```
-player-container/
-├── public/
-│   ├── index.html
-│   ├── manifest.json
-│   └── locales/          # Translation files
-├── src/
-│   ├── accounts/         # Account creation and management
-│   ├── Configure/        # Environment configuration
-│   ├── contexts/         # React contexts (Session, Environments, Playlists)
-│   ├── locales/          # i18n translation JSON files
-│   ├── Play/             # Playback controls and UI
-│   ├── PlayerCommands/   # Player control components
-│   ├── Playlists/        # Playlist management
-│   ├── SelectMontages/   # Montage selection
-│   ├── theme/            # MUI theme configuration
-│   ├── utils/            # Utility functions and helpers
-│   ├── App.js            # Main app component
-│   ├── WebPlayer.js      # Player container component
-│   └── index.js          # Entry point
-├── scripts/
-│   ├── build-ok.sh       # Production deployment script
-│   ├── test-ok.sh        # Test deployment script
-│   └── increment-sw-version.sh  # Service worker versioning
-├── docs/                 # Documentation files
-├── package.json
-└── README.md
-```
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 16+ and npm 8+
-- Access to WallMuse backend API
-- (Optional) WordPress site for integration
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/YOUR-USERNAME/wallmuse-digital-exhibitions.git
-cd wallmuse-digital-exhibitions/player-container
-
-# Install dependencies
-npm install
-```
-
-### Development
-
-```bash
-# Start development server (runs on http://localhost:3000)
-npm start
-
-# Run tests
-npm test
-
-# Build for production
-npm run build
-```
-
-### Environment Variables
-
-Create a `.env` file in the root directory:
-
-```env
-# API Configuration
-REACT_APP_API_URL=https://your-api-endpoint.com
-
-# WebSocket Configuration
-REACT_APP_WS_URL=wss://your-websocket-endpoint.com
-
-# Feature Flags
-REACT_APP_ENABLE_DEBUG=false
-```
-
-## WordPress Integration
-
-The Player Container integrates into WordPress via custom page templates.
-
-### Setup Instructions
-
-1. **Deploy Build Assets**
-   ```bash
-   # For production
-   ./scripts/build-ok.sh
-
-   # For test environment
-   ./scripts/test-ok.sh
-   ```
-
-2. **Add Page Template to WordPress Theme**
-   - Copy `wm_v4_player_static.php` to your theme directory
-   - Adjust asset paths to match your server structure
-
-3. **Create WordPress Page**
-   - Create new page in WordPress admin
-   - Select "WallMuse Player" template
-   - Publish page
-
-See [WORDPRESS_INTEGRATION.md](./WORDPRESS_INTEGRATION.md) for detailed setup guide.
-
-## Key Concepts
-
-### Environments
-An **environment** represents a single playback instance - a browser tab, PC desktop app, or mobile device. Users can have multiple environments and switch between them.
-
-### Playlists
-Collections of **montages** (video compilations) organized thematically. Users can create, edit, and share playlists.
-
-### Montages
-Multi-track video compositions created in the CreateMontage editor (separate app). Each montage contains synchronized video tracks with timing information.
-
-### Sessions
-User authentication state, managed through the `SessionContext`. Supports both WordPress-integrated authentication and standalone guest/personal accounts.
-
-## Architecture
-
-### React Contexts
-
-#### SessionContext
-Manages user authentication, house (account) creation, and WordPress integration.
-
-**Key Functions:**
-- `initializeSession()` - Initialize user session
-- `updateSession()` - Update session data
-- `updateDomWithHouseId()` - Sync house ID to DOM
-
-#### EnvironmentsContext
-Manages display environments, screens, and device orchestration.
-
-**Key Functions:**
-- `fetchEnvironmentDetails()` - Load environments from API
-- `handlePlaylistChange()` - Navigate to different playlist
-- `activateEnvironment()` - Activate specific environment
-
-#### PlaylistsContext
-Manages playlist data, montages, and content metadata.
-
-**Key Functions:**
-- `loadPlaylists()` - Fetch all playlists
-- `setCurrentPlaylist()` - Switch active playlist
-- `addToPlaylist()` - Add montage to playlist
-
-### Component Hierarchy
-
-```
-App
-├── SessionContext
-├── EnvironmentsContext
-├── PlaylistsContext
-└── Routes
-    ├── Configure (Environment Setup)
-    ├── Playlists (Playlist Management)
-    ├── SelectMontages (Montage Browser)
-    └── Play (Main Player View)
-        └── WebPlayer (Player Container)
-```
-
-### WebSocket Communication
-
-The app maintains a persistent WebSocket connection for:
-- Real-time playlist synchronization
-- Multi-environment coordination
-- Live montage updates
-- Display screen status
-
-**Event Types:**
-- `webplayer-navigate` - Navigation commands
-- `activation-complete` - Environment activation
-- `house-created` - New account created
-- `account-phase-change` - Account setup progress
-
-## Account Types
-
-### Guest Account
-- Browser-only storage (localStorage)
-- Session-based (no signup)
-- Limited to web features
-- Free tier
-
-**Use Case:** Quick tryout, temporary sessions
-
-### Personal Account
-- Cloud storage (persistent)
-- Multi-device synchronization
-- Web + PC desktop app support
-- Free and Premium tiers
-
-**Use Case:** Regular users, multi-display setups
-
-## Development Guidelines
-
-### Code Style
-- Use functional components with hooks
-- Prefer Context API over prop drilling
-- Keep components focused and single-purpose
-- Use descriptive variable and function names
-
-### State Management
-- Use `useState` for local component state
-- Use Context API for shared state
-- Avoid unnecessary re-renders with `useMemo` and `useCallback`
-
-### Logging
-All console logs should use prefixed identifiers:
-- `[SessionContext]` - Session-related logs
-- `[EnvironmentsContext]` - Environment-related logs
-- `[PlaylistsContext]` - Playlist-related logs
-- `[WebPlayer]` - Player-related logs
-- `[NAV-MANAGER]` - Navigation logs
-- `[GuestActionPopup]` - Account popup logs
-
-See documentation files for complete log keyword lists.
-
-### Translations
-When adding new UI text:
-
-1. Add key to all 12 language files in `src/locales/`
-2. Use descriptive key names (e.g., `account_creation_title`)
-3. Test with at least 2-3 languages
-4. Keep translations concise for mobile views
-
-## Deployment
-
-### Test Environment
-```bash
-./scripts/test-ok.sh
-```
-- Deploys to `play-v4B-assets` directory
-- Uses test page template
-- No service worker versioning
-
-### Production Environment
-```bash
-./scripts/build-ok.sh
-```
-- Deploys to `play-v4-assets` directory
-- Updates production page template
-- Automatically increments service worker versions
-
-**Service Worker Sites:**
-- wallmuse.com
-- ooo2.wallmuse.com
-- sharex.wallmuse.com
-
-## Troubleshooting
-
-### Common Issues
-
-**Problem:** Assets not loading (404 errors)
-- Check asset paths in WordPress template
-- Verify deployment completed successfully
-- Clear browser cache and service worker
-
-**Problem:** Styles conflicting with WordPress theme
-- Review CSS reset styles in page template
-- Increase specificity of custom styles
-- Check for !important overrides
-
-**Problem:** WebSocket connection failing
-- Verify WebSocket URL configuration
-- Check environment crypt_key generation
-- Review network/firewall settings
-
-**Problem:** Account creation fails
-- Check SessionContext initialization logs
-- Verify backend API availability
-- Review localStorage flags and state
-
-See [TROUBLESHOOTING_ACCOUNT_CREATION.md](./TROUBLESHOOTING_ACCOUNT_CREATION.md) for detailed debugging procedures.
+# Explore
 
 ## Documentation
 
-- [WordPress Integration Guide](./WORDPRESS_INTEGRATION.md)
-- [Account Creation Troubleshooting](./TROUBLESHOOTING_ACCOUNT_CREATION.md)
-- [Navigation System Refactor](./NAVIGATION_SYSTEM_REFACTOR.md)
-- [Guest Action Popup](./GUEST_ACTION_POPUP_DOCS.md)
-- [Player Container Rules](./PLAYER_CONTAINER_RULES.md)
-- [Enhanced Navigation Solution](./ENHANCED_NAVIGATION_SOLUTION.md)
+Project documentation is organized in the [docs/](./docs/) folder:
 
-## Testing
+### Architecture
+- [Enhanced Navigation Solution](./docs/architecture/ENHANCED_NAVIGATION_SOLUTION.md)
+- [Navigation System Refactor](./docs/architecture/NAVIGATION_SYSTEM_REFACTOR.md)
+- [Player Container Rules](./docs/architecture/PLAYER_CONTAINER_RULES.md)
+- [Player Container State Management](./docs/architecture/PLAYER_CONTAINER_STATE_MANAGEMENT.md)
+- [WallMuse Player Container Rules](./docs/architecture/WALLMUSE_PLAYER_CONTAINER_RULES.md)
 
-```bash
-# Run all tests
-npm test
+### Features
+- [Guest Action Popup](./docs/features/GUEST_ACTION_POPUP_DOCS.md)
+- [Mobile Autoplay Solution](./docs/features/MOBILE_AUTOPLAY_SOLUTION.md)
+- [Temporary Playlist Lifecycle](./docs/features/TEMPORARY_PLAYLIST_LIFECYCLE.md)
+- [WallMuse Features](./docs/features/WALLMUSE_FEATURES.md)
+- [WordPress Integration](./docs/features/WORDPRESS_INTEGRATION.md)
 
-# Run tests in watch mode
-npm test -- --watch
+### Troubleshooting
+- [LocalStorage Duplication Debug](./docs/troubleshooting/LOCALSTORAGE_DUPLICATION_DEBUG.md)
+- [Player Container Troubleshooting](./docs/troubleshooting/PLAYER_CONTAINER_TROUBLESHOOTING.md)
+- [Play Montage Fix and Mono Playlist Plan](./docs/troubleshooting/PLAY_MONTAGE_FIX_AND_MONO_PLAYLIST_PLAN.md)
+- [Troubleshooting Account Creation](./docs/troubleshooting/TROUBLESHOOTING_ACCOUNT_CREATION.md)
 
-# Generate coverage report
-npm test -- --coverage
+## Prerequisites
+
+You need node version 18 and npm version 8 to be able to build the project. It was difficult to revert back to React 16 as v5 MUI icons (using @mui/material version 5.15.2 and @mui/icons-material version 5.14.18), but even when changing there remained an unsolved issue.
+
+You can install and manage both with [nvm](https://github.com/nvm-sh/nvm):
+```shell
+nvm use 18
 ```
 
-## Browser Support
+Finally, with npm installed, you need to download the application's dependencies, with:
+```shell
+npm install
+```
 
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
-- Mobile browsers (iOS Safari, Chrome Mobile)
+Now you can use one of the available scripts listed below to either build the app, or test it locally.
 
-## Performance Considerations
+## Available Scripts
 
-- Lazy load components with React.lazy()
-- Optimize images and media assets
-- Use service workers for offline caching
-- Debounce API calls and event handlers
-- Monitor memory usage in long-running sessions
+In the project directory, you can run:
 
-## Security
+### `npm start`
 
-- All API requests use HTTPS
-- WebSocket connections use WSS
-- Environment keys encrypted with crypt_key
-- No sensitive data in localStorage
-- CORS properly configured
+Runs the app in the development mode. Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-## Contributing
+The page will reload when you make changes. You may also see any lint errors in the console.
 
-1. Create feature branch from `main`
-2. Make changes following code style guidelines
-3. Test thoroughly in test environment
-4. Update documentation as needed
-5. Submit pull request with clear description
+To test as a specific user, you need to update the `data-user` property on the line 36 of `public/index.html`. 
+This is the sessionId of the WordPress user, which can be obtained by doing a `<?=$sessionId?>` on the PHP code 
+of the website.
 
-## License
+### `npm test`
 
-[License information to be added]
+Launches the test runner in the interactive watch mode. 
+See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+*No tests have been implemented yet.*
 
-## Support
+### `npm run build`
 
-- **Issues:** [GitHub Issues](https://github.com/YOUR-USERNAME/wallmuse-digital-exhibitions/issues)
-- **Documentation:** [Project Wiki](https://github.com/YOUR-USERNAME/wallmuse-digital-exhibitions/wiki)
-- **Website:** [wallmuse.com](https://wallmuse.com)
+Builds the app for production to the `build` folder.
+It correctly bundles React in production mode and optimizes the build for the best performance.
+
+The build is minified and the filenames include the hashes. The app is ready to be deployed!
+
+Please the "Deploy" section below regarding how to deploy on the WallMuse Server.
+
+See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+
+## Deploy
+
+After building the app for production, you should place the contents of `build/css/` and `build/js` directories on the 
+WordPress template folders. The host and path details are shown below. You can connect over SSH or SFTP.
+
+Having done that, you need to update the WordPress template to actually use the new files. This needs to be done in the
+file `descriptions.php`. 
+
+This file is imported from the actual WordPress template which is named `wm_v4_player_static.php`, so it is also 
+a good place to put any custom CSS rules required.
+
+Apart from the js and css, the page also needs to have an element to serve as the root point of React:
+```html
+    <div id="root" data-user="<?=$sessionId?>" data-theme="wallmuse"></div>
+```
+
+Please note:
+* The ID of the element should be as shown above `root`, otherwise the React app will not be able to render
+* `data-user` indicates the current user's session and is used to fetch the relevant artworks, etc. `<?=$sessionId?>` can be used to retrieve it from the PHP code.
+* `data-theme` indicates the theme that will be used. The theme is case insensitive, and possible values are shown below:
+
+| Theme    | Description                  |
+| -------- | ------------                 |
+| Wallmuse | This is the default theme    | 
+| Sharex   | Theme for the Sharex account | 
+| AVIFF    | Theme for the AVIFF account  | 
+| OOO2     | Theme for the OOO2 account   | 
+
+
+### Host
+
+wallmuse.com
+
+### Path
+
+/data/www/wallmuse-wp/wp-content/themes/neve-child-master/play-v4-assets
+
+## Theming
+
+As described above, theming can be selecting by setting the `data-theme` attribute in the hosting div, as described 
+above. The theme will only affect the palette of the colours used throughout the application. At the moment the 
+following themes are available:
+
+
+| Theme    | Description                  |
+| -------- | ------------                 |
+| Wallmuse | This is the default theme    | 
+| Sharex   | Theme for the Sharex account | 
+| AVIFF    | Theme for the AVIFF account  | 
+| OOO2     | Theme for the OOO2 account   | 
+
+
+In order to create a new theme, the following should be done:
+* Under `src/theme/`, copy one of the existing theme files, e.g. `WallMuseTheme.js` and use an appropriate name for the new file, eg. `ClientXTheme.js`
+* Open `ClientXTheme.js` and 
+  * edit the `palette` object in it to use the colours you want
+  * At the bottom, change the export statement accordingly, e.g.:
+  ```js
+  export const ClientXTheme = theme(palette);
+  ```
+* Save `ClientXTheme.js`
+* Open `src/theme/ThemeUtils.js`
+  * In the `selectTheme` function, add a new `case` in the `switch` statement:
+  ```
+  case "clientx":
+    return ClientXTheme;
+  ```
+* The new theme can now be used:
+  * ```html
+    <div id="root-descriptions" data-user="<?=$sessionId?>" data-theme="clientX"></div>
+    ```
+## Global variables
+
+Apart from those used in PHP, particularily common.php and common0.php, see Word Press Child Neve Master repository, global variables are parsed using:
+
+### EnvironmentsProvider "./contexts/EnvironmentsContext.js";
+
+These concern useStates for:
+* const [houses, setHouses] = useState([]); it's the account, multiple houses currently not implemented
+* const [house, setHouse] = useState([]); current used account and house
+* const [environments, setEnvironments] = useState([]); concerning phyical devices with PC Backend player and virtual streams with Web player
+* const [screens, setScreens] = useState([]);
+
+###  UIProvider './Playlists/contexts/UIContext';
+
+Concerns useResponsive() implementation
+
+### SessionProvider './contexts/SessionContext';
+
+Concerns:
+* userDetails, the Word Press session of an account (text)
+* isLoggedIn
+* isPremium 
+
+### PlaylistsProvider './contexts/PlaylistsContext';
+
+Concerns success messages.
+
+
+## Styling
+
+Styling occurs at different levels, similarily to React's precedence. 
+
+public/index.html
+  |
+  └── src/index.js
+       ├── src/index.css, used to filter out some Neve theme styles as Word Press embedded as PHP page template
+       |              see wm_v4_player.php and wm_v4_player_static.php
+       |              also Word Press Child Neve Master repository for customised parts of Neve theme
+       |
+       └── src/App.js
+            ├── src/App.css, also used responsiveness
+            |
+            └── src/components
+                 |
+                 └── src/components/header/header.jsx e.g. using styled in PlayList.js and PlayListItem.js  
+                      |         but also for useResponsive.js that utilises navigator.userAgent for TV detection
+                      └── src/components/header/header.css e.g. PlayLists.css, PlayListItem.css
+
+Material UI provides several different ways to customize a component's styles. From broadest to narrowest, here are the options:
+* Global CSS override, also using classes such as tabs_icon and tabs_text indicated in App.css
+* Global theme overrides, 
+* Reusable component, mostly palette of theme.js
+* One-off customization, that occur freequently directly in the code
+
+
+
+## Learn More
+
+This app was built using create-react-app. You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+
+To learn React, check out the [React documentation](https://reactjs.org/).
+
+### Code Splitting
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+
+### Analyzing the Bundle Size
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+
+### Making a Progressive Web App
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+
+### Advanced Configuration
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+
+### Deployment
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+
+### `npm run build` fails to minify
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+

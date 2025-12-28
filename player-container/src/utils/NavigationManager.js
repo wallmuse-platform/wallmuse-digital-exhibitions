@@ -49,13 +49,18 @@ class NavigationManager {
   }
 
   addCommand(command) {
-    // Prevent duplicate commands
-    const commandKey = `${command.playlist}-${command.position?.montage}`;
-    const lastCommandKey = this.lastProcessedCommand ? 
-      `${this.lastProcessedCommand.playlist}-${this.lastProcessedCommand.position?.montage}` : '';
-    
-    if (commandKey === lastCommandKey) {
-      console.log('[NAV-MANAGER] 🔄 Skipping duplicate command');
+    // Prevent duplicate commands within a short time window (2 seconds)
+    const commandKey = `${command.playlist}-${command.position?.montage}-${command.position?.track}`;
+    const lastCommandKey = this.lastProcessedCommand ?
+      `${this.lastProcessedCommand.playlist}-${this.lastProcessedCommand.position?.montage}-${this.lastProcessedCommand.position?.track}` : '';
+    const timeSinceLastCommand = this.lastProcessedCommand ?
+      Date.now() - this.lastProcessedCommand.timestamp : Infinity;
+
+    console.log(`[NAV-MANAGER] Duplicate check: current="${commandKey}" vs last="${lastCommandKey}" (${timeSinceLastCommand}ms ago)`);
+
+    // Only skip if it's the same command AND within 2 seconds
+    if (commandKey === lastCommandKey && timeSinceLastCommand < 2000) {
+      console.log(`[NAV-MANAGER] 🔄 Skipping duplicate command (${timeSinceLastCommand}ms ago)`);
       return;
     }
 

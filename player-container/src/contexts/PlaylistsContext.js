@@ -22,12 +22,14 @@ const PlaylistsProviderComponent = ({ children }) => {
     const { playlists, setPlaylists, playlistsLoading, error } = useInitialData();
 
     // Memoize the context value to prevent unnecessary re-renders
-    const contextValue = useMemo(() => ({
-        playlists,
-        setPlaylists,
-        playlistsLoading,
-        error,
-    }), [playlists, setPlaylists, playlistsLoading, error]);
+    const contextValue = useMemo(() => {
+        return {
+            playlists,
+            setPlaylists,
+            playlistsLoading,
+            error,
+        };
+    }, [playlists, setPlaylists, playlistsLoading, error]);
 
     // Handle loading and error states
     if (playlistsLoading) return <div>Loading playlists...</div>;
@@ -40,5 +42,7 @@ const PlaylistsProviderComponent = ({ children }) => {
     );
 };
 
-// Memoize the provider to prevent unnecessary re-instantiation
-export const PlaylistsProvider = memo(PlaylistsProviderComponent);
+// Export without React.memo wrapper to ensure playlists state updates propagate immediately
+// to all consuming components. The Playlists component has its own React.memo with custom
+// comparison logic to handle drag-and-drop reordering.
+export const PlaylistsProvider = PlaylistsProviderComponent;

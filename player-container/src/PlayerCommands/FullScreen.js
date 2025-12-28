@@ -69,12 +69,15 @@ export function FullScreen() {
         const videoElement = mediaContainer.querySelector('video');
 
         if (fullScreen) {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) {
-                document.webkitExitFullscreen();
-            } else if (mediaContainer.webkitExitFullscreen) {
-                mediaContainer.webkitExitFullscreen();
+            // Check if document is actually in fullscreen before attempting to exit
+            if (document.fullscreenElement || document.webkitFullscreenElement || document.webkitIsFullScreen) {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(err => console.warn('[FullScreen] exitFullscreen failed:', err.message));
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (mediaContainer.webkitExitFullscreen) {
+                    mediaContainer.webkitExitFullscreen();
+                }
             }
             setFullScreen(false);
         } else {

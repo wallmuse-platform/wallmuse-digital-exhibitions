@@ -8,7 +8,9 @@ import {
     createDefaultScreen,
     copyGuestPlaylistsToUser,
     activateScreenWithParams,
-    removeEnvironment
+    removeEnvironment,
+    loadPlaylist,
+    getPlaylistById
 } from '../utils/api';
 import { forceStop } from '../utils/PlaybackManager';
 import { getUserId, setHouseId } from '../utils/Utils';
@@ -181,7 +183,7 @@ export const EnvironmentsProvider = ({ children }) => {
                         needsSecondRefresh: localStorage.getItem('needsSecondRefresh')
                     }
                 };
-                localStorage.setItem('accountProcess_' + Date.now(), JSON.stringify(accountCreationProcess));
+                // localStorage.setItem('accountProcess_' + Date.now(), JSON.stringify(accountCreationProcess));
                 console.log("[ACCOUNT CREATION PROCESS]", accountCreationProcess);
 
                 setEnvironments(houseEnvironments);
@@ -533,7 +535,7 @@ export const EnvironmentsProvider = ({ children }) => {
                                     needsRefresh: localStorage.getItem('needsRefresh')
                                 }
                             };
-                            localStorage.setItem('accountProcess_' + Date.now(), JSON.stringify(accountCreationProcess));
+                            // localStorage.setItem('accountProcess_' + Date.now(), JSON.stringify(accountCreationProcess));
 
                             // Signal that environment creation is needed (child WebPlayer will handle)
                             localStorage.setItem('environmentCreationNeeded', 'true');
@@ -618,6 +620,18 @@ export const EnvironmentsProvider = ({ children }) => {
                 // Set initial playlist only if not already set
                 if (currentPlaylist === undefined && backendCurrentPlaylist !== undefined) {
                     setCurrentPlaylist(backendCurrentPlaylist);
+
+                    // CRITICAL FIX: Also fetch and store full playlist data for child player
+                    // This ensures window.currentPlaylist is available on page load
+                    console.log('[EnvironmentsContext] Fetching initial playlist data for:', backendCurrentPlaylist);
+                    getPlaylistById(backendCurrentPlaylist)
+                        .then(playlistData => {
+                            window.currentPlaylist = playlistData;
+                            console.log('[EnvironmentsContext] Stored initial playlist in window.currentPlaylist:', playlistData.name || playlistData.id);
+                        })
+                        .catch(error => {
+                            console.error('[EnvironmentsContext] Error fetching initial playlist:', error);
+                        });
                 }
             } else {
                 console.log("[fetchEnvironmentDetails] No houses found.");
@@ -674,37 +688,67 @@ export const EnvironmentsProvider = ({ children }) => {
     /**
      * Handle manual playlist change - simplified version for use with smart polling
      */
-    const handlePlaylistChange = useCallback(async (newPlaylistId, position = null) => {
-        console.log("[handlePlaylistChange] New playlist selected:", newPlaylistId, "position:", position);
+    const handlePlaylistChange = useCallback(async (newPlaylistId, playlistObject = null, position = null) => {
+        console.log("[handlePlaylistChange] New playlist selected:", newPlaylistId, "position:", position, "hasPlaylistObject:", !!playlistObject);
 
         // Update UI state immediately for responsive UI
         console.log("[handlePlaylistChange] Updating currentPlaylist immediately from", currentPlaylist, "to", newPlaylistId);
         setCurrentPlaylist(newPlaylistId);
 
+        // Sync with child player via window variable
+        window.currentPlaylistForNav = String(newPlaylistId);
+        console.log("[handlePlaylistChange] Set window.currentPlaylistForNav:", window.currentPlaylistForNav);
+
         // Dispatch navigation event to WebPlayer
+        const isPlaylistChange = String(newPlaylistId) !== String(currentPlaylist);
         const dispatchNavigationEvent = () => {
             console.log("[handlePlaylistChange] Dispatching webplayer-navigate event:", {
                 playlist: newPlaylistId,
-                position: position
+                position: position,
+                isPlaylistChange: isPlaylistChange
             });
 
             window.dispatchEvent(new CustomEvent('webplayer-navigate', {
                 detail: {
                     playlist: newPlaylistId,
                     position: position,
+                    isPlaylistChange: isPlaylistChange,
                     timestamp: Date.now()
                 }
             }));
         };
 
-        // Dispatch navigation event immediately
-        dispatchNavigationEvent();
+        // CRITICAL FIX: Use provided playlist object instead of fetching from backend
+        console.log('[handlePlaylistChange] Preparing playlist data for child player');
+        try {
+            let playlistData;
 
-        // Backend verification is now handled by smart polling in doLoadPlaylist
-        console.log('[handlePlaylistChange] State updated - backend verification handled by smart polling');
+            if (playlistObject) {
+                // Use the playlist object that was passed in (already in memory!)
+                playlistData = playlistObject;
+                console.log('[handlePlaylistChange] Using provided playlist object:', playlistData.name);
+            } else {
+                // Fallback: Fetch from backend if no object provided
+                console.log('[handlePlaylistChange] No playlist object provided, fetching from backend:', newPlaylistId);
+                playlistData = await getPlaylistById(newPlaylistId);
+            }
+
+            // Store in window for child player
+            window.currentPlaylist = playlistData;
+            console.log('[handlePlaylistChange] Stored full playlist data in window.currentPlaylist:', playlistData.name || playlistData.id);
+
+            // Now dispatch navigation event (child will find playlist data immediately)
+            dispatchNavigationEvent();
+
+            // Also trigger backend load_playlist API
+            await loadPlaylist(house, newPlaylistId);
+            console.log('[handlePlaylistChange] Playlist loaded successfully via API');
+        } catch (error) {
+            console.error('[handlePlaylistChange] Error loading playlist:', error);
+        }
 
         return true;
-    }, [currentPlaylist]);
+    }, [currentPlaylist, house]);
 
     // AFTER: Consolidated useEffects - combines all initialization logic
     useEffect(() => {
@@ -736,6 +780,29 @@ export const EnvironmentsProvider = ({ children }) => {
 
         window.addEventListener('house-created', handleHouseCreated);
 
+        // CRITICAL FIX: Listen for playlist changes from child webplayer
+        const handleChildPlaylistChange = (event) => {
+            console.log("[EnvironmentsContext] Child playlist changed event:", event.detail);
+            const { playlistId, playlist } = event.detail;
+            if (playlistId && String(playlistId) !== String(currentPlaylist)) {
+                console.log(`[EnvironmentsContext] Updating parent playlist state from ${currentPlaylist} to ${playlistId}`);
+
+                // CRITICAL FIX: Store full playlist data immediately for child to access
+                // This eliminates the 500ms retry delay when child tries to read window.parent.currentPlaylist
+                if (playlist) {
+                    window.currentPlaylist = playlist;
+                    console.log(`[EnvironmentsContext] ✅ INSTANT: Stored full playlist data in window.currentPlaylist: ${playlist.name || playlist.id}`);
+                } else {
+                    console.log(`[EnvironmentsContext] ⚠️ No playlist object in event, child will need to retry or use WebSocket`);
+                }
+
+                setCurrentPlaylist(playlistId);
+            }
+        };
+
+        window.addEventListener('child-playlist-changed', handleChildPlaylistChange);
+        document.addEventListener('child-playlist-changed', handleChildPlaylistChange);
+
         // 3. Initial data fetch
         const syncData = async () => {
             console.log("[EnvironmentsContext] Fetching user details...");
@@ -750,8 +817,10 @@ export const EnvironmentsProvider = ({ children }) => {
         return () => {
             console.log("[EnvironmentsContext] Cleaning up...");
             window.removeEventListener('house-created', handleHouseCreated);
+            window.removeEventListener('child-playlist-changed', handleChildPlaylistChange);
+            document.removeEventListener('child-playlist-changed', handleChildPlaylistChange);
         };
-    }, []);
+    }, []); // CRITICAL FIX: Empty deps - only run once on mount, not on every playlist change
 
     // NEW: Handle needsSecondRefresh for data refresh (no page reload)
     useEffect(() => {
