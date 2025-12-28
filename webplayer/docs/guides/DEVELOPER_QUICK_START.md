@@ -73,16 +73,47 @@ console.log('Sequencer playing:', window.Sequencer?.isPlaying());
 **Quick Fix**: Check `resumePlaybook()` in `src/App.tsx` calls `Sequencer.play()` not
 `Sequencer.pause()`
 
-### Problem: Videos load but no audio
+### Problem: Videos load but no audio **UPDATED: 2025-12-26**
 
 **Quick Check**:
 
 ```javascript
-const video = document.querySelector('video');
-console.log('Video volume:', video?.volume); // Should be 0.0-1.0
+// Check if both videos are unmuted (BUG!)
+document.querySelectorAll('video').forEach((v, i) => {
+  console.log(`Video ${i+1}:`, {muted: v.muted, volume: v.volume});
+});
 ```
 
-**Quick Fix**: In `App.setVolume()`, convert: `normalizedVolume = v / 100`
+**Root Cause**: Both video slots were being unmuted, causing audio overlap
+
+**Fix Applied**: `setVolume()` in `App.tsx` now only unmutes the visible video slot:
+```typescript
+// Only unmute the SHOWN video
+if (videoShown === 1 && this.video1Ref.current) {
+  this.video1Ref.current.muted = false;
+  this.video2Ref.current.muted = true; // Mute the other one
+}
+```
+
+**Reference**: [App.tsx:1036-1067](../../src/App.tsx#L1036-L1067)
+
+### Problem: Initial video load warnings **UPDATED: 2025-12-26**
+
+**Console Shows**:
+```
+⚠️ [Video #1] Initial load (waiting for media): {filename: undefined, url: undefined, ...}
+```
+
+**This is NORMAL**: Videos mount before WebSocket sends playlist data
+
+**Why It Happens**:
+1. Video components render immediately on app startup
+2. WebSocket playlist data arrives in ~200ms
+3. Videos update with correct media after data arrives
+
+**Changed**: Console now shows `console.warn()` instead of `console.error()` to indicate this is expected behavior, not a bug
+
+**Reference**: [video.tsx:211](../../src/component/video.tsx#L211)
 
 ### Problem: Montages play for 1 second then loop
 

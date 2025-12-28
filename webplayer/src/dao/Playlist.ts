@@ -80,9 +80,7 @@ export class Playlist {
             - Playlist Name: ${this.name}
             - Total montages in playlist: ${this.montages.length}
             - Available montage IDs: ${this.montages.map(m => m.id).join(', ')}
-            - Global montages cache keys: ${Object.keys(
-              require('../manager/Globals').Montages
-            ).join(', ')}
+            - Global montages cache keys: ${Object.keys(require('../manager/Globals').Montages).join(', ')}
             - Timestamp: ${Date.now()}`
       );
     }

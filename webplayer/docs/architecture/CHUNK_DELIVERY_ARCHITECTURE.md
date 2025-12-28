@@ -1,5 +1,5 @@
-# Chunk Delivery Architecture
-
+# ??Video ??Chunk Delivery Architecture
+??//Can this file be called VIDEO_CHUNK_DELIVERY_ARCHITECTURE, it does not concern images, no??
 ## Overview
 
 The chunk delivery mechanism has been completely refactored to be a **lower-level implementation detail** that doesn't interfere with higher-level WebSocket commands and playlist management.

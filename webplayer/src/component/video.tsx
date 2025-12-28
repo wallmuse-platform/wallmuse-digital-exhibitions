@@ -61,11 +61,7 @@ class VideoComponentTracker {
     console.log(`🎬 [VIDEO-TRACKER] Status: ${this.instances.size} instances`);
     this.instances.forEach((instance, index) => {
       console.log(
-        `  Video #${index}: mounted=${
-          instance.getIsMounted && instance.getIsMounted()
-        }, unmounting=${instance.getIsUnmounting && instance.getIsUnmounting()}, initializing=${
-          instance.getIsInitializing && instance.getIsInitializing()
-        }`
+        `  Video #${index}: mounted=${instance.getIsMounted && instance.getIsMounted()}, unmounting=${instance.getIsUnmounting && instance.getIsUnmounting()}, initializing=${instance.getIsInitializing && instance.getIsInitializing()}`
       );
     });
   }
@@ -106,7 +102,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           reason: 'Component unmounting - check if this is causing DOM desynchronization',
         });
       };
-    }, [index, hidden, shouldLoad, media?.filename]); // Component lifecycle tracking
+    }, [index]); // CRITICAL FIX: Only depend on 'index' - component should NOT unmount/remount when media changes, only when slot changes
 
     // DEBUG: Log autoplay decision for testing
     React.useEffect(() => {
@@ -117,6 +113,42 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
         timestamp: Date.now(),
       });
     }, [index]);
+
+    // CRITICAL FIX: Force className update when hidden prop changes
+    // This bypasses React's className update mechanism which sometimes fails to commit changes to DOM
+    React.useEffect(() => {
+      if (ref && typeof ref === 'object' && ref.current) {
+        const videoElement = ref.current as HTMLVideoElement;
+        const newClassName = hidden ? 'video hidden' : 'video';
+        const currentClassName = videoElement.className;
+
+        console.log(`🎬 [Video Component #${index}] useEffect className check:`, {
+          currentClassName,
+          newClassName,
+          hidden,
+          needsUpdate: currentClassName !== newClassName,
+        });
+
+        if (currentClassName !== newClassName) {
+          console.log(
+            `🎬 [Video Component #${index}] Forcing className update: "${currentClassName}" -> "${newClassName}"`
+          );
+          videoElement.className = newClassName;
+
+          // Verify the update worked
+          setTimeout(() => {
+            const verifyClassName = videoElement.className;
+            const computedStyle = window.getComputedStyle(videoElement);
+            console.log(`🎬 [Video Component #${index}] Verified className update:`, {
+              className: verifyClassName,
+              zIndex: computedStyle.zIndex,
+              opacity: computedStyle.opacity,
+              visibility: computedStyle.visibility,
+            });
+          }, 0);
+        }
+      }
+    }, [index, hidden, ref]);
 
     // DEBUG: Track source changes (only log when they actually change)
     React.useEffect(() => {
@@ -142,7 +174,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
         const videoElement = ref.current as HTMLVideoElement;
         const computedStyle = window.getComputedStyle(videoElement);
         console.log(
-          `🎬 [Video Component #${index}] CSS check: z-index=${computedStyle.zIndex}, hidden=${hidden}`
+          `🎬 [Video Component #${index}] CSS check: z-index=${computedStyle.zIndex}, hidden=${hidden}, actualClassName="${videoElement.className}"`
         );
       }
 
@@ -155,7 +187,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
         <video
           ref={ref}
           id={`video-${index}`}
-          className={`video ${hidden ? 'hidden' : ''}`} // Use hidden prop, not media check
+          className={hidden ? 'video hidden' : 'video'} // Use hidden prop, not media check
           src={media?.url || ''} // Always set src, empty string when no media
           style={{
             width: '100%',
@@ -176,6 +208,19 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           playsInline
           muted
           controls={false}
+          onError={e => {
+            const videoEl = e.currentTarget as HTMLVideoElement;
+            console.warn(`⚠️ [Video #${index}] Initial load (waiting for media):`, {
+              filename: media?.filename,
+              url: media?.url,
+              error: videoEl.error,
+              networkState: videoEl.networkState,
+              readyState: videoEl.readyState,
+            });
+          }}
+          onLoadedData={() => {
+            console.log(`✅ [Video #${index}] LOADED:`, media?.filename, 'URL:', media?.url);
+          }}
           // CRITICAL FIX: Add data attributes for debugging
           data-index={index}
           data-filename={media?.filename || 'none'}
@@ -199,6 +244,8 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           elementType: videoElement.type,
           elementProps: videoElement.props,
           willRender: true,
+          mediaUrl: media?.url,
+          mediaFilename: media?.filename,
         });
       }
 

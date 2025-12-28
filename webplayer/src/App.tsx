@@ -313,27 +313,27 @@ export default class WallmusePlayer extends React.Component {
         }
       );
     }
-    // If image1 is preloading, show it
+    // If image1 is preloading, switch to show it
     else if (this.state.imagePreloading === 1) {
-      console.log('[App.showImage] Image1 was preloading - now showing it');
+      console.log('[App.showImage] Image1 was preloading - now switching to show it');
       this.setState(
-        state => ({ ...state, image1: media, imageShown: 1, videoShown: 0 }),
+        state => ({ ...state, imageShown: 1, imagePreloading: 0, videoShown: 0 }),
         () => {
           console.log(
-            '[App.showImage] ✅ STATE UPDATED - image1 now showing:',
+            '[App.showImage] ✅ STATE UPDATED - switched to image1:',
             this.state.imageShown
           );
         }
       );
     }
-    // If image2 is preloading, show it
+    // If image2 is preloading, switch to show it
     else if (this.state.imagePreloading === 2) {
-      console.log('[App.showImage] Image2 was preloading - now showing it');
+      console.log('[App.showImage] Image2 was preloading - now switching to show it');
       this.setState(
-        state => ({ ...state, image2: media, imageShown: 2, videoShown: 0 }),
+        state => ({ ...state, imageShown: 2, imagePreloading: 0, videoShown: 0 }),
         () => {
           console.log(
-            '[App.showImage] ✅ STATE UPDATED - image2 now showing:',
+            '[App.showImage] ✅ STATE UPDATED - switched to image2:',
             this.state.imageShown
           );
         }
@@ -471,6 +471,26 @@ export default class WallmusePlayer extends React.Component {
   public preloadVideo(media: VideoMediaFile) {
     // CRITICAL FIX: Use the opposite slot of what's currently shown
     const videoIndex = this.state.videoShown === 1 ? 2 : 1;
+
+    // CRITICAL FIX: Check if this is the same video already loaded in this slot
+    const existingVideo = videoIndex === 1 ? this.state.video1 : this.state.video2;
+    const isSameVideo =
+      existingVideo &&
+      (existingVideo.filename === media.filename ||
+        existingVideo.artworkId === media.artworkId ||
+        existingVideo.url === media.url);
+
+    if (isSameVideo) {
+      console.log(
+        '[App.preloadVideo] ✅ Video already loaded in slot',
+        videoIndex,
+        '- reusing existing instance:',
+        media.filename
+      );
+      // Don't update state - keep existing VideoMediaFile instance to prevent unmount/remount
+      return;
+    }
+
     console.log('[App.preloadVideo] Preloading video in slot', videoIndex, 'for:', media.filename);
 
     // CRITICAL FIX: If this is the first video (no video currently shown), make it visible immediately
@@ -626,6 +646,28 @@ export default class WallmusePlayer extends React.Component {
       return;
     }
 
+    // CRITICAL FIX: Prevent duplicate showVideo() calls for the same video that's already showing
+    const isVideo1Showing =
+      this.state.videoShown === 1 && this.state.video1?.filename === media.filename;
+    const isVideo2Showing =
+      this.state.videoShown === 2 && this.state.video2?.filename === media.filename;
+
+    if (isVideo1Showing || isVideo2Showing) {
+      console.log(
+        '[App.showVideo] ✅ Video already showing, ignoring duplicate call:',
+        media.filename
+      );
+      // Ensure the currently showing video is playing (not paused)
+      const currentVideoRef = isVideo1Showing ? this.video1Ref : this.video2Ref;
+      if (currentVideoRef?.current && currentVideoRef.current.paused) {
+        console.log('[App.showVideo] Resuming paused video:', media.filename);
+        currentVideoRef.current.play().catch(err => {
+          console.log('[App.showVideo] Play failed (expected during transitions):', err.message);
+        });
+      }
+      return;
+    }
+
     if (!this.state.videoPreloading) {
       this.preloadVideo(media);
       setTimeout(() => this.showVideo(media), 20);
@@ -636,6 +678,18 @@ export default class WallmusePlayer extends React.Component {
 
     // Log montage info when showing new video
     this.logMontageInfo();
+
+    // 🔍 DIAGNOSTIC BREAKPOINT 1: Entry to showVideo
+    console.log('🔍 [DIAGNOSTIC-1] showVideo() ENTRY:', {
+      timestamp: new Date().toISOString(),
+      newMedia: media.filename,
+      artworkId: media.artworkId,
+      videoPreloading: this.state.videoPreloading,
+      videoShown: this.state.videoShown,
+      currentVideo1: this.state.video1?.filename || 'undefined',
+      currentVideo2: this.state.video2?.filename || 'undefined',
+      stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n'),
+    });
 
     console.log('[App.showVideo] 🔍 SWITCHING LOGIC:', {
       videoPreloading: this.state.videoPreloading,
@@ -650,42 +704,172 @@ export default class WallmusePlayer extends React.Component {
         return;
       }
       console.log('[App.showVideo] Showing video in slot 1:', media.filename);
-      this.setState(state => {
-        return {
-          ...state,
-          videoShown: 1,
-          video1: media,
-          imageShown: 0,
-          video2: undefined,
-          videoPreloading: 0,
-        };
-      });
-      // TODO give time to render to be done, should be synced instead
-      setTimeout(() => {
-        this.video1Ref.current!.volume = Math.max(0, Math.min(1, this.state.volume / 100));
-        this.video1Ref.current!.play();
-        // HYBRID FIX: Sync timing reference for accurate track display
-        // this.syncPositionToTimingRef(); // PRODUCTION: Reduced sync frequency to prevent hiccups
-      }, 10);
+
+      // CRITICAL FIX: Pause video2 before switching to video1 to prevent simultaneous playback
+      // Only pause if video2 has media loaded
+      if (this.video2Ref?.current && this.state.video2) {
+        this.video2Ref.current.pause();
+        console.log('[App.showVideo] Paused video2 to prevent simultaneous playback');
+      }
+
+      // CRITICAL FIX: Keep existing video1 instance to prevent unmount/remount
+      // Only update if it's a different video
+      const shouldUpdateVideo1 =
+        !this.state.video1 || this.state.video1.filename !== media.filename;
+
+      // CRITICAL FIX: Only call setState if something actually needs to change
+      // If video1 already has this video AND videoShown is already 1, skip setState
+      const alreadyShowing = this.state.videoShown === 1 && !shouldUpdateVideo1;
+
+      if (alreadyShowing) {
+        console.log(
+          '[App.showVideo] ✅ Video already showing in slot 1, skipping setState to prevent unmount:',
+          media.filename
+        );
+        // Video is already playing - just ensure it's not paused
+        setTimeout(() => {
+          if (this.video1Ref.current) {
+            this.video1Ref.current.volume = Math.max(0, Math.min(1, this.state.volume / 100));
+            if (this.video1Ref.current.paused) {
+              this.video1Ref.current.play();
+            }
+          }
+        }, 100);
+      } else {
+        // 🔍 DIAGNOSTIC BREAKPOINT 2: Before setState for slot 1
+        console.log('🔍 [DIAGNOSTIC-2] BEFORE setState for SLOT 1:', {
+          timestamp: new Date().toISOString(),
+          shouldUpdateVideo1,
+          newMedia: media.filename,
+          preservedVideo2: this.state.video2?.filename || 'undefined',
+          stateBeforeChange: {
+            video1: this.state.video1?.filename || 'undefined',
+            video2: this.state.video2?.filename || 'undefined',
+            videoShown: this.state.videoShown,
+          },
+        });
+
+        // CRITICAL FIX: Don't clear hidden slot immediately - it causes fragment abort errors
+        // Keep the previous video in the hidden slot until it's naturally replaced
+        // This prevents browser from aborting ongoing fragment requests for still-playing video
+        this.setState((state: AppState) => {
+          // 🔍 DIAGNOSTIC BREAKPOINT 3: Inside setState for slot 1
+          console.log('🔍 [DIAGNOSTIC-3] INSIDE setState for SLOT 1:', {
+            timestamp: new Date().toISOString(),
+            newVideo1: shouldUpdateVideo1 ? media.filename : state.video1?.filename || 'undefined',
+            preservedVideo2: state.video2?.filename || 'undefined',
+          });
+
+          return {
+            ...state,
+            videoShown: 1,
+            video1: shouldUpdateVideo1 ? media : state.video1, // Preserve instance if same video
+            video2: state.video2, // Keep existing video in hidden slot to prevent fragment aborts
+            imageShown: 0,
+            videoPreloading: 0,
+          };
+        });
+        setTimeout(() => {
+          // 🔍 DIAGNOSTIC BREAKPOINT 4: After setState for slot 1
+          console.log('🔍 [DIAGNOSTIC-4] AFTER setState for SLOT 1 (in timeout):', {
+            timestamp: new Date().toISOString(),
+            stateAfterChange: {
+              video1: this.state.video1?.filename || 'undefined',
+              video2: this.state.video2?.filename || 'undefined',
+              videoShown: this.state.videoShown,
+            },
+          });
+
+          if (this.video1Ref.current) {
+            this.video1Ref.current.volume = Math.max(0, Math.min(1, this.state.volume / 100));
+            this.video1Ref.current.play();
+          }
+        }, 100); // Slight delay to let React commit changes
+      }
     } else {
       console.log('[App.showVideo] Showing video in slot 2:', media.filename);
-      this.setState(state => {
-        return {
-          ...state,
-          videoShown: 2,
-          video2: media,
-          imageShown: 0,
-          video1: undefined,
-          videoPreloading: 0,
-        };
-      });
-      // TODO give time to render to be done, should be synced instead
-      setTimeout(() => {
-        this.video2Ref.current!.volume = Math.max(0, Math.min(1, this.state.volume / 100));
-        this.video2Ref.current!.play();
-        // HYBRID FIX: Sync timing reference for accurate track display
-        // this.syncPositionToTimingRef(); // PRODUCTION: Reduced sync frequency to prevent hiccups
-      }, 10);
+
+      // CRITICAL FIX: Pause video1 before switching to video2 to prevent simultaneous playback
+      // Only pause if video1 has media loaded
+      if (this.video1Ref?.current && this.state.video1) {
+        this.video1Ref.current.pause();
+        console.log('[App.showVideo] Paused video1 to prevent simultaneous playback');
+      }
+
+      // CRITICAL FIX: Keep existing video2 instance to prevent unmount/remount
+      // Only update if it's a different video
+      const shouldUpdateVideo2 =
+        !this.state.video2 || this.state.video2.filename !== media.filename;
+
+      // CRITICAL FIX: Only call setState if something actually needs to change
+      // If video2 already has this video AND videoShown is already 2, skip setState
+      const alreadyShowing = this.state.videoShown === 2 && !shouldUpdateVideo2;
+
+      if (alreadyShowing) {
+        console.log(
+          '[App.showVideo] ✅ Video already showing in slot 2, skipping setState to prevent unmount:',
+          media.filename
+        );
+        // Video is already playing - just ensure it's not paused
+        setTimeout(() => {
+          if (this.video2Ref.current) {
+            this.video2Ref.current.volume = Math.max(0, Math.min(1, this.state.volume / 100));
+            if (this.video2Ref.current.paused) {
+              this.video2Ref.current.play();
+            }
+          }
+        }, 100);
+      } else {
+        // 🔍 DIAGNOSTIC BREAKPOINT 5: Before setState for slot 2
+        console.log('🔍 [DIAGNOSTIC-5] BEFORE setState for SLOT 2:', {
+          timestamp: new Date().toISOString(),
+          shouldUpdateVideo2,
+          newMedia: media.filename,
+          preservedVideo1: this.state.video1?.filename || 'undefined',
+          stateBeforeChange: {
+            video1: this.state.video1?.filename || 'undefined',
+            video2: this.state.video2?.filename || 'undefined',
+            videoShown: this.state.videoShown,
+          },
+        });
+
+        // CRITICAL FIX: Don't clear hidden slot immediately - it causes fragment abort errors
+        // Keep the previous video in the hidden slot until it's naturally replaced
+        // This prevents browser from aborting ongoing fragment requests for still-playing video
+        this.setState((state: AppState) => {
+          // 🔍 DIAGNOSTIC BREAKPOINT 6: Inside setState for slot 2
+          console.log('🔍 [DIAGNOSTIC-6] INSIDE setState for SLOT 2:', {
+            timestamp: new Date().toISOString(),
+            preservedVideo1: state.video1?.filename || 'undefined',
+            newVideo2: shouldUpdateVideo2 ? media.filename : state.video2?.filename || 'undefined',
+          });
+
+          return {
+            ...state,
+            videoShown: 2,
+            video2: shouldUpdateVideo2 ? media : state.video2, // Preserve instance if same video
+            video1: state.video1, // Keep existing video in hidden slot to prevent fragment aborts
+            imageShown: 0,
+            videoPreloading: 0,
+          };
+        });
+        setTimeout(() => {
+          // 🔍 DIAGNOSTIC BREAKPOINT 7: After setState for slot 2
+          console.log('🔍 [DIAGNOSTIC-7] AFTER setState for SLOT 2 (in timeout):', {
+            timestamp: new Date().toISOString(),
+            stateAfterChange: {
+              video1: this.state.video1?.filename || 'undefined',
+              video2: this.state.video2?.filename || 'undefined',
+              videoShown: this.state.videoShown,
+            },
+          });
+
+          if (this.video2Ref.current) {
+            this.video2Ref.current.volume = Math.max(0, Math.min(1, this.state.volume / 100));
+            this.video2Ref.current.play();
+          }
+        }, 100); // Slight delay to let React commit changes
+      }
     }
     this.makeOpeningTransition();
   }
@@ -873,24 +1057,32 @@ export default class WallmusePlayer extends React.Component {
       return { ...state, volume: v };
     });
 
-    // Apply volume to currently shown video
-    const video = this.getShownVideo();
-    if (video) {
-      video.volume = normalizedVolume;
-      video.muted = false; // Unmute to ensure audio is audible
-      console.log(`[App.setVolume] Applied volume ${normalizedVolume} and unmuted active video`);
-    } else {
-      console.log(`[App.setVolume] No active video found, will apply volume when video loads`);
-    }
+    // CRITICAL FIX: Only unmute and set volume on the SHOWN video
+    // Hidden videos must stay muted to prevent audio overlap
+    const videoShown = this.state.videoShown;
 
-    // Also apply to both video refs as fallback
-    if (this.video1Ref.current) {
+    if (videoShown === 1 && this.video1Ref.current) {
       this.video1Ref.current.volume = normalizedVolume;
-      this.video1Ref.current.muted = false; // Unmute
-    }
-    if (this.video2Ref.current) {
+      this.video1Ref.current.muted = false;
+      // Ensure video-2 is muted
+      if (this.video2Ref.current) {
+        this.video2Ref.current.muted = true;
+        this.video2Ref.current.volume = 0;
+      }
+      console.log(`[App.setVolume] Applied volume ${normalizedVolume} to video-1, muted video-2`);
+    } else if (videoShown === 2 && this.video2Ref.current) {
       this.video2Ref.current.volume = normalizedVolume;
-      this.video2Ref.current.muted = false; // Unmute
+      this.video2Ref.current.muted = false;
+      // Ensure video-1 is muted
+      if (this.video1Ref.current) {
+        this.video1Ref.current.muted = true;
+        this.video1Ref.current.volume = 0;
+      }
+      console.log(`[App.setVolume] Applied volume ${normalizedVolume} to video-2, muted video-1`);
+    } else {
+      console.log(
+        `[App.setVolume] No active video (videoShown=${videoShown}), will apply when video loads`
+      );
     }
   }
 
@@ -1135,8 +1327,31 @@ export default class WallmusePlayer extends React.Component {
       return;
     }
 
+    // 🔍 DIAGNOSTIC BREAKPOINT 8: Before force re-render
+    console.log('🔍 [DIAGNOSTIC-8] forcePlaylistContentTypeRerender() CALLED:', {
+      timestamp: new Date().toISOString(),
+      currentState: {
+        video1: this.state.video1?.filename || 'undefined',
+        video2: this.state.video2?.filename || 'undefined',
+        videoShown: this.state.videoShown,
+      },
+      stackTrace: new Error().stack?.split('\n').slice(1, 5).join('\n'),
+    });
+
     console.log('[App] Forcing re-render for playlist content type change');
     this.forceReactRerender();
+
+    // 🔍 DIAGNOSTIC BREAKPOINT 9: After force re-render (async check)
+    setTimeout(() => {
+      console.log('🔍 [DIAGNOSTIC-9] AFTER forcePlaylistContentTypeRerender():', {
+        timestamp: new Date().toISOString(),
+        currentState: {
+          video1: this.state.video1?.filename || 'undefined',
+          video2: this.state.video2?.filename || 'undefined',
+          videoShown: this.state.videoShown,
+        },
+      });
+    }, 50);
   }
 
   // Add method to force re-initialization if needed
@@ -1761,7 +1976,91 @@ export default class WallmusePlayer extends React.Component {
       }
     };
 
+    // 🔍 COMPREHENSIVE STATE TRACKING - Call this to see everything at once
+    (window as any).debugPlayerState = () => {
+      const { Sequencer } = require('./manager/Sequencer');
+      const { ItemPlayer } = require('./manager/ItemPlayer');
+      const { ThePlaylist } = require('./manager/Globals');
+
+      console.log('═══════════════════════════════════════════════════');
+      console.log('🔍 COMPREHENSIVE PLAYER STATE DEBUG');
+      console.log('═══════════════════════════════════════════════════');
+
+      // App state
+      console.log('\n📺 APP STATE:');
+      console.log({
+        videoShown: this.state.videoShown,
+        video1Media: this.state.video1?.filename || 'undefined',
+        video2Media: this.state.video2?.filename || 'undefined',
+        imageShown: this.state.imageShown,
+        videoPreloading: this.state.videoPreloading,
+        fadeClass: this.state.fadeClass,
+      });
+
+      // Video elements
+      console.log('\n🎬 VIDEO ELEMENTS:');
+      const v1 = this.video1Ref?.current;
+      const v2 = this.video2Ref?.current;
+      console.log(
+        'Video1:',
+        v1
+          ? {
+              exists: true,
+              paused: v1.paused,
+              currentTime: v1.currentTime.toFixed(2),
+              duration: v1.duration?.toFixed(2) || 'unknown',
+              readyState: v1.readyState,
+              networkState: v1.networkState,
+              src: v1.src.split('/').pop(),
+              hasError: !!v1.error,
+            }
+          : 'NOT MOUNTED'
+      );
+      console.log(
+        'Video2:',
+        v2
+          ? {
+              exists: true,
+              paused: v2.paused,
+              currentTime: v2.currentTime.toFixed(2),
+              duration: v2.duration?.toFixed(2) || 'unknown',
+              readyState: v2.readyState,
+              networkState: v2.networkState,
+              src: v2.src.split('/').pop(),
+              hasError: !!v2.error,
+            }
+          : 'NOT MOUNTED'
+      );
+
+      // Sequencer state
+      console.log('\n⏯️  SEQUENCER STATE:');
+      console.log({
+        isPlaying: Sequencer.isPlaying(),
+        currentPlaylist: ThePlaylist?.id || 'undefined',
+        playlistName: ThePlaylist?.name || 'none',
+      });
+
+      // Current position
+      if (ItemPlayer.ThePlayer) {
+        const pos = ItemPlayer.ThePlayer.getPosition();
+        console.log('\n📍 CURRENT POSITION:');
+        if (pos) {
+          console.log({
+            montage: pos.getMontageIndex(),
+            track: pos.getTrackIndex(),
+            item: pos.getItemIndex(),
+            offset: pos.getOffset()?.toFixed(2),
+          });
+        } else {
+          console.log('Position is undefined');
+        }
+      }
+
+      console.log('\n═══════════════════════════════════════════════════');
+    };
+
     console.log('[App] Added debugPlayCommand to window for manual testing');
+    console.log('[App] 💡 TIP: Call debugPlayerState() in console for comprehensive state info');
 
     // NOTE: Global navigation commands are now handled by EssentialLogger.ts
     console.log(
@@ -2157,12 +2456,24 @@ export default class WallmusePlayer extends React.Component {
     return (
       <div id="wm-player-contents" className="wm-player-contents">
         {!isShown && canWork && !loading && (
-          <div className="placeholder">Aucune animation en cours</div>
+          <div className="placeholder">
+            ⏸️
+            <br />
+            Ready to play
+          </div>
         )}
-        {!canWork && <div className="placeholder">Votre navigateur n'est pas supporté</div>}
-        {loading && <div className="placeholder">Chargement en cours...</div>}
-        {/* CRITICAL FIX: Always show a fallback message if nothing else is showing */}
-        {!isShown && !loading && <div className="placeholder">Prêt à afficher du contenu</div>}
+        {!canWork && (
+          <div className="placeholder">
+            ⚠️
+            <br />
+            Browser not supported
+          </div>
+        )}
+        {loading && (
+          <div className="placeholder">
+            <div className="spinner"></div>
+          </div>
+        )}
         {/* CRITICAL FIX: Conditionally render image components based on playlist type */}
         {(() => {
           const hasImagesInPlaylist = (window as any).WM_HAS_IMAGES === true;
@@ -2246,6 +2557,7 @@ export default class WallmusePlayer extends React.Component {
                   media={image1 || undefined}
                   hidden={imageShown !== 1}
                   shouldLoad={imageShown === 1 || imagePreloading === 1}
+                  zoomAndPan={image1?.zoomAndPan}
                 />
                 {/* Image2 component - always render for image playlists */}
                 <Image
@@ -2254,6 +2566,7 @@ export default class WallmusePlayer extends React.Component {
                   media={image2 || undefined}
                   hidden={imageShown !== 2}
                   shouldLoad={imageShown === 2 || imagePreloading === 2}
+                  zoomAndPan={image2?.zoomAndPan}
                 />
               </>
             );
@@ -2268,6 +2581,7 @@ export default class WallmusePlayer extends React.Component {
                     media={image1}
                     hidden={imageShown !== 1}
                     shouldLoad={imageShown === 1 || imagePreloading === 1}
+                    zoomAndPan={image1?.zoomAndPan}
                   />
                 )}
                 {image2 && (
@@ -2277,6 +2591,7 @@ export default class WallmusePlayer extends React.Component {
                     media={image2}
                     hidden={imageShown !== 2}
                     shouldLoad={imageShown === 2 || imagePreloading === 2}
+                    zoomAndPan={image2?.zoomAndPan}
                   />
                 )}
               </>
@@ -2284,140 +2599,24 @@ export default class WallmusePlayer extends React.Component {
           }
         })()}
         {/* CRITICAL FIX: Always render both video components for proper video switching */}
-        {/* Check if current playlist has videos - but don't exclude them if images are also present */}
-        {(() => {
-          const hasVideosInPlaylist = (window as any).WM_HAS_VIDEOS !== false; // default true unless explicitly false
-          const hasImagesInPlaylist = (window as any).WM_HAS_IMAGES === true; // default false unless explicitly true
-
-          console.log('[App] 🚨 CRITICAL DEBUG: Playlist type check:', {
-            hasVideosInPlaylist,
-            hasImagesInPlaylist,
-            videoShown: this.state.videoShown,
-            imageShown: this.state.imageShown,
-          });
-
-          // CRITICAL FIX: Always render both video components for proper video switching
-          if (hasVideosInPlaylist) {
-            console.log('[App] 🚨 CRITICAL DEBUG: Creating Video1 component with props:', {
-              media: video1?.filename,
-              hidden: this.state.videoShown !== 1,
-              shouldLoad: true,
-              videoShown: this.state.videoShown,
-            });
-            console.log('[App] 🚨 CRITICAL DEBUG: Creating Video2 component with props:', {
-              media: video2?.filename,
-              hidden: this.state.videoShown !== 2,
-              shouldLoad: true,
-              videoShown: this.state.videoShown,
-            });
-
-            // CRITICAL FIX: Auto-trigger video display if video playlist is detected but no video is showing
-            if (this.state.videoShown === 0 && !this.state.imageShown) {
-              console.log(
-                '[App] 🚑 CRITICAL FIX: Video playlist detected but no video showing - checking if auto-trigger needed'
-              );
-              // Use setTimeout to avoid setState during render
-              setTimeout(() => {
-                const { Sequencer } = require('./manager/Sequencer');
-
-                // Unified montage availability check for both default and defined playlists
-                const currentPlaylist = Sequencer.getCurrentPlaylist();
-                const { Montages } = require('./manager/Globals');
-
-                const montageCount = currentPlaylist
-                  ? currentPlaylist.getMontagesCount
-                    ? currentPlaylist.getMontagesCount()
-                    : 0
-                  : Object.keys(Montages).length;
-
-                if (montageCount === 0) {
-                  console.log('[App] 🚑 No montages available yet - skipping sequencer start');
-                  return;
-                }
-                console.log(
-                  '[App] 🚑 Found',
-                  montageCount,
-                  'montages, proceeding with sequencer start'
-                );
-
-                // CRITICAL FIX: Don't interfere if sequencer is already running - but force if stuck
-                if (Sequencer && !Sequencer.isPlaying()) {
-                  const montageCount = currentPlaylist
-                    ? currentPlaylist.getMontagesCount()
-                    : Object.keys(require('./manager/Globals').Montages).length;
-                  console.log(
-                    '[App] 🚑 Starting sequencer for video playlist with',
-                    montageCount,
-                    'montages'
-                  );
-                  Sequencer.play(0);
-                } else {
-                  console.log(
-                    '[App] 🚑 Sequencer already playing - but checking if media is actually displaying'
-                  );
-                  // CRITICAL FIX: If sequencer is "playing" but no media is showing, force showMedia
-                  if (this.state.videoShown === 0 && !this.state.imageShown) {
-                    console.log(
-                      '[App] 🚨 CRITICAL: Sequencer playing but no media showing - forcing media display'
-                    );
-                    const { ItemPlayer } = require('./manager/ItemPlayer');
-                    const player = ItemPlayer.ThePlayer;
-                    if (player) {
-                      const currentPos = player.getPosition();
-                      if (currentPos) {
-                        console.log('[App] 🚑 FORCE-TRIGGERING showMedia for stuck sequencer');
-                        // Import showMedia dynamically since it's a private method
-                        try {
-                          // Trigger via public interface instead
-                          Sequencer.play(0); // Force restart to trigger showMedia
-                        } catch (error) {
-                          console.error('[App] Failed to force-trigger sequencer:', error);
-                        }
-                      } else {
-                        console.log(
-                          '[App] 🚨 No position available for force trigger - trying sequencer restart'
-                        );
-                        Sequencer.play(0); // Force restart
-                      }
-                    } else {
-                      console.log(
-                        '[App] 🚨 No player available for force trigger - trying sequencer restart'
-                      );
-                      Sequencer.play(0); // Force restart
-                    }
-                  }
-                }
-              }, 100);
-            }
-
-            return (
-              <>
-                <Video
-                  key="video-1"
-                  ref={this.video1Ref}
-                  index={1}
-                  media={video1 || null}
-                  hidden={this.state.videoShown !== 1}
-                  shouldLoad={true}
-                />
-                <Video
-                  key="video-2"
-                  ref={this.video2Ref}
-                  index={2}
-                  media={video2 || null}
-                  hidden={this.state.videoShown !== 2}
-                  shouldLoad={true}
-                />
-              </>
-            );
-          } else {
-            // Only skip video components if explicitly no videos in playlist
-            console.log(
-              '[App] 🚨 CRITICAL DEBUG: No videos in playlist - skipping video component rendering'
-            );
-            return null;
-          }
-        })()}
+        {/* CRITICAL FIX: Move video rendering OUTSIDE IIFE to prevent unmount/remount on every render */}
+        {/* Video components now always render with stable keys - no conditional wrapping */}
+        <Video
+          key="video-1"
+          ref={this.video1Ref}
+          index={1}
+          media={video1 || null}
+          hidden={this.state.videoShown !== 1}
+          shouldLoad={true}
+        />
+        <Video
+          key="video-2"
+          ref={this.video2Ref}
+          index={2}
+          media={video2 || null}
+          hidden={this.state.videoShown !== 2}
+          shouldLoad={true}
+        />
 
         {isShown && <div id="fadeinout" className={fadeClass}></div>}
 

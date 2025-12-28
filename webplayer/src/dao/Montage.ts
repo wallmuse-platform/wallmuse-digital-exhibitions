@@ -18,8 +18,21 @@ export class Montage extends MontageLight {
       this.seqs = [];
     }
 
+    console.log('[Montage] Constructor received json.screens:', json.screens);
     if (json.screens && Array.isArray(json.screens)) {
       this.screens = json.screens.map((t: any) => new Screen(t));
+      console.log('[Montage] Created screens array:', {
+        count: this.screens.length,
+        screenIds: this.screens.map(s => s.id),
+        screensWithSeqRefs: this.screens
+          .filter((s: any) => s.seq_id)
+          .map((s: any) => ({
+            id: s.id,
+            seq_id: s.seq_id,
+          })),
+      });
+    } else {
+      console.log('[Montage] No screens data in JSON');
     }
   }
 
@@ -30,16 +43,12 @@ export class Montage extends MontageLight {
     if (seqValue !== undefined && seqValue !== null) {
       if (seqValue >= 0 && seqValue < this.seqs.length) {
         console.log(
-          `[TRACK-SELECTION] Using navigation seq parameter: seq ${seqValue} (track ${
-            seqValue + 1
-          })`
+          `[TRACK-SELECTION] Using navigation seq parameter: seq ${seqValue} (track ${seqValue + 1})`
         );
         return seqValue;
       } else {
         console.warn(
-          `[TRACK-SELECTION] Navigation seq ${seqValue} is out of range (0-${
-            this.seqs.length - 1
-          }), falling back to screen-based logic`
+          `[TRACK-SELECTION] Navigation seq ${seqValue} is out of range (0-${this.seqs.length - 1}), falling back to screen-based logic`
         );
       }
     }
@@ -85,16 +94,12 @@ export class Montage extends MontageLight {
 
             if (trackIndex >= 0 && trackIndex < this.seqs.length) {
               console.log(
-                `[TRACK-SELECTION] Using screen seq reference: seq ${trackIndex} (track ${
-                  trackIndex + 1
-                }) from screen data`
+                `[TRACK-SELECTION] Using screen seq reference: seq ${trackIndex} (track ${trackIndex + 1}) from screen data`
               );
               return trackIndex;
             } else {
               console.warn(
-                `[TRACK-SELECTION] Screen seq reference ${trackIndex} is out of range (0-${
-                  this.seqs.length - 1
-                }), falling back to track 0`
+                `[TRACK-SELECTION] Screen seq reference ${trackIndex} is out of range (0-${this.seqs.length - 1}), falling back to track 0`
               );
             }
           }

@@ -127,9 +127,10 @@ export function mountReactApp() {
 
     const root = ReactDOM.createRoot(container);
     root.render(
-      <React.StrictMode>
-        <WallmusePlayer />
-      </React.StrictMode>
+      // TEMPORARILY DISABLED: StrictMode causes double-mounting which makes debugging impossible
+      // <React.StrictMode>
+      <WallmusePlayer />
+      // </React.StrictMode>
     );
 
     setTimeout(() => {
@@ -279,9 +280,7 @@ function setupNavigationListener() {
 
     // Update last navigation event with resolved position
     lastNavigationEvent = { playlist, position: resolvedPosition, timestamp: now };
-    lastNavigationLog = `Event #${navigationEventCounter}: ${playlist} at ${new Date(
-      timestamp
-    ).toISOString()}`;
+    lastNavigationLog = `Event #${navigationEventCounter}: ${playlist} at ${new Date(timestamp).toISOString()}`;
 
     console.log(`[React] ✅ PROCESSING NAVIGATION EVENT #${navigationEventCounter}:`, {
       playlist,
@@ -332,7 +331,31 @@ function setupNavigationListener() {
 
     const { playlist, position, montage, track } = paramsObj;
 
-    console.log('[React] 🎯 NAVIGATION PARAMETERS:', { playlist, position, montage, track });
+    // CRITICAL FIX: Resolve position if it's an object {montage: X, track: Y}
+    let resolvedPosition: number | undefined;
+    let resolvedTrack: string | number | undefined = track; // Start with top-level track
+
+    if (typeof position === 'object' && position !== null && 'montage' in position) {
+      resolvedPosition = position.montage;
+      // Also extract track from position object if available
+      if (position.track !== undefined && resolvedTrack === undefined) {
+        resolvedTrack = position.track;
+      }
+    } else if (typeof position === 'number') {
+      resolvedPosition = position;
+    } else if (position !== null && position !== undefined) {
+      console.log(`[React] 🚨 NAVIGATION: Invalid position format, ignoring:`, position);
+      resolvedPosition = undefined;
+    } else {
+      resolvedPosition = position; // Keep as undefined/null
+    }
+
+    console.log('[React] 🎯 NAVIGATION PARAMETERS:', {
+      playlist,
+      position: resolvedPosition,
+      montage,
+      track: resolvedTrack,
+    });
 
     // Reset any existing pending values before processing new navigation
     console.log('[React] Resetting pending navigation values for new navigation event');
@@ -340,11 +363,11 @@ function setupNavigationListener() {
     // Note: Montage track overrides are preserved across navigation events
 
     // Handle track navigation FIRST - before any playlist processing
-    if (track !== undefined && track !== null) {
-      console.log('[React] Processing track navigation to:', track);
-      const trackIndex = parseInt(track) - 1; // Convert to 0-based index
+    if (resolvedTrack !== undefined && resolvedTrack !== null) {
+      console.log('[React] Processing track navigation to:', resolvedTrack);
+      const trackIndex = parseInt(String(resolvedTrack)) - 1; // Convert to 0-based index
       // Set track override for the target montage (use position or default to montage 0)
-      const targetMontageIndex = typeof position === 'number' ? position : 0;
+      const targetMontageIndex = typeof resolvedPosition === 'number' ? resolvedPosition : 0;
       Sequencer.setMontageTrackOverride(targetMontageIndex, trackIndex);
       console.log(
         '[React] Set track override for montage',
@@ -355,24 +378,31 @@ function setupNavigationListener() {
     }
 
     // CRITICAL FIX: Set pending montage index from position parameter
-    if (position !== undefined && position !== null && typeof position === 'number') {
-      console.log('[React] 🎯 NAVIGATION: Setting pending montage index from position:', position);
+    if (
+      resolvedPosition !== undefined &&
+      resolvedPosition !== null &&
+      typeof resolvedPosition === 'number'
+    ) {
       console.log(
-        '[React] 🔍 NAVIGATION: Position type check - raw position:',
-        position,
+        '[React] 🎯 NAVIGATION: Setting pending montage index from resolvedPosition:',
+        resolvedPosition
+      );
+      console.log(
+        '[React] 🔍 NAVIGATION: Position type check - resolvedPosition:',
+        resolvedPosition,
         'type:',
-        typeof position
+        typeof resolvedPosition
       );
       try {
         // IMPORTANT: Check if position needs 1-based to 0-based conversion
         // Most UI systems use 1-based montage numbers but arrays are 0-based
-        const montageIndex = position; // Keep as-is for now, add logging to debug
+        const montageIndex = resolvedPosition; // Keep as-is for now, add logging to debug
         Sequencer.setPendingMontageIndex(montageIndex);
         console.log(
           '[React] ✅ NAVIGATION: Pending montage index set to:',
           montageIndex,
-          '(from position:',
-          position,
+          '(from resolvedPosition:',
+          resolvedPosition,
           ')'
         );
 
@@ -385,8 +415,8 @@ function setupNavigationListener() {
     } else {
       console.log(
         '[React] 🚨 NAVIGATION: Invalid position parameter (not a number) - montage index will default to 0, received:',
-        position,
-        typeof position
+        resolvedPosition,
+        typeof resolvedPosition
       );
     }
 
@@ -469,9 +499,68 @@ function setupNavigationListener() {
           '[React] 🚨 PLAYLIST PROCESSING COMPLETE - continuing with position/montage navigation if needed'
         );
 
-        // CRITICAL FIX: Wait for WebSocket playlist command, but implement fallback if it doesn't arrive
+        // CRITICAL FIX: Try parent-child communication IMMEDIATELY, then fall back to WebSocket
         try {
-          console.log('[React] Waiting for WebSocket playlist command for:', playlist);
+          console.log('[React] Attempting immediate parent-child playlist load for:', playlist);
+
+          // Try to load from parent IMMEDIATELY with fast retries
+          const tryLoadFromParent = (attempt = 0, maxAttempts = 10) => {
+            const parentPlaylist = (window.parent as any)?.currentPlaylist;
+
+            // CRITICAL FIX: Compare with type coercion (playlist ID can be string or number)
+            if (parentPlaylist && String(parentPlaylist.id) === String(playlist)) {
+              console.log(
+                '[React] ✅ INSTANT: Found playlist in parent (attempt',
+                attempt + 1,
+                ')'
+              );
+
+              // CRITICAL FIX: Only call setCurrentPlaylist if it's NOT already the current playlist
+              const currentPlaylist = Sequencer?.getCurrentPlaylist();
+              const currentPlaylistId = currentPlaylist?.id;
+
+              if (String(currentPlaylistId) !== String(playlist)) {
+                console.log('[React] Loading playlist from parent:', playlist);
+                const { setCurrentPlaylist } = require('./manager/Globals');
+                const { Playlist } = require('./dao/Playlist');
+                const playlistInstance = new Playlist(parentPlaylist);
+                setCurrentPlaylist(playlistInstance); // This will dispatch child-playlist-changed event
+              } else {
+                console.log(
+                  '[React] Playlist',
+                  playlist,
+                  'already loaded, skipping duplicate load'
+                );
+                // CRITICAL FIX: Even if playlist is already loaded, ensure parent is in sync
+                // This prevents the WebSocket fallback from finding the wrong playlist
+                if (window.parent && window.parent !== window) {
+                  try {
+                    (window.parent as any).currentPlaylist = parentPlaylist;
+                    console.log(
+                      '[React] Updated parent.currentPlaylist to prevent fallback confusion'
+                    );
+                  } catch (e) {
+                    console.log('[React] Could not update parent.currentPlaylist');
+                  }
+                }
+              }
+              return true; // Success
+            } else if (attempt < maxAttempts) {
+              // Retry every 50ms for up to 500ms total
+              setTimeout(() => tryLoadFromParent(attempt + 1, maxAttempts), 50);
+              return false; // Will retry
+            } else {
+              console.log(
+                '[React] ⏱️ Parent data not available after',
+                maxAttempts * 50,
+                'ms - waiting for WebSocket fallback'
+              );
+              return false; // Failed after all attempts
+            }
+          };
+
+          // Start trying immediately
+          tryLoadFromParent();
 
           // Set a timeout to check if WebSocket playlist command arrives
           const webSocketTimeout = 5000; // 5 second timeout - increased to reduce false alarms
@@ -481,7 +570,8 @@ function setupNavigationListener() {
             const currentPlaylistId = currentPlaylist?.id;
 
             // If the sequencer still doesn't have the target playlist after timeout, something is wrong
-            if (currentPlaylistId !== playlist) {
+            // CRITICAL FIX: Compare with type coercion (playlist ID can be string or number)
+            if (String(currentPlaylistId) !== String(playlist)) {
               console.log(
                 `[React] ⏱️ WebSocket timeout after ${webSocketTimeout}ms - using fallback navigation`
               );
@@ -499,12 +589,16 @@ function setupNavigationListener() {
                 // Try to get playlist data from parent window global state for defined playlists
                 try {
                   const parentPlaylist = (window.parent as any)?.currentPlaylist;
-                  if (parentPlaylist && parentPlaylist.id === playlist) {
+                  // CRITICAL FIX: Compare with type coercion
+                  if (parentPlaylist && String(parentPlaylist.id) === String(playlist)) {
                     console.log(
                       '[React] Found target playlist in parent globals, calling setCurrentPlaylist'
                     );
                     const { setCurrentPlaylist } = require('./manager/Globals');
-                    setCurrentPlaylist(parentPlaylist);
+                    const { Playlist } = require('./dao/Playlist');
+                    // Convert plain object to Playlist instance
+                    const playlistInstance = new Playlist(parentPlaylist);
+                    setCurrentPlaylist(playlistInstance);
                   } else {
                     console.log('[React] Could not find playlist data in parent globals');
                   }
@@ -624,7 +718,7 @@ function setupNavigationListener() {
 
     const isSamePlaylist =
       // Case 1: No playlist parameter at all (position-only navigation)
-      (!hasPlaylistParameter && position !== undefined) ||
+      (!hasPlaylistParameter && resolvedPosition !== undefined) ||
       // Case 2: Both current and target are undefined (both on default playlist)
       (currentPlaylistId === undefined && playlist === undefined && hasPlaylistParameter) ||
       // Case 3: Both have same ID (convert to strings to handle number vs string comparison)
@@ -637,8 +731,8 @@ function setupNavigationListener() {
       currentPlaylistId,
       targetPlaylist: playlist,
       hasPlaylistParameter,
-      position,
-      case1: !hasPlaylistParameter && position !== undefined,
+      resolvedPosition,
+      case1: !hasPlaylistParameter && resolvedPosition !== undefined,
       case2: currentPlaylistId === undefined && playlist === undefined && hasPlaylistParameter,
       case3:
         currentPlaylistId !== undefined &&
@@ -647,10 +741,10 @@ function setupNavigationListener() {
       isSamePlaylist,
     });
 
-    if (position !== undefined && position !== null && isSamePlaylist) {
+    if (resolvedPosition !== undefined && resolvedPosition !== null && isSamePlaylist) {
       console.log(
         '[React] 🎯 SAME-PLAYLIST NAVIGATION: Processing position navigation to montage:',
-        position,
+        resolvedPosition,
         {
           currentPlaylistId,
           targetPlaylist: playlist,
@@ -659,20 +753,20 @@ function setupNavigationListener() {
           reason: !hasPlaylistParameter
             ? 'no-playlist-param'
             : currentPlaylistId === undefined && playlist === undefined
-            ? 'both-undefined'
-            : currentPlaylistId === playlist
-            ? 'same-id'
-            : 'other',
+              ? 'both-undefined'
+              : currentPlaylistId === playlist
+                ? 'same-id'
+                : 'other',
         }
       );
 
       try {
         // For same-playlist navigation, call goMontage directly
         if (Sequencer && typeof Sequencer.goMontage === 'function') {
-          const trackOverride = Sequencer.getMontageTrackOverride(position);
+          const trackOverride = Sequencer.getMontageTrackOverride(resolvedPosition);
           console.log(
             '[React] 🎯 SAME-PLAYLIST NAVIGATION: Calling Sequencer.goMontage() directly with montage:',
-            position,
+            resolvedPosition,
             'and track override:',
             trackOverride
           );
@@ -694,9 +788,7 @@ function setupNavigationListener() {
               if (retryCount < 5) {
                 // Max 5 retries (2.5 seconds)
                 console.log(
-                  `[React] 🔄 No global montages loaded yet, retrying navigation in 500ms (attempt ${
-                    retryCount + 1
-                  }/5)`
+                  `[React] 🔄 No global montages loaded yet, retrying navigation in 500ms (attempt ${retryCount + 1}/5)`
                 );
                 const retryParams = { ...params, retryCount: retryCount + 1 };
                 setTimeout(() => window.webPlayerNavigate(retryParams), 500);
@@ -711,7 +803,7 @@ function setupNavigationListener() {
           }
           console.log(
             '[React] 🔍 BOUNDS CHECK: Montage index:',
-            position,
+            resolvedPosition,
             'Available montages:',
             montageCount,
             'Is default playlist:',
@@ -719,13 +811,13 @@ function setupNavigationListener() {
           );
 
           // CRITICAL: Validate bounds before calling goMontage
-          if (position >= 0 && position < montageCount) {
-            Sequencer.goMontage(position);
+          if (resolvedPosition >= 0 && resolvedPosition < montageCount) {
+            Sequencer.goMontage(resolvedPosition);
             console.log('[React] ✅ SAME-PLAYLIST NAVIGATION: goMontage() called successfully');
           } else {
             console.error(
               '[React] 🚨 BOUNDS ERROR: Montage index',
-              position,
+              resolvedPosition,
               'is out of bounds (0-' + (montageCount - 1) + '). Skipping navigation.'
             );
             return; // Don't call goMontage with invalid index
@@ -976,7 +1068,7 @@ const WebPlayer: React.FC<WebPlayerProps> = ({
     montageIndex?: number,
     playlistId?: string
   ) => {
-    const baseUrl = '/wp-content/themes/neve-child-master/wm-playerB/index.html';
+    const baseUrl = '/wp-content/themes/neve-child-master/wm-player/index.html';
     const params = new URLSearchParams({
       session: sessionId,
       anticache: anticache.toString(),

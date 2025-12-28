@@ -22,7 +22,7 @@ console.log('System Status:', {
 });
 ```
 
-### Media State Check
+### Media State Check **UPDATED: 2025-12-26**
 ```javascript
 // Check what media is loaded
 console.log('Media State:', {
@@ -40,9 +40,21 @@ console.log('Video Elements:', Array.from(videos).map((v, i) => ({
     index: i,
     src: v.src || 'no src',
     paused: v.paused,
+    muted: v.muted,  // NEW: Check if video is muted
     volume: v.volume,
-    readyState: v.readyState
+    readyState: v.readyState,
+    hidden: v.classList.contains('hidden')  // NEW: Check if video is hidden
 })));
+
+// CRITICAL CHECK: Verify only visible video is unmuted
+const videoShown = window.TheApp?.state?.videoShown;
+console.log('Audio Status:', {
+    videoShown: videoShown,
+    video1_muted: videos[0]?.muted,
+    video2_muted: videos[1]?.muted,
+    correctState: (videoShown === 1 && !videos[0]?.muted && videos[1]?.muted) ||
+                  (videoShown === 2 && videos[0]?.muted && !videos[1]?.muted)
+});
 ```
 
 ### Storage Queue Check
@@ -82,7 +94,7 @@ console.log('Playlist Detection:', {
 // Should call Sequencer.play(), NOT Sequencer.pause()
 ```
 
-### ❌ Volume slider works but no audio
+### ❌ Volume slider works but no audio **UPDATED: 2025-12-26**
 ```javascript
 // CHECK: Video element volume
 document.querySelector('video')?.volume // Should be 0.0-1.0, not 0-100
@@ -90,6 +102,21 @@ document.querySelector('video')?.volume // Should be 0.0-1.0, not 0-100
 // FIX: In src/App.tsx setVolume(), add:
 // const normalizedVolume = v / 100;
 // video.volume = normalizedVolume;
+```
+
+### ❌ Dual audio (hearing two videos at once) **NEW: 2025-12-26**
+```javascript
+// CHECK: Both videos unmuted?
+const videos = document.querySelectorAll('video');
+console.log({
+    video1_muted: videos[0]?.muted,  // Should be true if video2 is showing
+    video2_muted: videos[1]?.muted,  // Should be true if video1 is showing
+    videoShown: window.TheApp?.state?.videoShown
+});
+
+// ROOT CAUSE: setVolume() was unmuting BOTH video slots
+// FIX APPLIED: App.tsx:1036-1067 now only unmutes the visible slot
+// Hidden slot is explicitly muted with volume=0
 ```
 
 ### ❌ Montages play 1 second then loop immediately

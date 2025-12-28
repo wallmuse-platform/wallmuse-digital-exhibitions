@@ -212,27 +212,105 @@ net::ERR_CONNECTION_CLOSED 206 (Partial Content)
 - **Loading Locks**: Prevent multiple simultaneous loads
 - **AbortError Handling**: Normal behavior during transitions
 
-## 8. Track Management System
+### 7.4 Video Volume Control **UPDATED: 2025-12-26**
+
+**CRITICAL RULE**: Only the visible video element should have volume and be unmuted
+
+- **Hidden Video Slot**: Always muted with `volume = 0`
+- **Visible Video Slot**: Receives volume commands from WebSocket
+- **Volume Commands**: Only applied to `this.state.videoShown` element
+- **Audio Overlap Prevention**: Explicit muting prevents dual audio playback
+
+**Implementation Pattern**:
+```typescript
+if (videoShown === 1 && this.video1Ref.current) {
+  this.video1Ref.current.volume = normalizedVolume;
+  this.video1Ref.current.muted = false;
+  // Explicitly mute the other slot
+  if (this.video2Ref.current) {
+    this.video2Ref.current.muted = true;
+    this.video2Ref.current.volume = 0;
+  }
+}
+```
+
+**Reference**: See [App.tsx:1036-1067](../../src/App.tsx#L1036-L1067) for full implementation
+
+## 8. Track Management System **UPDATED: 2025-12-27**
 
 ### 8.1 Track Selection Priority
 
-1. **Montage-specific override**: Previously set track for specific montage
-2. **Track continuity**: Same track as currently playing montage
-3. **Navigation parameters**: Track from parent NAV commands
+1. **Navigation parameters (Parent prevails)**: Track from parent NAV commands takes absolute priority
+2. **Montage-specific override**: Previously set track for specific montage (by montage ID)
+3. **Track continuity**: Same track as currently playing montage
 4. **Montage default**: Fallback track from montage.getTrackIndex()
 
-### 8.2 Track Memory System
+**Reference**: See [index.tsx:746-763](../../src/index.tsx#L746-L763) for implementation
 
-- **Override Storage**: `Map<montageId, trackIndex>` for consistency
-- **Loop Preservation**: Track memory maintained across playlist loops
-- **Continuity**: Track selection preserved across montage transitions
+### 8.2 Track Storage System (ID-Based)
 
-### 8.3 Track Navigation Rules
+**CRITICAL**: Track overrides stored by **montage ID** (not position) to survive playlist reordering
 
-- **Track 0**: Special cases or explicit requests
-- **Track 1**: Default track (1-based indexing)
-- **URL Parameters**: 1-based, converted to 0-based internally
-- **Screen-based Selection**: Original fallback system still works
+```typescript
+// Sequencer.ts
+private static montageTrackOverrides: Map<string, number> = new Map();
+// Example: "1552" → 1 (Entre-deux Seines → Track 2, 0-based)
+```
+
+**Why ID-based?**
+- Montage position changes during playlist reordering
+- Montage ID remains stable
+- Track mappings survive reorder operations
+
+**Reference**: See [Sequencer.ts:36-42](../../src/manager/Sequencer.ts#L36-42) for storage declaration
+
+### 8.3 Track Indexing Convention
+
+- **UI/Server**: 1-based indexing (Track 1, Track 2, Track 3)
+- **Internal Code**: 0-based indexing (0, 1, 2)
+- **Conversion**: `trackIndex = parseInt(track) - 1`
+
+### 8.4 Peer Synchronization for Track Changes
+
+Track assignments synchronized across all screens in house cluster via WebSocket:
+
+**Same Browser (Parent Prevails)**:
+1. User changes track → Parent applies immediately
+2. Parent sends track mappings by montage ID
+3. WebPlayer stores override: `Map.set(montageId, trackIndex)`
+
+**Peer Browsers (WebSocket Sync)**:
+1. Server broadcasts environment update with screen assignments
+2. WebSocket detects track assignment change
+3. Extracts track from montage.screens[screenId].seq_refs
+4. Updates track override and navigates: `goMontage(position, newTrack)`
+
+**Reference**: See [ws-tools.ts:583-725](../../src/ws/ws-tools.ts#L583-L725) for peer sync implementation
+
+### 8.5 Montage Signature & Reorder Detection
+
+**Signature**: Identifies montage order in playlist
+```javascript
+signature = playlist.montages.map(m => m.id).join('-');
+// Example: "1552-1559-1450"
+```
+
+**Reorder Detection**: When signature changes, reload current position with new montage order
+
+**Why Important**: After reordering, position 1 might have a different montage. Track mappings remain valid because they use montage ID.
+
+**Reference**: See [ws-tools.ts:648-660](../../src/ws/ws-tools.ts#L648-L660) for signature generation
+
+### 8.6 Complete Track Management Documentation
+
+For comprehensive documentation including:
+- Source of truth architecture (server database vs environment config)
+- Data flow diagrams
+- Peer synchronization details
+- Implementation code pointers
+- Troubleshooting guide
+
+**See**: [Track Management Architecture](./TRACK_MANAGEMENT_ARCHITECTURE.md) ✏️ *New 2025-12-27*
 
 ## 9. Performance Optimization
 

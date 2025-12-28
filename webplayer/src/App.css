@@ -25,16 +25,13 @@
 
 #root-wm-player .placeholder {
   font-size: 4rem;
-  color: #ffffff; /* CRITICAL FIX: Use white instead of gray for better visibility */
+  color: #ffffff;
   text-align: center;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  z-index: 10;
-  background-color: rgba(0, 0, 0, 0.7);
-  padding: 2rem;
-  border-radius: 1rem;
+  z-index: 9999;
   white-space: nowrap;
 }
 
@@ -42,6 +39,24 @@
   #root-wm-player .placeholder {
     font-size: 2rem;
   }
+}
+
+/* CSS-only circular progress spinner */
+.spinner {
+  width: 60px;
+  height: 60px;
+  border: 6px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 1.5rem;
+  box-sizing: content-box;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 #root-wm-player .hidden {
@@ -57,6 +72,8 @@
   top: 0;
   left: 0;
   z-index: 1;
+  /* Smooth opacity transition for image switching */
+  transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
 }
 
 #root-wm-player .video {
@@ -70,15 +87,16 @@
 }
 
 /* CRITICAL FIX: Give the currently playing video higher z-index */
-#root-wm-player .video[data-index='1'] {
+/* UPDATED: Match specificity of base rule by including #root-wm-player */
+#root-wm-player .video[data-index='1']:not(.hidden) {
   z-index: 2 !important;
 }
 
-#root-wm-player .video[data-index='2'] {
+#root-wm-player .video[data-index='2']:not(.hidden) {
   z-index: 1 !important;
 }
 
-/* CRITICAL FIX: When video is hidden, reduce its z-index but keep it visible */
+/* CRITICAL FIX: When video is hidden, reduce its z-index */
 #root-wm-player .video.hidden {
   z-index: 0 !important;
   /* Override the conflicting display: none rule */

@@ -11,12 +11,12 @@ export class House {
   public environments?: Environment[];
 
   public constructor(json?: any) {
-    if (json) {
-      Object.assign(this, json);
-    }
     this.id = myParseInt(this.id);
     this.user = myParseInt(this.user);
     this.autostart_playlist = myParseBoolean(this.autostart_playlist);
+    if (json) {
+      Object.assign(this, json);
+    }
     if (this.environments) {
       this.environments = this.environments.map(e => new Environment(e));
     }

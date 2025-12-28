@@ -1,15 +1,109 @@
 import { ImageMediaFile } from '../media/ImageMediaFile';
 import React from 'react';
+import { ZoomAndPanParams } from '../dao/ZoomAndPan';
+import {
+  calculateTranslateForPosition,
+  mapAnimationType,
+  hashZoomAndPanParams,
+} from '../utils/kenBurnsGenerator';
+
+// Track injected keyframes to avoid duplicates
+const injectedKeyframes = new Set<string>();
+
+/**
+ * Inject CSS keyframe for Ken Burns animation
+ * Returns the keyframe name to use in animation property
+ */
+function injectKenBurnsKeyframe(params: ZoomAndPanParams): string {
+  const keyframeName = hashZoomAndPanParams(params);
+
+  // Skip if already injected
+  if (injectedKeyframes.has(keyframeName)) {
+    return keyframeName;
+  }
+
+  // Calculate transform values
+  const startTranslate = calculateTranslateForPosition(params.start.from, params.start.scale);
+  const endTranslate = calculateTranslateForPosition(params.end.to, params.end.scale);
+
+  // Generate keyframe CSS
+  const keyframeCSS = `
+    @keyframes ${keyframeName} {
+      from {
+        transform: scale(${params.start.scale / 100}) translate(${startTranslate});
+      }
+      to {
+        transform: scale(${params.end.scale / 100}) translate(${endTranslate});
+      }
+    }
+  `;
+
+  // Inject into document
+  const styleElement = document.createElement('style');
+  styleElement.textContent = keyframeCSS;
+  document.head.appendChild(styleElement);
+
+  // Mark as injected
+  injectedKeyframes.add(keyframeName);
+
+  console.log(`[Ken Burns] Injected keyframe: ${keyframeName}`, {
+    start: { scale: params.start.scale, translate: startTranslate },
+    end: { scale: params.end.scale, translate: endTranslate },
+  });
+
+  return keyframeName;
+}
 
 export interface ImageProps {
   media?: ImageMediaFile; // Made optional to handle undefined media during initialization
   hidden: boolean;
   index: number;
   shouldLoad?: boolean; // <-- Added
+
+  // Ken Burns effect parameters
+  zoomAndPan?: ZoomAndPanParams;
+
+  // FUTURE: Display mode based on copyright/croppable flags
+  // objectFit?: 'cover' | 'contain';  // 'cover' = fill (default), 'contain' = fit (for non-croppable)
 }
 
 export const Image = React.forwardRef<HTMLImageElement, ImageProps>(
-  ({ media, hidden, index, shouldLoad }, ref) => {
+  ({ media, hidden, index, shouldLoad, zoomAndPan }, ref) => {
+    // ===== ALL HOOKS MUST BE AT THE TOP (React Hooks rules) =====
+
+    // Generate animation CSS if Ken Burns is enabled
+    const animationStyle = React.useMemo(() => {
+      if (!zoomAndPan || !zoomAndPan.enabled || !media) {
+        return {};
+      }
+
+      const keyframeName = hashZoomAndPanParams(zoomAndPan);
+      const timingFunction = mapAnimationType(zoomAndPan.type);
+      const duration = media.duration || 30; // Use media duration or default to 30s
+
+      return {
+        animation: `${keyframeName} ${duration}s ${timingFunction} forwards`,
+        animationPlayState: hidden ? 'paused' : 'running',
+      };
+    }, [zoomAndPan, media, hidden]);
+
+    // Generate and inject CSS keyframes for Ken Burns animation
+    React.useEffect(() => {
+      if (zoomAndPan && zoomAndPan.enabled && media) {
+        const keyframeName = injectKenBurnsKeyframe(zoomAndPan);
+        console.log(`[Image #${index}] Ken Burns keyframe injected: ${keyframeName}`, zoomAndPan);
+      }
+    }, [zoomAndPan, media, index]);
+
+    // Track visibility changes for cross-fade transitions
+    React.useEffect(() => {
+      if (media) {
+        console.log(
+          `[Image #${index}] 🎭 TRANSITION: ${hidden ? 'HIDING (fade out)' : 'SHOWING (fade in)'} - ${media.filename}`
+        );
+      }
+    }, [hidden, media, index]);
+
     // Check if image element exists in DOM after render
     React.useEffect(() => {
       // Only run DOM checks if we have media
@@ -142,63 +236,52 @@ export const Image = React.forwardRef<HTMLImageElement, ImageProps>(
       };
     }, [index, media?.filename]); // Reduced dependencies to prevent excessive re-runs
 
-    if (shouldLoad === false) {
-      // console.log(`[Image Component #${index}] Not loading (shouldLoad: false)`);
-      return null;
-    }
-
-    // Handle undefined media gracefully
-    if (!media) {
-      console.log(`[Image Component #${index}] No media provided, rendering placeholder`);
-      return (
-        <div
-          id={`image-${index}-placeholder`}
-          style={{
-            width: '100%',
-            height: '100%',
-            backgroundColor: '#f0f0f0',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '14px',
-            color: '#666',
-          }}
-        >
-          Image {index} - No Media
-        </div>
-      );
-    }
+    // CRITICAL FIX: Always render image element like Video component does
+    // Don't return null based on shouldLoad - let CSS handle visibility
+    // This ensures both image-1 and image-2 slots always exist in DOM
 
     console.log(`[Image Component #${index}] Rendering:`, {
-      filename: media.filename,
+      filename: media?.filename || 'no media',
       hidden: hidden,
       shouldLoad: shouldLoad,
-      url: media.url,
+      url: media?.url || 'no url',
+      hasMedia: !!media,
     });
 
-    // console.log(`[Image Component #${index}] Rendering image element`);
+    // FUTURE: Object-fit mode based on croppable flag
+    // const objectFitMode = objectFit || 'cover';
+    // When copyright images come: objectFit={media.croppable !== false ? 'cover' : 'contain'}
+
+    // CRITICAL FIX: Always render img element, handle undefined media like Video component
     const imgElement = (
       <img
         ref={ref}
-        src={media.url}
+        src={media?.url || ''} // Empty src when no media (like Video component)
         className={hidden ? 'image hidden' : 'image'}
         id={`image-${index}`}
         alt="" // Add alt attribute to fix ESLint warning
         style={{
           width: '100%',
           height: '100%',
-          objectFit: 'cover',
+          objectFit: 'cover', // FUTURE: Use objectFitMode when croppable flag available
           position: 'absolute',
           top: 0,
           left: 0,
           zIndex: hidden ? 0 : 2, // Ensure visible images appear above videos
+          ...animationStyle, // Apply Ken Burns animation if enabled
         }}
         onLoad={() =>
-          console.log(`[Image Component #${index}] Image loaded successfully:`, media.filename)
+          console.log(
+            `[Image Component #${index}] Image loaded successfully:`,
+            media?.filename || 'no filename'
+          )
         }
-        onError={e =>
-          console.error(`[Image Component #${index}] Image failed to load:`, media.filename, e)
-        }
+        onError={e => {
+          // Only log errors for images with actual media (ignore empty src errors)
+          if (media?.url) {
+            console.warn(`[Image Component #${index}] Image failed to load:`, media.filename, e);
+          }
+        }}
       />
     );
 
