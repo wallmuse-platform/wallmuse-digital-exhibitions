@@ -133,7 +133,7 @@ export class WsTools {
             this.getCommands(); // Use the correct method for reconnection
           }
         } else {
-          // console.log('[WS-HEALTH] WebSocket healthy, readyState:', readyState); // PRODUCTION: Commented out frequent health checks
+          console.log('[WS-HEALTH] WebSocket healthy, readyState:', readyState);
         }
       }
     }, 30000); // Check every 30 seconds
@@ -198,9 +198,6 @@ export class WsTools {
           if (this.ws?.readyState === WebSocket.OPEN) {
             this.isRegistered = true;
             console.log('[WS-TOOLS] Registration completed silently - state synchronized');
-
-            // Now that WebSocket is authenticated, activate screen if needed
-            this.ensureScreenActivation();
 
             // Notify other parts of the system that we're ready
             window.dispatchEvent(
@@ -363,7 +360,7 @@ export class WsTools {
       const currentPlaylist = Sequencer.getCurrentPlaylist();
       const recentLogs = console.log.toString(); // This won't work, need different approach
 
-      // SIMPLIFIED: Check if we need to create default playlist or just cache montages
+      // BETTER FIX: Check if we're actually switching TO a default playlist vs just detecting cached montages
       const currentPlaylistId = Sequencer.getCurrentPlaylist()?.id;
       const recentMontageIds = Object.keys(require('../manager/Globals').Montages).map(key =>
         key.replace('m', '')
@@ -372,20 +369,25 @@ export class WsTools {
 
       // Check if any of the montages in this array were recently added as individual montages
       const hasRecentlyAddedMontages = receivedMontageIds.some(id => recentMontageIds.includes(id));
-      const isDefaultPlaylistSwitch = currentPlaylistId !== undefined;
-      const shouldSkipPlaylistCreation = hasRecentlyAddedMontages && !isDefaultPlaylistSwitch;
 
-      if (shouldSkipPlaylistCreation) {
-        console.log(
-          '🔍 [WS-TOOLS] SKIPPING DEFAULT PLAYLIST - Montages array contains recently added individual montages (not switching to default):',
-          {
-            receivedMontageIds,
-            recentMontageIds: recentMontageIds.slice(-10), // Show last 10
-            overlap: receivedMontageIds.filter(id => recentMontageIds.includes(id)),
-            currentPlaylistId,
-            isDefaultPlaylistSwitch,
-          }
-        );
+      // CRITICAL FIX: Don't create default playlist when we're on a numbered playlist
+      // Only create default playlist when currentPlaylistId is undefined (not on any specific playlist)
+      const isOnNumberedPlaylist = currentPlaylistId !== undefined;
+
+      if (hasRecentlyAddedMontages || isOnNumberedPlaylist) {
+        const reason = isOnNumberedPlaylist
+          ? 'already on numbered playlist - keep it'
+          : 'montages recently added individually';
+
+        console.log('🔍 [WS-TOOLS] SKIPPING DEFAULT PLAYLIST:', {
+          reason,
+          receivedMontageIds,
+          recentMontageIds: recentMontageIds.slice(-10), // Show last 10
+          overlap: receivedMontageIds.filter(id => recentMontageIds.includes(id)),
+          currentPlaylistId,
+          isOnNumberedPlaylist,
+          hasRecentlyAddedMontages,
+        });
 
         // Just add any new montages to cache, don't create default playlist
         if (data.montages) {
@@ -402,14 +404,12 @@ export class WsTools {
         return;
       }
 
-      // FIXED: This is the default playlist format - create a default playlist object
+      // CRITICAL FIX: This is the default playlist format - create a default playlist object
       console.log('🔍 [WS-TOOLS] ALLOWING DEFAULT PLAYLIST CREATION:', {
         hasRecentlyAddedMontages,
-        isDefaultPlaylistSwitch,
+        isOnNumberedPlaylist,
         currentPlaylistId,
-        reason: isDefaultPlaylistSwitch
-          ? 'switching to default playlist'
-          : 'no recent montages conflict',
+        reason: 'not on numbered playlist and montages not recently cached',
       });
       console.log('🔍 [WS-TOOLS] Creating default playlist from montages array');
 
@@ -738,7 +738,7 @@ export class WsTools {
 
       if (response.ok) {
         this.httpPingsSuccessful++;
-        // console.log('[HTTP-PING] Success'); // PRODUCTION: Commented out frequent ping success logs
+        console.log('[HTTP-PING] Success');
       }
     } catch (error) {
       console.error('[HTTP-PING] Failed:', error);
@@ -944,9 +944,7 @@ export class WsTools {
       console.log('[WS-TOOLS] Creating new environment as needed');
       environ.key = uuid();
 
-      const envUrl = `add_environment?house=${environ.houseId}&name=Web player&keys=${
-        environ.key
-      },${getFingerprint()}`;
+      const envUrl = `add_environment?house=${environ.houseId}&name=Web player&keys=${environ.key},${getFingerprint()}`;
 
       this.get<Environment>(envUrl)
         .then(e => {
@@ -962,19 +960,16 @@ export class WsTools {
           this.getCommands();
           this.tellTheWorld();
 
-          // REMOVED: Screen activation moved to after WebSocket authentication
+          // CONSOLIDATED: Check and activate screen as part of house setup
+          this.ensureScreenActivation();
 
           if (!e.screens || e.screens.length === 0) {
-            const screen = window.screen;
-            const screenUrl = `add_screen?environ=${environ.environId}&name=Main&w=${screen.width}&h=${screen.height}`;
+            const screenUrl = `add_screen?environ=${environ.environId}&name=Main`;
             return this.get<Screen>(screenUrl).then(screen => {
               this.screenId = screen.id;
               if (!e.screens) e.screens = [];
               e.screens.push(screen);
-              console.log('[WS-TOOLS] House: new screen added:', {
-                screenId: this.screenId,
-                dimensions: `${screen.width}x${screen.height}`,
-              });
+              console.log('[WS-TOOLS] House: new screen added:', this.screenId);
             });
           } else {
             this.screenId = e.screens[0].id;
@@ -992,18 +987,6 @@ export class WsTools {
 
   private tellTheWorld() {
     window.dispatchEvent(new Event('wmPlayerInited'));
-
-    // Also notify parent about environment details for synchronization
-    if (this.environ) {
-      window.dispatchEvent(new CustomEvent('child-environment-created', {
-        detail: {
-          houseId: this.environ.houseId,
-          environmentId: this.environ.environId,  // Note: parent expects "environmentId"
-          screenId: this.screenId,
-          environmentData: this.environ.environ
-        }
-      }));
-    }
   }
 
   authenticate(login: string, pwd: string): Promise<string> {
@@ -1052,15 +1035,15 @@ export class WsTools {
         }
       }
     }
-    // console.log('[SCREEN-DEBUG] Screen info being sent:', { // PRODUCTION: Commented out frequent screen debug logs
-    //     screenId: this.screenId,
-    //     environId: this.environ?.environId,
-    //     key: this.environ?.key,
-    //     screenWidth: screen.width,
-    //     screenHeight: screen.height,
-    //     isPlaying: Sequencer.isPlaying(),
-    //     currentOffset: Sequencer.getCurrentOffset()
-    // });
+    console.log('[SCREEN-DEBUG] Screen info being sent:', {
+      screenId: this.screenId,
+      environId: this.environ?.environId,
+      key: this.environ?.key,
+      screenWidth: screen.width,
+      screenHeight: screen.height,
+      isPlaying: Sequencer.isPlaying(),
+      currentOffset: Sequencer.getCurrentOffset(),
+    });
 
     // REMOVED: Screen activation now handled in checkHouse() only
 
@@ -1135,17 +1118,7 @@ export class WsTools {
 
               // NEW: Proactive screen activation - try to activate the screen directly
               try {
-                // Use upd_screen endpoint like the parent EnvironmentsContext does
-                const screen = window.screen;
-                const screenParams = JSON.stringify({
-                  on: 1, // Activate the screen
-                  type: 'web',
-                  browserScreen: true,
-                });
-
-                const activationUrl = `upd_screen?screen=${
-                  this.screenId
-                }&enabled=1&w=${screen.width}&h=${screen.height}&params=${encodeURIComponent(screenParams)}&version=1`;
+                const activationUrl = `activate_screen?screen_id=${this.screenId}&environ=${this.environ.environId}&key=${this.environ.key}`;
                 console.log(
                   '[SCREEN-ACTIVATION] Attempting to activate screen via:',
                   activationUrl
@@ -1154,7 +1127,7 @@ export class WsTools {
                 const result = await this.get<any>(activationUrl);
                 console.log('[SCREEN-ACTIVATION] Screen activation result:', result);
 
-                if (result && result.tag_name === 'screen' && result.on === '1') {
+                if (result && (result.success || result.status === 'ok')) {
                   console.log('[SCREEN-ACTIVATION] Screen activated successfully');
 
                   // Update the environment data to reflect the activated screen
@@ -1164,26 +1137,11 @@ export class WsTools {
 
                   // Refresh track association with the newly activated screen
                   this.refreshTrackAssociation();
-
-                  // Notify parent that screen is now activated with proper dimensions
-                  window.dispatchEvent(new CustomEvent('child-screen-activated', {
-                    detail: {
-                      screenId: this.screenId,
-                      width: result.width,
-                      height: result.height,
-                      activated: true
-                    }
-                  }));
                 } else {
                   console.log(
-                    '[SCREEN-ACTIVATION] Screen activation failed:',
-                    {
-                      expected: { on: '1', tag_name: 'screen' },
-                      received: { on: result?.on, tag_name: result?.tag_name },
-                      fullResult: result
-                    }
+                    '[SCREEN-ACTIVATION] Screen activation failed, server will handle reactivation via WebSocket commands'
                   );
-                  // The activation failed - likely auth issue or API parameter problem
+                  // REMOVED: No retry mechanism - activation only happens during checkHouse()
                 }
               } catch (activationError) {
                 console.log(
@@ -1305,17 +1263,12 @@ export class WsTools {
       );
     }
 
-    // Create timeout with AbortController for browser compatibility (Safari 15, older browsers)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-
     return fetch(baseUrl + finalUrl, {
       headers: {
         Accept: 'text/x-json',
       },
-      signal: controller.signal,
+      signal: AbortSignal.timeout(10000),
     })
-      .finally(() => clearTimeout(timeoutId))
       .then(response => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -1332,11 +1285,6 @@ export class WsTools {
         return data;
       })
       .catch(error => {
-        // Handle timeout errors with clear messaging
-        if (error.name === 'AbortError') {
-          console.warn('[WS-TOOLS] Request timed out after 10s:', finalUrl);
-          throw new Error(`Request timeout: ${finalUrl}`);
-        }
         // Also check for 551 in error messages
         if (
           error.message &&
@@ -1382,20 +1330,14 @@ export class WsTools {
   private setupErrorHandlers(): void {
     window.addEventListener('unhandledrejection', event => {
       // CRITICAL FIX: Handle AbortError during playlist switches gracefully
+      // This happens when video.play() is interrupted by loading a new video
       if (event.reason?.name === 'AbortError' && event.reason?.message?.includes('interrupted')) {
-        // Common video AbortError cases that are normal during playlist/video transitions
-        if (
-          event.reason.message.includes('media was removed') ||
-          event.reason.message.includes('new load request') ||
-          event.reason.message.includes('call to pause()')
-        ) {
-          console.warn(
-            '[WS-TOOLS] 🚑 Expected AbortError during video transition (normal):',
-            event.reason.message
-          );
-          event.preventDefault(); // Prevent the error from propagating and destroying the container
-          return;
-        }
+        console.log(
+          '[WS-TOOLS] 🚑 Suppressed AbortError during video transition - this is normal:',
+          event.reason.message
+        );
+        event.preventDefault(); // Prevent the error from propagating
+        return;
       }
       console.error('[WS-UNHANDLED] Unhandled promise rejection:', event.reason);
     });
@@ -1579,8 +1521,8 @@ export class WsTools {
         `;
 
     overlay.innerHTML = `
-            <div style="text-align: center; padding: 40px; background: #333; border-radius: 10px; max-width: 500px;">
-                <h2 style="color: #fff; margin-bottom: 20px;">⚠️ Multiple Player Tabs Detected</h2>
+            <div style="text-align: center; padding: 40px; background: #333; border-radius: 10px; max-width: 40px;">
+                <h4 style="color: #fff; margin-bottom: 20px;">⚠️ Multiple Player Tabs Detected</h4>
                 <p style="font-size: 16px; line-height: 1.5; margin-bottom: 20px;">
                     You already have the Web Player open. Running it in multiple tabs or browsers may not work correctly.
                 </p>

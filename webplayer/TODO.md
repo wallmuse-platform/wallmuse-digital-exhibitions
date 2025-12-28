@@ -1,5 +1,5 @@
 # TODO: Montage Transition Stalling Fix
-
+??//this needs updating, progress was done recently, please recheck//
 ## Issue Summary
 During playlist 1040 playback, there's a long stall at the end of montage 1 when transitioning back to montage 0. The system correctly detects timeout and initiates montage transition, but gets stuck during position calculation.
 

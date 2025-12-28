@@ -248,9 +248,7 @@ export class Sequencer {
     // Both defined playlists and undefined (default) playlists are valid
     LogHelper.log(
       'Sequencer.goMontage',
-      `Going to montage ${montageIndex}, track ${trackIndex} (playlist: ${
-        this._playlist?.id || 'default'
-      })`
+      `Going to montage ${montageIndex}, track ${trackIndex} (playlist: ${this._playlist?.id || 'default'})`
     );
 
     // ESSENTIAL: Preserve track override
@@ -306,9 +304,7 @@ export class Sequencer {
     this._playlist = newPlaylist;
     LogHelper.log(
       'Sequencer.assumeNewPlaylist',
-      `${isPlaylistChange ? 'Changing to' : 'Reloading'} playlist: ID ${
-        newPlaylist?.id || 'undefined'
-      } (${newPlaylist?.name || 'default playlist'})`
+      `${isPlaylistChange ? 'Changing to' : 'Reloading'} playlist: ID ${newPlaylist?.id || 'undefined'} (${newPlaylist?.name || 'default playlist'})`
     );
 
     if (isPlaylistChange) {
@@ -527,9 +523,7 @@ export class Sequencer {
     const trackIndex = this.getMontageTrackIndex(this.pendingMontageIndex);
     LogHelper.log(
       'Sequencer.initializePlayback',
-      `Creating position: montage=${this.pendingMontageIndex}, track=${trackIndex}, playlist=${
-        this._playlist ? this._playlist.id : 'default'
-      }`
+      `Creating position: montage=${this.pendingMontageIndex}, track=${trackIndex}, playlist=${this._playlist ? this._playlist.id : 'default'}`
     );
 
     const startPosition = new PlayerPosition(
@@ -594,9 +588,7 @@ export class Sequencer {
 
     LogHelper.log(
       'Sequencer.showMedia',
-      `${load ? 'Loading' : 'Preloading'} ${
-        artwork.filename
-      } from montage ${position.getMontageIndex()}`
+      `${load ? 'Loading' : 'Preloading'} ${artwork.filename} from montage ${position.getMontageIndex()}`
     );
 
     if (load) {
@@ -654,6 +646,19 @@ export class Sequencer {
           undefined // backgroundColor
         );
         TheApp.preloadVideo(videoFile);
+      } else if (artwork.type === 'IMG' && TheApp?.preloadImage) {
+        // Preload images similarly to videos
+        const imageFile = ImageMediaFile.getImage(
+          artwork.artwork_id || 0,
+          `image-${artwork.artwork_id || 'unknown'}`,
+          artwork.url,
+          artwork.filename || 'unknown',
+          0, // offset
+          artwork.duration || 30,
+          undefined, // shapes
+          undefined // backgroundColor
+        );
+        TheApp.preloadImage(imageFile);
       }
     }
 

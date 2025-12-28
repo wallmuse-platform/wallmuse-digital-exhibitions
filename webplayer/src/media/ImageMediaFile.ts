@@ -1,11 +1,22 @@
 import { MediaFile } from './MediaFile';
 import { Shape } from '../dao/Shape';
-import { TheApp } from '../manager/Globals';
+import { TheApp, KEN_BURNS_ENABLED } from '../manager/Globals';
 import { LogHelper } from '../manager/LogHelper';
+import { ZoomAndPanParams } from '../dao/ZoomAndPan';
+import { generateRandomKenBurns } from '../utils/kenBurnsGenerator';
 
 export class ImageMediaFile extends MediaFile {
   private imageView: any;
   private animationDuration: number;
+
+  // Ken Burns effect parameters
+  public zoomAndPan?: ZoomAndPanParams;
+
+  // FUTURE: Image metadata for copyright and display modes
+  // public copyright?: boolean;
+  // public croppable?: boolean;    // If false, use 'contain' instead of 'cover'
+  // public splittable?: boolean;   // For multi-screen spanning
+  // public deconstructable?: boolean;
 
   public static getImage(
     aid: number,
@@ -16,6 +27,12 @@ export class ImageMediaFile extends MediaFile {
     duration: number,
     shapes: Shape[] | undefined,
     backgroundColor: string | undefined
+    // FUTURE: Backend will provide these parameters via WebSocket
+    // zoomAndPan?: ZoomAndPanParams,     // Explicit zoom/pan from updateImageZoomAndPan tool
+    // copyright?: boolean,                // Copyright flag
+    // croppable?: boolean,                // If false, use 'contain' mode (fit)
+    // splittable?: boolean,               // For multi-screen image spanning
+    // deconstructable?: boolean           // For shape-based content extraction
   ) {
     const imf = new ImageMediaFile(
       aid,
@@ -27,6 +44,24 @@ export class ImageMediaFile extends MediaFile {
       shapes,
       backgroundColor
     );
+
+    // Auto-generate Ken Burns parameters if enabled and not explicitly provided
+    if (KEN_BURNS_ENABLED) {
+      // FUTURE: When backend sends zoomAndPan parameter, use it instead:
+      // imf.zoomAndPan = zoomAndPan || generateRandomKenBurns();
+
+      // For now: Always auto-generate random Ken Burns
+      imf.zoomAndPan = generateRandomKenBurns();
+
+      console.log(`[ImageMediaFile] Generated Ken Burns for ${filename}:`, imf.zoomAndPan);
+    }
+
+    // FUTURE: Store copyright/croppable flags
+    // imf.copyright = copyright;
+    // imf.croppable = croppable;
+    // imf.splittable = splittable;
+    // imf.deconstructable = deconstructable;
+
     return imf;
   }
 

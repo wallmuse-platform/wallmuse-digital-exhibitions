@@ -10,6 +10,18 @@ export let TheScreen: string;
 export let Montages: { [key: string]: Montage } = {};
 export let TheApp: WallmusePlayer;
 
+// ===== KEN BURNS CONFIGURATION =====
+// Global toggle for Ken Burns effect on images
+// Set to true to enable auto-generated zoom/pan animations on all images
+// Set to false to disable Ken Burns effect entirely
+export const KEN_BURNS_ENABLED = true;
+
+// FUTURE: This may be moved to:
+// - Per-playlist configuration (Playlist.kenBurnsEnabled)
+// - Per-image configuration (via zoomAndPan.enabled parameter from backend)
+// - User preference settings
+// ===================================
+
 // Add queuing mechanism for when App isn't ready
 declare global {
   interface Window {
@@ -48,8 +60,14 @@ const detectPlaylistContentTypes = (playlist: Playlist | undefined) => {
   let hasVideos = false;
 
   if (playlist) {
+    const montageCount = playlist.getMontagesCount();
+    LogHelper.log(
+      'detectPlaylistContentTypes',
+      `Scanning playlist ${playlist.id} with ${montageCount} montages`
+    );
+
     // Scan through all montages in the playlist
-    for (let i = 0; i < playlist.getMontagesCount(); i++) {
+    for (let i = 0; i < montageCount; i++) {
       const montage = playlist.getMontage(i);
       if (montage && montage.seqs) {
         // Scan through all tracks in the montage
@@ -104,9 +122,7 @@ const detectPlaylistContentTypes = (playlist: Playlist | undefined) => {
 
   LogHelper.log(
     'setCurrentPlaylist',
-    `🎨 PLAYLIST CONTENT TYPES DETECTED: ${
-      playlist?.id || 'undefined'
-    } - Images: ${hasImages}, Videos: ${hasVideos}`
+    `🎨 PLAYLIST CONTENT TYPES DETECTED: ${playlist?.id || 'undefined'} - Images: ${hasImages}, Videos: ${hasVideos}`
   );
 
   // Force React re-render when content types change so conditional rendering updates
@@ -139,6 +155,21 @@ export const setCurrentPlaylist = (p: Playlist | undefined) => {
     ThePlaylist = p;
     // CRITICAL FIX: Detect playlist content types and set window globals
     detectPlaylistContentTypes(p);
+
+    // CRITICAL FIX: Update parent window's currentPlaylist for parent-child communication
+    // This ensures cross-playlist goMontage navigation has access to full playlist data
+    if (window.parent && window.parent !== window) {
+      try {
+        (window.parent as any).currentPlaylist = p;
+        LogHelper.log(
+          'setCurrentPlaylist',
+          `Updated parent window.currentPlaylist: ${p?.id || 'undefined'}`
+        );
+      } catch (e) {
+        LogHelper.log('setCurrentPlaylist', 'Cannot update parent window (cross-origin)');
+      }
+    }
+
     if (p) {
       Sequencer.assumeNewPlaylist(p);
     }
@@ -150,6 +181,17 @@ export const setCurrentPlaylist = (p: Playlist | undefined) => {
     ThePlaylist = p;
     // CRITICAL FIX: Detect playlist content types and set window globals
     detectPlaylistContentTypes(p);
+
+    // CRITICAL FIX: Update parent window's currentPlaylist for parent-child communication
+    if (window.parent && window.parent !== window) {
+      try {
+        (window.parent as any).currentPlaylist = p;
+        LogHelper.log('setCurrentPlaylist', `Updated parent window.currentPlaylist: undefined`);
+      } catch (e) {
+        LogHelper.log('setCurrentPlaylist', 'Cannot update parent window (cross-origin)');
+      }
+    }
+
     // Always notify sequencer of playlist change, even for undefined playlists
     Sequencer.assumeNewPlaylist(p);
   } else if (p.id !== ThePlaylist?.id) {
@@ -160,6 +202,49 @@ export const setCurrentPlaylist = (p: Playlist | undefined) => {
     ThePlaylist = p;
     // CRITICAL FIX: Detect playlist content types and set window globals
     detectPlaylistContentTypes(p);
+
+    // CRITICAL FIX: Update parent window's currentPlaylist for parent-child communication
+    // This is the key fix for cross-playlist goMontage navigation
+    if (window.parent && window.parent !== window) {
+      try {
+        (window.parent as any).currentPlaylist = p;
+        LogHelper.log(
+          'setCurrentPlaylist',
+          `Updated parent window.currentPlaylist: ${p.id} (${p.name})`
+        );
+
+        // CRITICAL FIX: Try multiple methods to update parent's React state
+        try {
+          // Method 1: Call parent's exposed function if available
+          if ((window.parent as any).setCurrentPlaylistFromChild) {
+            (window.parent as any).setCurrentPlaylistFromChild(p.id);
+            LogHelper.log(
+              'setCurrentPlaylist',
+              `Called parent setCurrentPlaylistFromChild for playlist ${p.id}`
+            );
+          }
+
+          // Method 2: Dispatch events (both document and window)
+          const event = new CustomEvent('child-playlist-changed', {
+            detail: { playlistId: p.id, playlist: p, timestamp: Date.now() },
+          });
+          window.parent.document.dispatchEvent(event);
+          window.parent.dispatchEvent(event);
+          LogHelper.log(
+            'setCurrentPlaylist',
+            `Dispatched child-playlist-changed events to parent for playlist ${p.id}`
+          );
+        } catch (eventError) {
+          LogHelper.log(
+            'setCurrentPlaylist',
+            'Could not update parent state (cross-origin or not available)'
+          );
+        }
+      } catch (e) {
+        LogHelper.log('setCurrentPlaylist', 'Cannot update parent window (cross-origin)');
+      }
+    }
+
     if (p) {
       Sequencer.assumeNewPlaylist(p);
     }
@@ -176,6 +261,17 @@ export const setScreenName = (s: string) => {
 
 export const addMontage = (montage: Montage) => {
   Montages['m' + montage.id] = montage;
+
+  // CRITICAL FIX: Re-detect content types after adding montage
+  // This handles the case where playlist was loaded before montages arrived via WebSocket
+  const currentPlaylist = ThePlaylist;
+  if (currentPlaylist) {
+    LogHelper.log(
+      'addMontage',
+      `Montage ${montage.id} added, re-detecting content types for playlist ${currentPlaylist.id}`
+    );
+    detectPlaylistContentTypes(currentPlaylist);
+  }
 };
 
 export const getMontage = (id: number) => {

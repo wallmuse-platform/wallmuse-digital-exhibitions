@@ -150,7 +150,36 @@ window.debugWsTools.checkConnectionHealth();
 - Better error recovery
 - Improved system monitoring
 
-## 7. Technical Details
+## 7. Volume Control
+
+**UPDATED: 2025-12-26**
+
+- **Critical Fix: Hidden Video Muting**
+  - Only the visible video slot receives volume and is unmuted
+  - Hidden video slot is explicitly muted with volume=0
+  - Prevents audio overlap from both video elements playing simultaneously
+  - Volume commands from WebSocket only affect the active video
+
+- **Implementation** ([App.tsx:1036-1067](../src/App.tsx#L1036-L1067))
+  ```typescript
+  public setVolume(v: number) {
+    const videoShown = this.state.videoShown;
+
+    if (videoShown === 1 && this.video1Ref.current) {
+      this.video1Ref.current.volume = normalizedVolume;
+      this.video1Ref.current.muted = false;
+      // Ensure video-2 is muted
+      if (this.video2Ref.current) {
+        this.video2Ref.current.muted = true;
+        this.video2Ref.current.volume = 0;
+      }
+    } else if (videoShown === 2 && this.video2Ref.current) {
+      // Similar logic for video-2
+    }
+  }
+  ```
+
+## 8. Technical Details
 
 - **Connection Health**
   - Regular heartbeat checks
@@ -163,6 +192,7 @@ window.debugWsTools.checkConnectionHealth();
   - Guaranteed command delivery
   - Improved error handling
   - Better state management
+  - Volume commands only affect visible video slot
 
 - **Navigation Rules**
   - 5-second threshold for montage navigation

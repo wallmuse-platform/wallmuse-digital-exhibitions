@@ -1,31 +1,72 @@
 # Wallmuse React Web Player
 
-A React-based media player for displaying synchronized video and image content in playlist sequences.
+A React-based media player for displaying synchronized video and image content in playlist sequences. Serves as the foundation for a Progressive Web App (PWA) and will serve as the core for an Electron standalone version.
 
-## Quick Start
+## 📚 Documentation
 
-### For New Developers
+All detailed documentation has been organized into the [`/docs`](./docs) folder for better clarity:
 
-1. **Read the Rules First**: Start with `WALLMUSE_WEBPLAYER_RULES.md` - especially sections 1-4
-2. **Understand the Architecture**: NAV commands → WebSocket → Sequencer → Media Display
-3. **Test Your Setup**: Use `test-playlist-switching.html` to verify functionality
-4. **Learn Debug Commands**: Use browser console commands to troubleshoot
+### 🏗️ Architecture
+- **[WebSocket vs Parent Architecture](./docs/architecture/WEBSOCKET_VS_PARENT_ARCHITECTURE.md)** ✏️ *Updated 2025-12-27*
+  - Communication mechanisms, data flow patterns, peer synchronization
+- **[WebSocket System](./docs/architecture/WEBSOCKET_SYSTEM.md)** ✏️ *Updated 2025-12-26*
+  - WebSocket connection management, command handling, volume control
+- **[Track Management Architecture](./docs/architecture/TRACK_MANAGEMENT_ARCHITECTURE.md)** ✅ *New 2025-12-27*
+  - Complete system documentation: source of truth, peer sync, signature detection, code pointers
+- **[Chunk Delivery Architecture](./docs/architecture/CHUNK_DELIVERY_ARCHITECTURE.md)**
+  - HTTP Range requests, video streaming, chunked delivery
+- **[Wallmuse WebPlayer Rules](./docs/architecture/WALLMUSE_WEBPLAYER_RULES.md)** ✏️ *Updated 2025-12-27*
+  - Core development rules, track management, volume control, media loading patterns
+
+### ✨ Features
+- **[Wallmuse WebPlayer Features](./docs/features/WALLMUSE_WEBPLAYER_FEATURES.md)**
+  - Complete feature list and capabilities
+- **[Multi-Device Implementation Guide](./docs/features/MULTI_DEVICE_IMPLEMENTATION_GUIDE.md)**
+  - Cross-device compatibility strategies
+- **[Ken Burns Implementation](./docs/features/KEN_BURNS_IMPLEMENTATION.md)**
+  - Animated pan/zoom effects for images
+- **[360° Media Implementation](./docs/features/IMPLEMENTATION_360_MEDIA.md)** ⚠️ *Not yet implemented*
+  - Panoramic and 360° video support (planned)
+
+
+### 📖 Guides
+- **[Developer Quick Start](./docs/guides/DEVELOPER_QUICK_START.md)** ✏️ *Updated 2025-12-26*
+  - Get productive in 15 minutes, common problems & fixes
+- **[Backend Developer Brief](./docs/guides/BACKEND_DEVELOPER_BRIEF.md)** 📦 *Batch 1: Dec 2025*
+  - WebSocket server requirements and integration (more batches to come) 
+- **[Troubleshooting Cheat Sheet](./docs/guides/TROUBLESHOOTING_CHEAT_SHEET.md)** ✏️ *Updated 2025-12-26*
+  - Quick debug commands, common issues with fixes
+
+### 🔧 Troubleshooting
+- **[WebPlayer Troubleshooting](./docs/troubleshooting/WEBPLAYER_TROUBLESHOOTING.md)** ✏️ *Updated 2025-12-26*
+  - Complete troubleshooting reference, recent improvements
+- **[Playlist Switching Final Analysis](./docs/troubleshooting/PLAYLIST_SWITCHING_FINAL_ANALYSIS.md)**
+  - Deep dive into playlist navigation issues
+- **[Playlist Bug Summary](./docs/troubleshooting/PLAYLIST_BUG_SUMMARY.md)**
+  - Known issues and resolution status
+
+### 📊 Analysis
+- **[Fred Original vs Forks Analysis](./docs/analysis/FRED_ORIGINAL_VS_FORKS_ANALYSIS.md)**
+  - Comparison of codebase versions
+- **[Prod vs Test Comparison](./docs/analysis/PROD_VS_TEST_COMPARISON.md)**
+  - Production vs development environment differences
+
+### 📜 History
+- **[Changelog 2025-12-22](./docs/history/CHANGELOG_2025_12_22.md)**
+  - Recent changes and updates
+
+---
+
+## ⚡ Quick Start
 
 ### Installation
-
 ```bash
-# Clone and install
 npm install
-
-# Start development server
-npm start
-
-# Build for production
-npm run build
+npm start          # Development server
+npm run build      # Production build
 ```
 
-## Core Architecture
-
+### Core Architecture
 ```
 Parent App (NavigationManager.js)
 └── NAV Commands ('webplayer-navigate' events)
@@ -36,181 +77,136 @@ Parent App (NavigationManager.js)
                     └── App Component (video/image display)
 ```
 
-## Key Components
-
-| Component | Purpose | File |
-|-----------|---------|------|
-| **Sequencer** | Core timing and montage navigation | `src/manager/Sequencer.ts` |
-| **ItemPlayer** | Media loading and playback coordination | `src/manager/ItemPlayer.ts` |
-| **App** | React UI, video/image rendering | `src/App.tsx` |
-| **WebSocket** | Server communication | `src/ws/services.ts` |
-| **Navigation** | NAV command processing | `src/index.tsx` |
-
-## Data Hierarchy
-
+### Data Hierarchy
 ```
-Playlist (e.g., 1040 or undefined)
+Playlist (e.g., 954 or undefined)
 ├── Montage 0 (74 seconds)
 │   ├── Track 0: [Item1, Item2, Item3...]
 │   └── Track 1: [ItemA, ItemB, ItemC...]
 ├── Montage 1 (60 seconds)
-│   ├── Track 0: [Item4, Item5, Item6...]
-│   └── Track 1: [ItemD, ItemE, ItemF...]
-└── ...
+│   └── ...
 ```
 
-## Common Commands
+---
 
-### Development
-```bash
-npm start          # Development server
-npm run build      # Production build
-npm test          # Run tests (if available)
-```
+## 🐛 Debug Commands
 
-### Debug Console Commands
 ```javascript
-// Check system status
+// System health check
 window.debugPlayer()
-
-// Verify sequencer state
 window.debugSequencerStatus()
 
-// Monitor playlist type
-console.log('Playlist flags:', {
-    WM_HAS_VIDEOS: window.WM_HAS_VIDEOS,
-    WM_HAS_IMAGES: window.WM_HAS_IMAGES
-})
+// Check video audio status
+const videos = document.querySelectorAll('video');
+videos.forEach((v, i) => console.log(`Video ${i+1}:`, {muted: v.muted, volume: v.volume}));
 
-// Check current video element
-window.Sequencer?.getCurrentVideoElement?.()
+// Check current state
+console.log({
+    videoShown: window.TheApp?.state?.videoShown,
+    imageShown: window.TheApp?.state?.imageShown,
+    isPlaying: window.Sequencer?.isPlaying()
+});
 ```
 
-## Testing
+---
 
-### Manual Testing Interface
-Open `test-playlist-switching.html` in browser for UI-based testing of:
-- Play/Pause/Stop commands
-- Playlist switching (1039 ↔ 1040)
-- Montage navigation
-- Track selection
+## 🧪 Testing
+
+### Manual Testing
+Open `test-playlist-switching.html` for UI-based testing
 
 ### 4 Critical Benchmarks
-1. **Play/Pause/Stop** - UI buttons affect actual playbook
-2. **Track Navigation** - Next/Previous work correctly
-3. **Playlist Switching** - Different playlists load media
-4. **goMontage** - Direct montage navigation works
+1. ✅ Play/Pause/Stop buttons work
+2. ✅ Playlist switching (e.g., 954 ↔ 955)
+3. ✅ Next/Previous montage navigation
+4. ✅ goMontage direct navigation
+   - 4a. Same playlist ✅
+   - 4b. Different playlist (not yet tested)
 
-## Troubleshooting
+---
 
-### Empty UI After Playlist Switch
-```javascript
-// Check storage mechanism
-console.log('Queue status:', {
-    exists: !!window.PENDING_APP_OPERATIONS,
-    length: window.PENDING_APP_OPERATIONS?.length || 0
-})
-```
+## 🚀 Recent Updates (2025-12-26)
 
-### Play/Pause Not Working
-```javascript
-// Check sequencer connection
-console.log('Sequencer status:', {
-    isPlaying: window.Sequencer?.isPlaying(),
-    hasApp: !!window.TheApp,
-    videoShown: window.TheApp?.state?.videoShown
-})
-```
+### Console Log Improvements
+- **Video Load Warnings**: Changed from `console.error()` to `console.warn()` - these are expected during startup
+- **Better Messages**: "Initial load (waiting for media)" instead of "LOAD ERROR"
 
-### No Audio Despite Volume Slider
-Check if volume conversion is applied (should be 0.0-1.0 for HTML5 video):
-```javascript
-const video = document.querySelector('video');
-console.log('Video volume:', video?.volume); // Should be 0.0-1.0, not 0-100
-```
+### Audio Control Fix
+- **Problem**: Both video slots were unmuted, causing dual audio
+- **Fix**: Only the visible video slot receives volume and is unmuted
+- **Impact**: Eliminates audio overlap issue
 
-## Development Guidelines
+### UI Improvements
+- **Internationalization**: Replaced French placeholders with English
+- **Visual Clarity**: Added emoji icons (⏸️ pause, ⚠️ warning)
+- **Loading Spinner**: CSS-only circular progress instead of hourglass emoji
 
-### Before Making Changes
-1. Test current functionality with benchmark tests
-2. Read relevant sections in `WALLMUSE_WEBPLAYER_RULES.md`
-3. Understand the data flow for your area of change
-4. Use debug commands to verify system state
+See [WebPlayer Troubleshooting](./docs/troubleshooting/WEBPLAYER_TROUBLESHOOTING.md#recent-improvements-2025-12-26) for details.
 
-### Code Standards
+---
+
+## 📁 Key Files
+
+| Component | Purpose | File |
+|-----------|---------|------|
+| **Sequencer** | Core timing and navigation | `src/manager/Sequencer.ts` |
+| **ItemPlayer** | Media loading coordination | `src/manager/ItemPlayer.ts` |
+| **App** | React UI, video/image rendering | `src/App.tsx` |
+| **WebSocket** | Server communication | `src/ws/services.ts` |
+| **Navigation** | NAV command processing | `src/index.tsx` |
+
+---
+
+## 🎯 Development Standards
+
+### Code Conventions
 - **No comments** unless explicitly requested
-- **Defensive programming** - always check for null/undefined
-- **Clear logging prefixes** - `[ComponentName.methodName]`
-- **Root cause fixes** - don't patch symptoms
+- **Defensive programming** - always check null/undefined
+- **Clear logging** - use prefixes like `[ComponentName.methodName]`
+- **Type safety** - use TypeScript types, avoid `any`
 
-### Anti-Patterns to Avoid
-- ❌ Special handling for undefined playlist IDs
-- ❌ Using URL parameters for navigation
-- ❌ Clearing ALL media state during switches
-- ❌ Adding setTimeout without cleanup
-- ❌ Patching without understanding root cause
+### Anti-Patterns ❌
+- Special handling for undefined playlist IDs
+- Using URL parameters for navigation
+- Clearing ALL media state during switches
+- Adding setTimeout without cleanup
 
-### Best Practices
-- ✅ Treat undefined playlists like normal playlists
-- ✅ Use NAV commands for all navigation
-- ✅ Clear only conflicting media state
-- ✅ Use proper locks and debouncing
-- ✅ Fix root causes that solve multiple symptoms
+### Best Practices ✅
+- Treat undefined playlists like normal playlists (each account has a default playlist with `undefined` as ID)
+- Use NAV commands for all navigation
+- Clear only conflicting media state
+- Use proper locks and debouncing
+- Fix root causes, not symptoms
 
-## File Structure
+---
 
-```
-src/
-├── App.tsx                 # Main React component
-├── index.tsx              # Entry point, NAV handling
-├── component/             # UI components
-│   ├── image.tsx         # Image display component
-│   └── video.tsx         # Video display component
-├── dao/                   # Data objects
-│   ├── Playlist.ts       # Playlist management
-│   ├── Montage.ts        # Montage structure
-│   └── Artwork.ts        # Media content
-├── manager/               # Core logic
-│   ├── Sequencer.ts      # Timing and navigation
-│   ├── ItemPlayer.ts     # Media coordination
-│   └── Globals.ts        # Global state
-└── ws/                    # WebSocket communication
-    └── services.ts        # Server communication
-```
-
-## Deployment
+## 🌐 Deployment
 
 ### Testing Environment
 - **Branch**: `webplayer2B`
 - **Purpose**: Development and testing
-- **URL**: Local development only
 
 ### Production Environment
 - **Branch**: `webplayer2`
-- **Purpose**: Stable releases
 - **Build**: `npm run build`
 - **Deploy**: Custom rsync scripts to WordPress
 
-## Support
+---
 
-### Documentation
-- `WALLMUSE_WEBPLAYER_RULES.md` - Comprehensive technical guide
-- `TODO.md` - Current development tasks
-- `CHUNK_DELIVERY_ARCHITECTURE.md` - WebSocket communication details
+## 📞 Support
 
-### Debug Tools
-- Browser console debug functions
-- `test-playlist-switching.html` - Manual testing interface
-- Chrome DevTools for React component inspection
-- Network tab for WebSocket message monitoring
+For detailed troubleshooting, see:
+- [Troubleshooting Cheat Sheet](./docs/guides/TROUBLESHOOTING_CHEAT_SHEET.md)
+- [WebPlayer Troubleshooting](./docs/troubleshooting/WEBPLAYER_TROUBLESHOOTING.md)
 
-### Common Log Prefixes for Filtering
+Common log filters:
 - `[SEQUENCER]` - Core timing and logic
 - `[APP-STATE]` - React component state
 - `[WS-COMMAND]` - WebSocket messages
 - `[TRACK-TIMING]` - Track selection logic
-- `[GUARD-CHECK]` - System readiness checks
 
 ---
 
-**Note**: This is a specialized media player designed for the Wallmuse platform. It requires specific server infrastructure and WebSocket communication protocols.
+**Note**: This is a specialized media player for the Wallmuse platform. Requires specific server infrastructure and WebSocket communication protocols.
+
+**Last Updated**: 2025-12-27
