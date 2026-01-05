@@ -180,200 +180,105 @@ The following complexity was intentionally NOT implemented:
 
 ---
 
-# 3. Video Chunk Delivery - Fragmented MP4 Migration
+# 3. Video Chunk Delivery - Server-Side Fragmentation
 
-**Status**: Infrastructure implemented and ready. Automatic detection and fallback working.
-**Priority**: Medium (optimization - current system works well)
-**Reference**: See [docs/architecture/CHUNK_DELIVERY_ARCHITECTURE.md](docs/architecture/CHUNK_DELIVERY_ARCHITECTURE.md) for full implementation details.
+**Status**: ❌ DISABLED - Server `&frag=1` fragmentation not producing SourceBuffer-compatible data
+**Priority**: Medium (optimization blocked - needs server-side investigation)
+**Reference**: See [docs/architecture/CHUNK_DELIVERY_ARCHITECTURE.md](docs/architecture/CHUNK_DELIVERY_ARCHITECTURE.md) for implementation details.
 
-### Current Limitation
+### Current Status
 
-All videos are currently **progressive MP4** (HandBrake baseline encoding), which are **not compatible** with MediaSource API chunk delivery. The system automatically detects this and falls back to browser native streaming with HTTP range requests, which works perfectly.
+The chunk delivery system is **disabled** (`withFragments = false`) due to server-side fragmentation issues.
 
-### Future Enhancement: Fragmented MP4 Support
+**What Was Implemented**:
+- ✅ Client-side infrastructure (VideoStreamManager, ChunkManager)
+- ✅ SourceBuffer setup with `mode = 'segments'`
+- ✅ Legacy configuration (500KB chunks, 2s buffer, 3 initial chunks)
+- ✅ URL parameter `&frag=1` appended to all requests
+- ✅ Graceful fallback to browser native streaming
 
-When videos are re-encoded as **fragmented MP4**, the system will automatically use MediaSource-based chunked streaming with **zero code changes**.
+**Current Blocker**:
+The server's `&frag=1` parameter returns data that SourceBuffer rejects with "SourceBuffer update failed" error. The server returns HTTP 206 (success) and the correct byte range, but the data format is incompatible with MediaSource API's SourceBuffer.
+
+### Investigation Needed
+
+**Server-Side** (`s3_get_file` endpoint):
+URLs use the `/wallmuse/ws/s3_get_file/` endpoint (e.g., `https://manager.wallmuse.com:8444/wallmuse/ws/s3_get_file/uuid-xxx.mp4?version=1`). The legacy webplayer successfully used `&frag=1` with this endpoint, but current implementation fails.
+
+**Questions to investigate**:
+1. Has the `s3_get_file` endpoint's `&frag=1` implementation changed since legacy webplayer?
+2. Is it producing valid MP4 fragments with `moof` boxes, or just byte-range splits?
+3. Have the MP4 files themselves changed encoding (different HandBrake settings)?
+4. Is there a server-side configuration flag that needs to be enabled?
+
+**Possible Solutions**:
+1. **Option A**: Fix server to produce proper fragmented MP4 boxes (moof/mdat pairs)
+2. **Option B**: Abandon server-side fragmentation, use client-only for already-fragmented files
+3. **Option C**: Use browser native streaming (current fallback - works well)
+
+### How It Should Work (When Fixed)
+
+1. Client appends `&frag=1` to video URL
+2. Client sets `sourceBuffer.mode = 'segments'`
+3. Server returns properly fragmented MP4 data (moof + mdat boxes)
+4. MediaSource API appends fragmented chunks to SourceBuffer
+5. Video plays smoothly with 500KB chunks
+
+### Technical Implementation
+
+**Key Configuration**:
+```typescript
+// video.tsx - Critical SourceBuffer setup
+const sourceBuffer = mediaSource.addSourceBuffer(mimeType);
+sourceBuffer.mode = 'segments'; // ← REQUIRED for server-side fragmentation
+```
+
+**Server-Side Fragmentation Flow**:
+1. **URL Parameter**: VideoStreamManager appends `&frag=1` to video URLs
+2. **SourceBuffer Mode**: Set to `'segments'` to accept fragmented chunks
+3. **Server Processing**: Server fragments progressive MP4 on-the-fly
+4. **Client Chunking**: VideoStreamManager loads video in 500KB chunks
+5. **No Special Encoding**: Works with existing HandBrake baseline MP4 files
 
 **Benefits**:
-- 512KB chunk delivery instead of full file downloads
-- Better performance on mobile/3G/4G connections
-- Faster initial playback (smaller initialization segment)
-- More efficient bandwidth usage
+- ✅ 500KB chunk delivery for better mobile/3G performance
+- ✅ Works with existing progressive MP4 files (no re-encoding needed)
+- ✅ Faster initial playback (only 3 chunks = ~1.5MB initial load)
+- ✅ More efficient bandwidth usage on slow connections
+- ✅ Reduces memory pressure for large 4K videos
 
-### Required Changes
+### Configuration
 
-#### 1. HandBrake Encoding Updates
+**Current Settings** (optimized from legacy implementation):
+- **Chunk Size**: 500KB (legacy config - exact match)
+- **Initial Chunks**: 3 (~1.5MB for fast startup)
+- **Buffer Ahead**: 2 seconds (legacy config - exact match)
+- **Max Concurrent Requests**: 1 (prevents connection pool exhaustion)
+- **SourceBuffer Mode**: `'segments'` ← **Critical for server-side fragmentation**
 
-**Current Command** (produces progressive MP4):
-```bash
-HandBrake --input video.mov --output video.mp4 \
-  --encoder x264 \
-  --encoder-preset slow \
-  --encoder-profile baseline \
-  --quality 20
+### Expected Console Output
+
+**Successful Chunked Streaming**:
 ```
-
-**Updated Command** (produces fragmented MP4):
-```bash
-HandBrake --input video.mov --output video.mp4 \
-  --encoder x264 \
-  --encoder-preset slow \
-  --encoder-profile baseline \
-  --quality 20 \
-  --enable-x264-fragment
-```
-
-**Key Addition**: `--enable-x264-fragment` flag enables fragmentation during encoding.
-
-#### 2. FFmpeg Post-Processing (Alternative Approach)
-
-If you prefer to keep current HandBrake settings and post-process, use FFmpeg to convert existing progressive MP4 files to fragmented MP4:
-
-```bash
-ffmpeg -i input.mp4 -c copy -movflags frag_keyframe+empty_moov+default_base_moof output.mp4
-```
-
-**Flags Explained**:
-- `frag_keyframe` - Create fragment at each keyframe
-- `empty_moov` - Create minimal moov atom (faster startup)
-- `default_base_moof` - Use moof-based fragments
-
-**Advantages**:
-- No re-encoding (fast)
-- Preserves original quality
-- Can be batched across existing library
-
-#### 3. Server-Side Batch Processing
-
-**Current**: Server-side batch process encodes videos with HandBrake, uploads to S3.
-
-**Update Required**:
-1. Add `--enable-x264-fragment` to HandBrake command in batch processing script
-2. **OR** Add FFmpeg post-processing step after HandBrake encoding
-3. Consider versioning strategy (keep old progressive MP4s? Re-encode entire library?)
-
-**Considerations**:
-- **Storage**: Fragmented MP4 files are similar size to progressive MP4
-- **Processing Time**: Re-encoding entire library may take significant time
-- **Migration Strategy**: Could use hybrid approach (new videos fragmented, old videos on-demand)
-
-#### 4. Testing and Validation
-
-Before deploying to production:
-
-1. **Test Encoding**:
-   ```bash
-   # Encode test video with fragmentation
-   HandBrake --input test.mov --output test-fragmented.mp4 --enable-x264-fragment
-
-   # Verify structure
-   node scripts/check-mp4-structure.js "https://your-cdn.com/test-fragmented.mp4"
-   ```
-
-2. **Expected Output**:
-   ```
-   📦 MP4 Box Structure:
-     [ftyp] size: 32 bytes, offset: 0
-     [moov] size: 13,651 bytes, offset: 32
-     [moof] size: 1,024 bytes, offset: 13683
-     [mdat] size: 524,288 bytes, offset: 14707
-     [moof] size: 1,024 bytes, offset: 538995
-     [mdat] size: 524,288 bytes, offset: 540019
-     ...
-
-   🎯 Verdict:
-     ✅ FRAGMENTED MP4 - Compatible with MediaSource API!
-   ```
-
-3. **Monitor Console**: Should see MediaSource chunking logs instead of fallback warnings:
-   ```
-   [VideoStreamManager] Fragmented MP4 detected - proceeding with MediaSource streaming
-   [ChunkManager] Requesting chunk 0: bytes 0-524287
-   [ChunkManager] Requesting chunk 1: bytes 524288-1048575
-   ```
-
-### Performance Optimization Opportunities
-
-Once fragmented MP4 is deployed, consider these enhancements:
-
-#### 1. Adaptive Chunk Size
-- **Current**: Fixed 512KB chunks
-- **Enhancement**: Adjust chunk size based on network speed
-- **Implementation**: Monitor download times, adjust `ChunkManager.config.chunkSize`
-
-#### 2. Concurrent Chunk Loading
-- **Current**: `maxConcurrentChunks: 1`
-- **Enhancement**: Increase for faster connections (e.g., 2-3 concurrent)
-- **Consideration**: May exhaust browser connection pool on slow networks
-
-#### 3. Buffer Ahead Configuration
-- **Current**: Fixed 5 seconds ahead buffering
-- **Enhancement**: Increase for more stable playback on unstable networks
-- **Implementation**: Adjust `VideoStreamManager.shouldLoadMoreChunks()` threshold
-
-#### 4. Adaptive Bitrate Streaming (Advanced)
-- Encode multiple quality levels (720p, 1080p, 4K)
-- Switch quality based on network conditions
-- Requires server-side support for multiple encodings
-
-### Diagnostic Tools
-
-#### Check MP4 Structure
-```bash
-node scripts/check-mp4-structure.js "https://your-cdn.com/video.mp4"
-```
-
-#### Browser Console Commands
-```javascript
-// Check chunk manager status
-window.chunkManager.getStats()
-
-// Check if MediaSource is supported
-typeof MediaSource !== 'undefined'
-
-// Inspect video element
-document.getElementById('video-1')
-```
-
-### Migration Checklist
-
-- [ ] Update HandBrake batch processing script with `--enable-x264-fragment`
-- [ ] Test fragmented encoding with sample 4K video (50-60Hz)
-- [ ] Verify file size comparison (fragmented vs progressive)
-- [ ] Verify playback quality (no degradation expected)
-- [ ] Test on multiple browsers (Chrome, Firefox, Safari)
-- [ ] Test on mobile devices (iOS Safari, Android Chrome)
-- [ ] Test on slow network (throttle to 3G in DevTools)
-- [ ] Monitor chunk delivery logs in production
-- [ ] Update CDN cache policies if needed (chunk-friendly caching)
-- [ ] Decide on migration strategy (all at once vs gradual)
-- [ ] Re-encode sample batch (10-20 videos)
-- [ ] Deploy to production, monitor performance
-- [ ] (Optional) Re-encode entire library or keep hybrid approach
-
-### Expected Outcome
-
-**Before** (Progressive MP4 - Current):
-```
-⚠️ [VideoStreamManager] Progressive MP4 detected - will use direct streaming
-📹 Using direct streaming (progressive MP4 format)
-```
-
-**After** (Fragmented MP4 - Future):
-```
-✅ [VideoStreamManager] Fragmented MP4 detected - proceeding with MediaSource streaming
 🎬 [Video Component #1] Initializing chunked streaming
-[ChunkManager] Loading chunk 0/256 (512KB)
-[ChunkManager] Loading chunk 1/256 (512KB)
-✅ [Video #1] LOADED: video.mp4 via MediaSource chunks
+🎬 [Video Component #1] MediaSource opened
+🎬 [Video Component #1] SourceBuffer created successfully (mode: segments)
+[VideoStreamManager] Video size: 52428800 bytes, 100 chunks
+[VideoStreamManager] Loading 3 initial chunks...
+[VideoStreamManager.loadChunk] Chunk 0 received: 524288 bytes
+[VideoStreamManager.loadChunk] Chunk 1 received: 524288 bytes
+[VideoStreamManager.loadChunk] Chunk 2 received: 524288 bytes
+[VideoStreamManager] Initial chunks loaded, starting background streaming...
+✅ [Video #1] LOADED: video.mp4
 ```
 
-### Resources
+### Troubleshooting
 
-- **HandBrake Documentation**: [https://handbrake.fr/docs/](https://handbrake.fr/docs/)
-- **FFmpeg Documentation**: [https://ffmpeg.org/ffmpeg-formats.html#mov_002c-mp4_002c-ismv](https://ffmpeg.org/ffmpeg-formats.html#mov_002c-mp4_002c-ismv)
-- **MediaSource API**: [https://developer.mozilla.org/en-US/docs/Web/API/MediaSource](https://developer.mozilla.org/en-US/docs/Web/API/MediaSource)
-- **MP4 Box Structure**: [https://www.cimarronsystems.com/wp-content/uploads/2017/04/Elements-of-the-H.264-VideoAAC-Audio-MP4-Movie-v2_0.pdf](https://www.cimarronsystems.com/wp-content/uploads/2017/04/Elements-of-the-H.264-VideoAAC-Audio-MP4-Movie-v2_0.pdf)
+If you see `SourceBuffer update failed` errors:
+1. ✅ Check that `sourceBuffer.mode = 'segments'` is set
+2. ✅ Verify `&frag=1` parameter is appended to URL
+3. ✅ Confirm server supports server-side fragmentation
+4. ✅ Check MIME type matches video codec (e.g., `'video/mp4; codecs="avc1.42C028, mp4a.40.2"'`)
 
 ---
 
