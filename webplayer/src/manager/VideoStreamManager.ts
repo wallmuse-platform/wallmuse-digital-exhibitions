@@ -65,40 +65,19 @@ export class VideoStreamManager {
     this.chunkManager.cancelRequestsForUrl(videoUrl);
 
     try {
-      console.log('[VideoStreamManager] Getting video size...');
       // Get video size first
       await this.getVideoSize();
-
-      console.log(
-        `[VideoStreamManager] Video size: ${this.streamState.totalBytes} bytes, ${this.streamState.totalChunks} chunks`
-      );
 
       // Start streaming
       this.streamState.isStreaming = true;
       this.streamState.currentChunk = 0;
       this.streamState.downloadedBytes = 0;
 
-      // LogHelper.log('VideoStreamManager', `Starting stream: ${this.streamState.totalChunks} chunks, ${this.streamState.totalBytes} bytes`);
-
-      console.log('[VideoStreamManager] Loading initial chunks...');
       // Start with first few chunks
       await this.loadInitialChunks();
-
-      console.log('[VideoStreamManager] Initial chunks loaded successfully');
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-
-      // Progressive MP4 is expected - use warning, not error
-      if (errorMsg.includes('Progressive MP4')) {
-        console.warn(
-          '[VideoStreamManager] Progressive MP4 detected - falling back to direct streaming'
-        );
-        LogHelper.log('VideoStreamManager', 'Using direct streaming for progressive MP4');
-      } else {
-        console.error('[VideoStreamManager] ERROR in startStreaming:', error);
-        LogHelper.error('VideoStreamManager', 'Failed to start streaming:', error);
-      }
-
+      console.error('[VideoStreamManager] ERROR in startStreaming:', error);
+      LogHelper.error('VideoStreamManager', 'Failed to start streaming:', error);
       this.callbacks.onStreamError?.(error as Error);
       throw error; // Re-throw so video.tsx can handle it
     }
@@ -109,9 +88,10 @@ export class VideoStreamManager {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    // Fetch first 100KB to check MP4 structure
-    const response = await fetch(this.videoUrl, {
-      headers: { Range: 'bytes=0-102399' },
+    // RESTORED ORIGINAL: Use &frag=1 for server-side fragmentation
+    // Only request 1 byte to get total file size
+    const response = await fetch(this.videoUrl + '&frag=1', {
+      headers: { Range: 'bytes=0-1' },
       signal: controller.signal,
     });
 
@@ -131,83 +111,26 @@ export class VideoStreamManager {
       this.streamState.totalBytes / this.chunkManager.getStats().config.chunkSize
     );
 
-    // Check MP4 structure to detect if fragmented
-    const buffer = await response.arrayBuffer();
-    const isFragmented = this.detectFragmentedMP4(new Uint8Array(buffer));
-
-    if (!isFragmented) {
-      console.warn(
-        '[VideoStreamManager] Progressive MP4 detected - will use direct streaming (expected for HandBrake baseline)'
-      );
-      throw new Error('Progressive MP4 format - not compatible with MediaSource streaming');
-    }
-
     console.log(
-      '[VideoStreamManager] Fragmented MP4 detected - proceeding with MediaSource streaming'
+      `[VideoStreamManager] Video size: ${this.streamState.totalBytes} bytes, ${this.streamState.totalChunks} chunks`
     );
-  }
-
-  private detectFragmentedMP4(data: Uint8Array): boolean {
-    // Parse MP4 boxes to detect if it's fragmented
-    let offset = 0;
-    let hasMoof = false;
-
-    while (offset < Math.min(data.length - 8, 100000)) {
-      // Read box size (4 bytes, big-endian)
-      const size =
-        (data[offset] << 24) |
-        (data[offset + 1] << 16) |
-        (data[offset + 2] << 8) |
-        data[offset + 3];
-
-      // Read box type (4 bytes, ASCII)
-      const type = String.fromCharCode(
-        data[offset + 4],
-        data[offset + 5],
-        data[offset + 6],
-        data[offset + 7]
-      );
-
-      if (type === 'moof') {
-        hasMoof = true;
-        break;
-      }
-
-      // Move to next box
-      if (size === 0 || size === 1 || size > data.length) break;
-      offset += size;
-    }
-
-    return hasMoof;
   }
 
   private async loadInitialChunks(): Promise<void> {
-    // For progressive MP4, we need to load enough to get the moov atom (initialization segment)
-    // This is typically in the first 1-5MB. Let's load first 5MB to be safe.
-    const initSegmentSize = 5 * 1024 * 1024; // 5MB - increased to capture full moov atom
-    const chunkSize = this.chunkManager.getStats().config.chunkSize;
-    const initialChunks = Math.min(
-      Math.ceil(initSegmentSize / chunkSize),
-      this.streamState.totalChunks
-    );
+    // RESTORED ORIGINAL: Load first 3 chunks only (fast initial playback)
+    const initialChunks = Math.min(3, this.streamState.totalChunks);
 
-    console.log(
-      `[VideoStreamManager] Loading ${initialChunks} initial chunks (${initSegmentSize} bytes for init segment)...`
-    );
+    console.log(`[VideoStreamManager] Loading ${initialChunks} initial chunks...`);
 
     for (let i = 0; i < initialChunks; i++) {
       if (this.isDestroyed) {
         console.log(`[VideoStreamManager] Destroyed during initial chunk loading at chunk ${i}`);
         return;
       }
-      console.log(`[VideoStreamManager] About to load chunk ${i}...`);
       await this.loadChunk(i);
-      console.log(`[VideoStreamManager] Chunk ${i} loaded`);
     }
 
-    console.log(
-      `[VideoStreamManager] All ${initialChunks} initial chunks loaded, starting background streaming...`
-    );
+    console.log(`[VideoStreamManager] Initial chunks loaded, starting background streaming...`);
     // Start background loading
     this.continueStreaming();
   }
@@ -233,8 +156,9 @@ export class VideoStreamManager {
         `[VideoStreamManager.loadChunk] Requesting chunk ${chunkIndex}: bytes ${startByte}-${endByte}`
       );
 
+      // CRITICAL: Append &frag=1 to EVERY chunk request (legacy behavior)
       const chunkResponse = await this.chunkManager.requestChunk(
-        this.videoUrl,
+        this.videoUrl + '&frag=1',
         startByte,
         endByte,
         'normal'
@@ -349,9 +273,9 @@ export class VideoStreamManager {
       this.callbacks.onBufferUpdate?.(this.streamState.bufferEnd);
     }
 
-    // Load more if buffer is less than 5 seconds ahead
+    // Load more if buffer is less than 2 seconds ahead (legacy config)
     const bufferAhead = this.streamState.bufferEnd - this.streamState.playbackPosition;
-    return bufferAhead < 5;
+    return bufferAhead < 2;
   }
 
   public updatePlaybackPosition(position: number): void {
