@@ -29,7 +29,7 @@ interface VideoProps {
   onVideoLoaded?: () => void;
 }
 
-const withFragments = true;
+const withFragments = true; // Restored &frag=1 like original working code
 
 export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
   ({ media, hidden, index, shouldLoad = true, onVideoLoaded }, ref) => {
@@ -193,6 +193,15 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           const arrayBuffer = await response.arrayBuffer();
 
           if (!isStreamingRef.current || !sourceBufferRef.current) break;
+
+          // Check MediaSource is still open before appending
+          if (mediaSourceRef.current?.readyState !== 'open') {
+            console.log(
+              `🎬 [Video #${index}] MediaSource no longer open (state: ${mediaSourceRef.current?.readyState}), stopping worker`
+            );
+            break;
+          }
+
           if (sb.updating)
             await new Promise(resolve => {
               sb.onupdateend = resolve;
@@ -200,9 +209,19 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
 
           // 4. APPEND with QuotaExceededError fallback
           try {
+            // Final check before append - MediaSource must be open
+            if (mediaSourceRef.current?.readyState !== 'open') {
+              console.log(
+                `🎬 [Video #${index}] MediaSource closed before append (state: ${mediaSourceRef.current?.readyState}), stopping`
+              );
+              break;
+            }
+
             await new Promise<void>((resolve, reject) => {
               const currentSb = sourceBufferRef.current;
-              if (!currentSb) return reject('Detached');
+              if (!currentSb || mediaSourceRef.current?.readyState !== 'open') {
+                return reject(new Error('MediaSource closed'));
+              }
               currentSb.onupdateend = () => {
                 currentSb.onupdateend = null;
 
@@ -214,12 +233,22 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
 
                 resolve();
               };
-              currentSb.onerror = e => reject(e);
+              currentSb.onerror = e =>
+                reject(new Error(`SourceBuffer error: ${mediaSourceRef.current?.readyState}`));
               currentSb.appendBuffer(arrayBuffer);
             });
 
             const isFirstChunk = downloadedRef.current === 0;
             downloadedRef.current = endByte + 1;
+
+            // CRITICAL: Call onVideoLoaded AFTER first chunk is appended (video now has data)
+            if (isFirstChunk) {
+              console.log(`🎬 [Video #${index}] First chunk loaded successfully, signaling ready`);
+              if (onVideoLoaded) {
+                console.log(`🎬 [Video #${index}] Calling onVideoLoaded (first chunk ready)`);
+                onVideoLoaded();
+              }
+            }
 
             // Start playback AFTER the first chunk is fully appended
             if (isFirstChunk && ref && typeof ref === 'object' && ref.current) {
@@ -303,7 +332,13 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           );
         }
       } catch (err: any) {
-        if (err.name !== 'AbortError') {
+        // Ignore expected errors: AbortError, MediaSource closed (normal during navigation)
+        const isExpectedError =
+          err.name === 'AbortError' ||
+          err.message?.includes('MediaSource closed') ||
+          err.message?.includes('SourceBuffer error') ||
+          mediaSourceRef.current?.readyState !== 'open';
+        if (!isExpectedError) {
           console.error(`🎬 [Video #${index}] Worker Error:`, err);
           console.error(`🎬 [Video #${index}] Error details:`, {
             name: err?.name,
@@ -370,10 +405,10 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           `🎬 [Video #${index}] Using direct src (iOS/Safari mode - browser will handle buffering)`
         );
 
-        // Remove &frag=1 parameter for iOS - Safari handles streaming natively
-        const iosUrl = media.url.replace(/[&?]frag=1/, '');
-        console.log(`🎬 [Video #${index}] iOS URL (frag removed):`, iosUrl);
-        videoEl.src = iosUrl;
+        // Use URL directly - no &frag=1 needed (server streams file as-is)
+        const directUrl = media.url;
+        console.log(`🎬 [Video #${index}] Direct URL:`, directUrl);
+        videoEl.src = directUrl;
 
         // Wait for video to have enough data before calling onVideoLoaded
         const onCanPlay = () => {
@@ -408,7 +443,17 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
         console.log(`🎬 [Video #${index}] 🎉 sourceopen event fired! ReadyState: ${ms.readyState}`);
         ms.removeEventListener('sourceopen', onSourceOpen);
         try {
-          const codecs = media.codecs ?? 'avc1.42C028, mp4a.40.2';
+          // Filter out unsupported codecs (text/subtitle tracks not supported by MediaSource)
+          const rawCodecs = media.codecs ?? 'avc1.42C028, mp4a.40.2';
+          const filteredCodecs = rawCodecs
+            .split(',')
+            .map((c: string) => c.trim())
+            .filter(
+              (c: string) => !c.includes('text') && !c.includes('wvtt') && !c.includes('stpp')
+            )
+            .join(', ');
+          const codecs = filteredCodecs || 'avc1.42C028, mp4a.40.2';
+          console.log(`🎬 [Video #${index}] Codecs: raw="${rawCodecs}" → filtered="${codecs}"`);
           const sb = ms.addSourceBuffer(`video/mp4; codecs="${codecs}"`);
           sb.mode = 'segments';
           sourceBufferRef.current = sb;
@@ -419,15 +464,8 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           downloadedRef.current = 0;
 
           // Start the worker in background (do NOT await - it runs until video is fully loaded!)
+          // NOTE: onVideoLoaded will be called from the worker AFTER the first chunk is appended
           startBufferWorker();
-
-          // Call onVideoLoaded immediately - worker will continue loading in background
-          if (onVideoLoaded) {
-            console.log(
-              `🎬 [Video #${index}] Calling onVideoLoaded (worker running in background)`
-            );
-            onVideoLoaded();
-          }
         } catch (e) {
           console.error('MSE Failed, Falling back to direct src', e);
           videoEl.src = media.url!;

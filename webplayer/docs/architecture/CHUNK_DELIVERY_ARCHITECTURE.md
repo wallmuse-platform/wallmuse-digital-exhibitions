@@ -1,8 +1,8 @@
 # Video Chunk Delivery Architecture
 
 > **Status**: ✅ Implemented with platform-adaptive streaming
-> **Last Updated**: 2026-01-05
-> **Implementation**: Direct MediaSource integration with iOS fallback
+> **Last Updated**: 2026-01-15
+> **Implementation**: MediaSource chunked streaming with `&frag=1` server parameter
 
 ## Overview
 
@@ -23,31 +23,43 @@ The video streaming system provides intelligent, platform-adaptive video deliver
 ### ✅ What Works Now (January 2026)
 
 - **Platform-adaptive streaming** - Automatic detection and fallback
-- **MediaSource-based chunked delivery** for desktop/modern Android
-- **Direct src streaming** for iOS with automatic `&frag=1` removal
+- **MediaSource-based chunked delivery** for desktop/modern Android with `&frag=1` parameter
+- **Direct src streaming** for iOS (uses direct URL, browser handles buffering)
+- **Codec filtering** - Filters out unsupported codecs (`text`, `wvtt`, `stpp`) for MediaSource compatibility
 - **Dynamic chunk sizing** - 512KB to 4MB based on file size
 - **Large file support** - Tested with 2.5GB+ files
 - **Intelligent buffer management** - Prevents QuotaExceededError
 - **Background worker suspension** - Stops hidden videos to prevent resource contention
 - **Graceful worker shutdown** - No abort() on active downloads
+- **First-chunk timing** - `onVideoLoaded` called only after first chunk is appended (not prematurely)
 - **Audio restoration** - Proper unmute/volume on montage transitions
 
 ### 🎯 Key Improvements (December 2025 - January 2026)
 
 1. **iOS Compatibility Fix** (Jan 2026)
    - Detects MediaSource unavailability on iOS
-   - Falls back to direct `<video src>` without `&frag=1`
+   - Falls back to direct `<video src>` (browser handles streaming)
    - Waits for `canplay` event before seeking
 
-2. **Large File Optimization** (Jan 2026)
+2. **Codec Filtering** (Jan 2026)
+   - Filters out `text`, `wvtt`, `stpp` codecs from server-provided codec strings
+   - Prevents MediaSource `NotSupportedError` for videos with subtitle tracks
+   - Example: `"avc1.42C01F, mp4a.40.2, text"` → `"avc1.42C01F, mp4a.40.2"`
+
+3. **Large File Optimization** (Jan 2026)
    - Dynamic chunk sizing: 4MB for >500MB files
    - Reduced buffer ahead: 20s for >1GB files (prevents quota errors)
    - Proactive garbage collection for active/background videos
 
-3. **Resource Management** (Jan 2026)
+4. **Resource Management** (Jan 2026)
    - Background worker suspension when video hidden
    - Graceful shutdown without aborting active fetches
    - Emergency buffer clearing on QuotaExceededError
+
+5. **First-Chunk Timing Fix** (Jan 2026)
+   - `onVideoLoaded` callback now fires after first chunk is successfully appended
+   - Ensures video has data (readyState > 0) before App attempts seek operations
+   - Prevents "Video not ready for seek" errors
 
 ## Architecture Layers
 
@@ -87,14 +99,13 @@ The video streaming system provides intelligent, platform-adaptive video deliver
 const mediaSourceSupported = typeof MediaSource !== 'undefined';
 
 if (!mediaSourceSupported || !withFragments) {
-  // iOS/Safari fallback: Direct src without &frag=1
-  const iosUrl = media.url.replace(/[&?]frag=1/, '');
-  videoEl.src = iosUrl;
+  // iOS/Safari fallback: Direct src (browser handles streaming natively)
+  videoEl.src = media.url;
 
   // Wait for canplay before signaling ready
   videoEl.addEventListener('canplay', onCanPlay, { once: true });
 } else {
-  // Desktop/Android: MediaSource chunked streaming
+  // Desktop/Android: MediaSource chunked streaming with &frag=1
   const ms = new MediaSource();
   videoEl.src = URL.createObjectURL(ms);
   ms.addEventListener('sourceopen', onSourceOpen);
@@ -112,18 +123,26 @@ mediaSourceRef.current = ms;
 videoEl.src = URL.createObjectURL(ms);
 
 ms.addEventListener('sourceopen', async () => {
-  const codecs = media.codecs ?? 'avc1.42C028, mp4a.40.2';
+  // Filter out unsupported codecs (text/subtitle tracks)
+  const rawCodecs = media.codecs ?? 'avc1.42C028, mp4a.40.2';
+  const filteredCodecs = rawCodecs
+    .split(',')
+    .map(c => c.trim())
+    .filter(c => !c.includes('text') && !c.includes('wvtt') && !c.includes('stpp'))
+    .join(', ');
+  const codecs = filteredCodecs || 'avc1.42C028, mp4a.40.2';
+
   const sb = ms.addSourceBuffer(`video/mp4; codecs="${codecs}"`);
   sb.mode = 'segments';
 
-  // Determine file size via HEAD request
+  // Determine file size via HEAD request (MUST include &frag=1)
   const headRes = await fetch(`${media.url}&frag=1`, {
     headers: { 'Range': 'bytes=0-1' }
   });
   const range = headRes.headers.get('Content-Range');
   lengthRef.current = parseFloat(range.split('/')[1]);
 
-  // Start background worker
+  // Start background worker - onVideoLoaded will be called after first chunk
   startBufferWorker();
 });
 ```
@@ -224,9 +243,8 @@ try {
 if (!mediaSourceSupported || !withFragments) {
   console.log(`🎬 [Video #${index}] Using direct src (iOS/Safari mode)`);
 
-  // Remove &frag=1 parameter - iOS doesn't need fragmented MP4 hint
-  const iosUrl = media.url.replace(/[&?]frag=1/, '');
-  videoEl.src = iosUrl;
+  // Use URL directly - browser handles streaming natively
+  videoEl.src = media.url;
 
   // Wait for canplay event before signaling ready for seeking
   const onCanPlay = () => {
@@ -244,11 +262,11 @@ if (!mediaSourceSupported || !withFragments) {
 }
 ```
 
-**Implementation**: [src/component/video.tsx:312-336](../../src/component/video.tsx#L312-L336)
+**Implementation**: [src/component/video.tsx:318-341](../../src/component/video.tsx#L318-L341)
 
 #### iOS-Specific Considerations
 
-1. **URL Parameter Removal**: `&frag=1` is removed because iOS doesn't use it
+1. **Direct URL**: Uses `media.url` directly - browser handles all streaming natively
 2. **Async Loading**: Must wait for `canplay` event before seeking (readyState >= 3)
 3. **No Chunk Control**: iOS manages buffering internally via native streaming
 4. **Audio Context**: iOS requires user gesture to resume AudioContext (separate banner handling)
@@ -260,7 +278,7 @@ if (!mediaSourceSupported || !withFragments) {
 🎬 [Video #1] Mounting Video: video.mp4
 🎬 [Video #1] MediaSource supported: false
 🎬 [Video #1] Using direct src (iOS/Safari mode - browser will handle buffering)
-🎬 [Video #1] iOS URL (frag removed): https://...video.mp4?version=1
+🎬 [Video #1] Direct URL: https://...video.mp4?version=1
 🎬 [Video #1] Data Loaded (Ready)
 🎬 [Video #1] Video ready (canplay event), readyState: 3
 🎬 [Video #1] Calling onVideoLoaded (direct src mode)
@@ -480,19 +498,37 @@ console.log('MediaSource available:', typeof MediaSource !== 'undefined');
 
 **Rationale**: Cleaner, faster, avoids unnecessary error logs. iOS will **never** support MediaSource.
 
-### 2. iOS Direct Src Without &frag=1
+### 2. `&frag=1` Parameter Required for Chunked Streaming
 
-**Decision**: Remove `&frag=1` URL parameter for iOS.
+**Decision**: Always include `&frag=1` parameter in chunk fetch requests for MediaSource streaming.
 
-**Rationale**: iOS doesn't use server-side fragmentation hints. Cleaner URL, no server-side changes needed.
+**Rationale**: The server uses this parameter to return properly fragmented MP4 data suitable for MediaSource API. Without it, the server returns progressive MP4 which may not work with chunked appending.
 
-### 3. Wait for canplay on iOS
+### 3. iOS Uses Direct Src (Browser Native)
+
+**Decision**: iOS uses direct `videoEl.src = media.url` without MediaSource.
+
+**Rationale**: iOS Safari doesn't support MediaSource API. The browser's native video streaming handles buffering efficiently.
+
+### 4. Codec Filtering for MediaSource
+
+**Decision**: Filter out `text`, `wvtt`, `stpp` codecs before creating SourceBuffer.
+
+**Rationale**: MediaSource doesn't support text/subtitle track codecs. Server returns codec strings like `"avc1.42C01F, mp4a.40.2, text"` which must be filtered to `"avc1.42C01F, mp4a.40.2"`.
+
+### 5. Wait for canplay on iOS
 
 **Decision**: Don't call `onVideoLoaded()` until `canplay` event fires (readyState >= 3).
 
 **Rationale**: Prevents premature seek operations that fail with "Video not ready" errors.
 
-### 4. Dynamic Chunk Sizing
+### 6. First-Chunk Timing for MediaSource
+
+**Decision**: Call `onVideoLoaded()` only after the first chunk is successfully appended to SourceBuffer.
+
+**Rationale**: The video has no data until the first chunk is appended. Calling `onVideoLoaded()` before this causes App to attempt seek operations on an empty video (readyState: 0).
+
+### 7. Dynamic Chunk Sizing
 
 **Decision**: Scale chunk size from 512KB to 4MB based on file size.
 
@@ -501,13 +537,13 @@ console.log('MediaSource available:', typeof MediaSource !== 'undefined');
 - Large files: 4MB = fewer HTTP requests, less overhead
 - Tested with 2.5GB file successfully
 
-### 5. Graceful Worker Shutdown (No abort())
+### 8. Graceful Worker Shutdown (No abort())
 
 **Decision**: Stop worker by setting `isStreamingRef = false`, not calling `abort()`.
 
 **Rationale**: abort() kills in-flight downloads, causing "Connection closed" errors. Let fetches complete naturally.
 
-### 6. Proactive Garbage Collection
+### 9. Proactive Garbage Collection
 
 **Decision**: Remove old buffer data proactively, not just when quota exceeded.
 
@@ -516,7 +552,7 @@ console.log('MediaSource available:', typeof MediaSource !== 'undefined');
 - Reduces memory pressure
 - Different strategies for active (10s behind) vs background (20s max) videos
 
-### 7. Background Worker Suspension
+### 10. Background Worker Suspension
 
 **Decision**: Stop hidden video workers immediately.
 
