@@ -81,6 +81,11 @@ export default class WallmusePlayer extends React.Component {
   private lastShowVideoCall: { filename: string; artworkId: number; timestamp: number } | null =
     null;
   private readonly SHOW_VIDEO_DEBOUNCE_MS = 100; // 100ms debounce
+
+  // CRITICAL FIX: Track video ready state and pending showVideo calls
+  private video1Ready: boolean = false;
+  private video2Ready: boolean = false;
+  private pendingShowVideo: VideoMediaFile | null = null;
   private startTime: number = Date.now();
   private videoRetryCount: number = 0;
   private readonly MAX_VIDEO_RETRIES: number = 50; // 50 retries = 5 seconds max
@@ -528,6 +533,13 @@ export default class WallmusePlayer extends React.Component {
 
     console.log('[App.preloadVideo] Preloading video in slot', videoIndex, 'for:', media.filename);
 
+    // CRITICAL FIX: Reset video ready state for the slot being loaded
+    if (videoIndex === 1) {
+      this.video1Ready = false;
+    } else {
+      this.video2Ready = false;
+    }
+
     // CRITICAL FIX: If this is the first video (no video currently shown), make it visible immediately
     const shouldShowImmediately = this.state.videoShown === 0;
 
@@ -654,13 +666,11 @@ export default class WallmusePlayer extends React.Component {
 
       console.log('[App] Created VideoMediaFile:', videoMedia.filename);
 
-      // Preload and show the video
+      // Preload the video and set pending showVideo
+      // showVideo will be called when onVideoLoaded fires
       this.preloadVideo(videoMedia);
-      setTimeout(() => {
-        this.showVideo(videoMedia);
-      }, 100);
-
-      console.log('[App] CRITICAL: First montage video loaded and shown');
+      this.pendingShowVideo = videoMedia;
+      console.log('[App] CRITICAL: First montage video preloaded, waiting for onVideoLoaded');
     } else {
       console.log('[App] First item is not a video:', firstItem.artwork?.type);
     }
@@ -695,12 +705,26 @@ export default class WallmusePlayer extends React.Component {
         media.filename
       );
       const currentVideoRef = isVideo1Showing ? this.video1Ref : this.video2Ref;
+      const isVideoReady = isVideo1Showing ? this.video1Ready : this.video2Ready;
+
       if (currentVideoRef?.current) {
         console.log('[App.showVideo] Ensuring video is playing:', media.filename, {
           paused: currentVideoRef.current.paused,
           readyState: currentVideoRef.current.readyState,
           currentTime: currentVideoRef.current.currentTime,
+          videoReady: isVideoReady,
         });
+
+        // CRITICAL FIX: If video not ready yet, store as pending and wait for onVideoLoaded
+        if (currentVideoRef.current.readyState === 0 && !isVideoReady) {
+          console.log(
+            '[App.showVideo] ⏳ Video not ready yet (readyState: 0), setting as pending:',
+            media.filename
+          );
+          this.pendingShowVideo = media;
+          return;
+        }
+
         currentVideoRef.current.play().catch(err => {
           console.log('[App.showVideo] Play failed (expected during transitions):', err.message);
         });
@@ -2816,9 +2840,23 @@ export default class WallmusePlayer extends React.Component {
               '🔄 [SPINNER-DEBUG] Video #1 onVideoLoaded fired, loading:',
               this.state.loading
             );
+            this.video1Ready = true;
             if (this.state.loading) {
               console.log('🔄 [SPINNER-DEBUG] Turning spinner OFF (video #1 loaded)');
               this.setState({ loading: false });
+            }
+            // CRITICAL FIX: Process pending showVideo now that video is ready
+            if (
+              this.pendingShowVideo &&
+              this.state.video1?.filename === this.pendingShowVideo.filename
+            ) {
+              console.log(
+                '[App] Video #1 ready, processing pending showVideo:',
+                this.pendingShowVideo.filename
+              );
+              const pending = this.pendingShowVideo;
+              this.pendingShowVideo = null;
+              this.showVideo(pending);
             }
           }}
         />
@@ -2834,9 +2872,23 @@ export default class WallmusePlayer extends React.Component {
               '🔄 [SPINNER-DEBUG] Video #2 onVideoLoaded fired, loading:',
               this.state.loading
             );
+            this.video2Ready = true;
             if (this.state.loading) {
               console.log('🔄 [SPINNER-DEBUG] Turning spinner OFF (video #2 loaded)');
               this.setState({ loading: false });
+            }
+            // CRITICAL FIX: Process pending showVideo now that video is ready
+            if (
+              this.pendingShowVideo &&
+              this.state.video2?.filename === this.pendingShowVideo.filename
+            ) {
+              console.log(
+                '[App] Video #2 ready, processing pending showVideo:',
+                this.pendingShowVideo.filename
+              );
+              const pending = this.pendingShowVideo;
+              this.pendingShowVideo = null;
+              this.showVideo(pending);
             }
           }}
         />

@@ -29,7 +29,7 @@ interface VideoProps {
   onVideoLoaded?: () => void;
 }
 
-const withFragments = true; // Restored &frag=1 like original working code
+const withFragments = true; // DISABLED - chunk streaming causing frozen video on goMontage navigation
 
 export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
   ({ media, hidden, index, shouldLoad = true, onVideoLoaded }, ref) => {
@@ -490,6 +490,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
       <video
         ref={ref}
         id={`video-${index}`}
+        className={`video ${hidden ? 'hidden' : ''}`}
         data-filename={media?.filename || 'none'}
         data-index={index}
         data-hidden={hidden}
@@ -500,8 +501,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           position: 'absolute',
           top: 0,
           left: 0,
-          opacity: hidden ? 0 : 1,
-          transition: 'opacity 0.5s ease-in-out',
+          // opacity and visibility now controlled by CSS classes
         }}
         autoPlay={wsTools.getHouseAutostart()}
         loop={media?.loop || false}
