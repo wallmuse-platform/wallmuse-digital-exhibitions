@@ -29,7 +29,7 @@ interface VideoProps {
   onVideoLoaded?: () => void;
 }
 
-const withFragments = true; // DISABLED - chunk streaming causing frozen video on goMontage navigation
+const withFragments = false; // DISABLED - chunk streaming causing server overload (200-600 parallel requests per video)
 
 export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
   ({ media, hidden, index, shouldLoad = true, onVideoLoaded }, ref) => {
