@@ -1,40 +1,82 @@
 # Video Chunk Delivery Architecture
 
-> **Status**: ✅ Implemented with platform-adaptive streaming
-> **Last Updated**: 2026-01-15
-> **Implementation**: MediaSource chunked streaming with `&frag=1` server parameter
+> **Status**: ⚠️ MediaSource chunking DEPRECATED - Using direct src mode
+> **Last Updated**: 2026-01-21
+> **Implementation**: Direct src with browser-native Range requests (chunking disabled)
+
+---
+
+## ⚠️ IMPORTANT: MediaSource Chunking Deprecated (January 21, 2026)
+
+**MediaSource-based chunked streaming has been DISABLED** due to critical server overload issues.
+
+### Why Chunking Was Disabled
+
+On January 21, 2026, the production server experienced a critical overload:
+
+| Metric | Value | Expected |
+|--------|-------|----------|
+| Requests from single IP | **5,394** (54% of traffic) | ~50-100 |
+| HTTP requests per video | **200-600** | 1 (with Range) |
+| Same fragment requested | **50+ times** in 30s | Once |
+| Server impact | **Crash** | Normal operation |
+
+**Root Cause Analysis**:
+
+1. **Navigation restart problem**: Each user navigation (goMontage, playlist switch) caused the chunked downloader to restart from byte 0
+2. **Request multiplication**: 1GB video = ~256 chunks × multiple navigation cycles = hundreds of requests
+3. **Server fragmentation overhead**: Each `&frag=1` request triggers MP4 fragmentation check on the server
+4. **No client-side caching**: Browser HTTP cache doesn't help because each chunk is a unique byte range
+
+### Current Configuration
+
+```typescript
+// In video.tsx - KEEP THIS FALSE
+const withFragments = false;  // DISABLED - chunk streaming causing server overload
+```
+
+**Direct src mode** is now the standard:
+- Browser makes **1 request** per video (with native Range header support)
+- Server responds with standard HTTP 206 Partial Content
+- Works on all platforms including iOS
+- No server overload risk
+
+---
 
 ## Overview
 
-The video streaming system provides intelligent, platform-adaptive video delivery using MediaSource Extensions (MSE) API with automatic fallback for platforms that don't support it (primarily iOS/Safari).
+The video streaming system now uses **direct src mode** for all platforms, relying on the browser's native HTTP Range request handling for efficient video streaming.
 
-## Platform Support Matrix
+## Platform Support Matrix (Current)
 
-| Platform | MediaSource Support | Streaming Mode | Chunk Size |
-|----------|-------------------|----------------|------------|
-| **Desktop Chrome/Firefox/Edge** | ✅ Yes | MediaSource chunked | Dynamic (512KB-4MB) |
-| **Desktop Safari 15+** | ✅ Yes | MediaSource chunked | Dynamic (512KB-4MB) |
-| **Android Chrome/Firefox** | ✅ Yes | MediaSource chunked | Dynamic (512KB-4MB) |
-| **iOS Safari (all versions)** | ❌ No | Direct src | Browser native |
-| **Old Android (<API 21)** | ❌ No | Direct src | Browser native |
+| Platform | Streaming Mode | Requests per Video | Notes |
+|----------|----------------|-------------------|-------|
+| **All Desktop Browsers** | Direct src | 1 (with Range) | Browser handles buffering |
+| **iOS Safari** | Direct src | 1 (with Range) | Native HLS support available |
+| **Android** | Direct src | 1 (with Range) | Browser handles buffering |
 
 ## Current Implementation Status
 
 ### ✅ What Works Now (January 2026)
 
-- **Platform-adaptive streaming** - Automatic detection and fallback
-- **MediaSource-based chunked delivery** for desktop/modern Android with `&frag=1` parameter
-- **Direct src streaming** for iOS (uses direct URL, browser handles buffering)
-- **Codec filtering** - Filters out unsupported codecs (`text`, `wvtt`, `stpp`) for MediaSource compatibility
-- **Dynamic chunk sizing** - 512KB to 4MB based on file size
-- **Large file support** - Tested with 2.5GB+ files
-- **Intelligent buffer management** - Prevents QuotaExceededError
-- **Background worker suspension** - Stops hidden videos to prevent resource contention
-- **Graceful worker shutdown** - No abort() on active downloads
-- **First-chunk timing** - `onVideoLoaded` called only after first chunk is appended (not prematurely)
+- **Direct src streaming** for all platforms (browser handles Range requests natively)
 - **Audio restoration** - Proper unmute/volume on montage transitions
+- **Pending showVideo mechanism** - Waits for video data before playback
+- **iOS compatibility** - Uses `canplay` event for readiness detection
 
-### 🎯 Key Improvements (December 2025 - January 2026)
+### ⚠️ MediaSource Chunking (DEPRECATED)
+
+The following features are **disabled** but code remains for potential future use:
+- ~~MediaSource-based chunked delivery~~
+- ~~Dynamic chunk sizing (512KB-4MB)~~
+- ~~Intelligent buffer management~~
+- ~~Background worker suspension~~
+- ~~Proactive garbage collection~~
+
+### Historical Improvements (December 2025 - January 2026)
+
+<details>
+<summary>Click to expand historical changes (for reference only)</summary>
 
 1. **iOS Compatibility Fix** (Jan 2026)
    - Detects MediaSource unavailability on iOS
@@ -60,6 +102,8 @@ The video streaming system provides intelligent, platform-adaptive video deliver
    - `onVideoLoaded` callback now fires after first chunk is successfully appended
    - Ensures video has data (readyState > 0) before App attempts seek operations
    - Prevents "Video not ready for seek" errors
+
+</details>
 
 ## Architecture Layers
 
@@ -395,7 +439,7 @@ if (this.video2Ref?.current) {
 
 ```typescript
 // At top of video.tsx
-const withFragments = true;  // Enable/disable chunking globally
+const withFragments = false;  // Enable/disable chunking globally
 ```
 
 **Implementation**: [src/component/video.tsx:32](../../src/component/video.tsx#L32)
@@ -595,16 +639,158 @@ console.log('MediaSource available:', typeof MediaSource !== 'undefined');
 - [ ] Firefox: MediaSource chunked streaming
 - [ ] Old devices (<API 21): Direct src fallback
 
-## Conclusion
+## Conclusion (Current State)
 
-The current architecture provides:
+The current architecture uses **direct src mode** for all platforms:
 
-- ✅ **Platform-adaptive streaming** - MediaSource for desktop/Android, direct src for iOS
-- ✅ **iOS compatibility** - Automatic detection and graceful fallback
-- ✅ **Large file support** - Tested with 2.5GB+ files
-- ✅ **Intelligent memory management** - Dynamic chunks, proactive GC, quota error recovery
-- ✅ **Resource optimization** - Background worker suspension, graceful shutdown
+- ✅ **Simple and reliable** - Browser handles all streaming natively
+- ✅ **Server-friendly** - 1 request per video instead of 200+
+- ✅ **iOS compatibility** - Works on all platforms
 - ✅ **Audio preservation** - Unmute and volume restoration on transitions
-- ✅ **Zero configuration** - All parameters auto-configured based on file size and platform
+- ✅ **Zero configuration** - No special parameters needed
 
-**Result**: Videos play smoothly on all platforms (desktop, iOS, Android) with optimal streaming strategy for each.
+**Trade-off**: Less control over buffering, but avoids server overload issues.
+
+---
+
+## Future Recommendations: HLS and DASH
+
+If advanced streaming features are needed in the future (adaptive bitrate, better seeking in large files), consider implementing **HLS** or **DASH** instead of custom MediaSource chunking.
+
+### Why HLS/DASH Instead of Custom MediaSource?
+
+| Feature | Custom MediaSource (Deprecated) | HLS/DASH |
+|---------|--------------------------------|----------|
+| Server requests | 200-600 per video | 1 manifest + efficient segments |
+| Caching | Poor (unique byte ranges) | Excellent (discrete segment files) |
+| Adaptive bitrate | Not implemented | Built-in |
+| CDN support | Limited | Native |
+| iOS support | No | Native HLS |
+| Server load | High (fragmentation per request) | Low (pre-segmented) |
+| Implementation | Custom client code | Standard players |
+
+### HLS (HTTP Live Streaming) - Recommended for iOS Priority
+
+**Pros**:
+- Native iOS Safari support (no JavaScript needed)
+- Widely supported on all platforms
+- Excellent CDN caching
+- Adaptive bitrate streaming
+- Industry standard
+
+**Server-side requirements**:
+```bash
+# Convert MP4 to HLS using FFmpeg
+ffmpeg -i input.mp4 \
+  -codec: copy \
+  -start_number 0 \
+  -hls_time 10 \
+  -hls_list_size 0 \
+  -f hls output.m3u8
+```
+
+**Client-side implementation**:
+```typescript
+// iOS - Native support, just set src
+videoEl.src = 'https://server/video.m3u8';
+
+// Desktop/Android - Use hls.js library
+import Hls from 'hls.js';
+
+if (Hls.isSupported()) {
+  const hls = new Hls();
+  hls.loadSource('https://server/video.m3u8');
+  hls.attachMedia(videoEl);
+} else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+  // Native HLS support (Safari)
+  videoEl.src = 'https://server/video.m3u8';
+}
+```
+
+**Recommended library**: [hls.js](https://github.com/video-dev/hls.js/) (~200KB gzipped)
+
+### DASH (Dynamic Adaptive Streaming over HTTP)
+
+**Pros**:
+- More flexible than HLS
+- Better codec support (VP9, AV1)
+- Standardized by MPEG
+- Fine-grained control over segments
+
+**Cons**:
+- No native iOS support (requires JavaScript player)
+- More complex than HLS
+- Less widely deployed
+
+**Server-side requirements**:
+```bash
+# Convert MP4 to DASH using FFmpeg
+ffmpeg -i input.mp4 \
+  -codec: copy \
+  -f dash \
+  -seg_duration 10 \
+  output.mpd
+```
+
+**Client-side implementation**:
+```typescript
+import dashjs from 'dashjs';
+
+const player = dashjs.MediaPlayer().create();
+player.initialize(videoEl, 'https://server/video.mpd', true);
+```
+
+**Recommended library**: [dash.js](https://github.com/Dash-Industry-Forum/dash.js/) (~300KB gzipped)
+
+### Implementation Recommendations
+
+#### Phase 1: Server-Side Preparation
+1. Add FFmpeg or similar tool to transcode uploaded videos to HLS format
+2. Store both original MP4 and HLS segments (`.m3u8` + `.ts` files)
+3. Serve HLS segments from CDN if available
+
+#### Phase 2: Client-Side Integration
+1. Detect platform capability:
+   ```typescript
+   const canPlayHLS = videoEl.canPlayType('application/vnd.apple.mpegurl');
+   const hlsJsSupported = typeof Hls !== 'undefined' && Hls.isSupported();
+   ```
+2. Use native HLS on iOS Safari
+3. Use hls.js on other platforms
+4. Fall back to direct MP4 if HLS unavailable
+
+#### Phase 3: Adaptive Bitrate (Optional)
+1. Create multiple quality levels (1080p, 720p, 480p)
+2. Let HLS/DASH player auto-select based on bandwidth
+3. Configure quality switching thresholds
+
+### Estimated Effort
+
+| Task | Effort | Priority |
+|------|--------|----------|
+| Server: HLS transcoding pipeline | Medium | High |
+| Client: hls.js integration | Low | High |
+| Storage: HLS segment hosting | Low | High |
+| Multi-bitrate encoding | Medium | Low |
+| DASH support | Medium | Low |
+
+### When to Implement
+
+Consider HLS/DASH when:
+- Users report buffering issues with large files
+- Need adaptive bitrate for varying network conditions
+- Want CDN-friendly video delivery
+- Require better seeking performance in large files
+
+For current use case with direct src mode working well, this is **not urgent** but recommended for future scalability.
+
+---
+
+## Summary of Architecture Evolution
+
+| Date | Implementation | Status |
+|------|---------------|--------|
+| Pre-2026 | Direct src | Working |
+| Jan 2026 | MediaSource chunking | Implemented then disabled |
+| Jan 21, 2026 | Direct src (reverted) | **Current** |
+| Future | HLS/DASH | **Recommended** |
