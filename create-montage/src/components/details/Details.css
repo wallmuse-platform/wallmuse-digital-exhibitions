@@ -1,0 +1,23 @@
+.details-grid > .MuiGrid2-root .wm-thumbnail {
+    height: 100%;
+    width: 100%;
+}
+.details-grid .MuiTypography-root.MuiTypography-subtitle1 {
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+.wm-save-btn .MuiPaper-root .MuiMenuItem-root {
+    padding: 10px
+}
+.wm-save-btn .MuiPaper-root .MuiMenuItem-root {
+    padding: 10px;
+}
+.wm-save-btn .MuiSvgIcon-root {
+    margin-right: 5px;
+}
+.wm-save-btn .save-options-button .MuiSvgIcon-root {
+    padding-left: 0;
+    padding-right: 0;
+    margin-right: 0;
+}
+

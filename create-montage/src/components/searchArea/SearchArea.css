@@ -1,0 +1,68 @@
+.search-box {
+    display: inline-block;
+    text-align: center;
+    justify-content: center;
+    width: 100%;
+    padding-top: 5px;
+}
+.MuiToggleButtonGroup-root {
+    width: 90%;
+}
+.MuiToggleButton-root.MuiToggleButton-primary {
+    text-transform: none;
+    padding: 5px;
+    width: 50%;
+    line-height: 1.25;
+}
+
+/* Selected toggle button: filled style with primary background */
+.MuiToggleButton-root.MuiToggleButton-primary.Mui-selected {
+    background-color: var(--nv-primary-accent);
+    color: #fff;
+    border-color: var(--nv-primary-accent);
+}
+.MuiToggleButton-root.MuiToggleButton-primary.Mui-selected:hover {
+    background-color: var(--nv-primary-accent);
+    /* ak was FFFFFF */
+}
+
+/* Non-selected toggle button: outlined style */
+.MuiToggleButton-root.MuiToggleButton-primary:not(.Mui-selected) {
+    background-color: transparent;
+    color: var(--nv-primary-accent);
+    border-color: var(--nv-primary-accent);
+}
+.search-box > .chips {
+    display: inline-block;
+    width: 90%;
+    margin-top: 10px;
+}
+.MuiChip-root.MuiChip-filled, .MuiChip-root.MuiChip-filled:hover {
+    border: 1px solid;
+}
+.MuiChip-root.MuiChip-outlined.wm-chip {
+    border: 1px solid;
+}
+.MuiToggleButtonGroup-root.wm-select-element {
+    margin-top: 8px;
+    width: 70%
+}
+.MuiToggleButtonGroup-root.wm-select-element > .MuiButtonBase-root {
+    padding: 2px 0;
+    width: 33.33%;  /* Three buttons in this group */
+}
+.MuiTablePagination-root.wm-pagination {
+    width: 100%;
+}
+.MuiTablePagination-root.wm-pagination > .MuiToolbar-root {
+    padding-left: 4px;
+}
+.MuiTablePagination-root.wm-pagination > .MuiToolbar-root > .MuiInputBase-root {
+    margin: 0 3px;
+}
+.MuiTablePagination-root.wm-pagination > .MuiToolbar-root > .MuiTablePagination-actions {
+    margin-left: 0;
+}
+.MuiAutocomplete-popper {
+    min-width: 180px;
+}

@@ -1,0 +1,23 @@
+.active {
+    background-color: var(--nv-primary-accent);
+    color: white;
+}
+
+/* Add this to your CSS file or custom CSS section */
+@media screen and (max-width: 1080px) {
+    .create-montage-grid.tablet-pc-notice {
+        display: block;
+    }
+}
+
+@media screen and (min-width: 1081px) {
+    .create-montage-grid.tablet-pc-notice {
+        display: none;
+    }
+}
+
+/* Fix WordPress theme CSS hiding Autocomplete label */
+.wm-autocomplete.wm-autocomplete.search-category .MuiAutocomplete-inputRoot .MuiAutocomplete-input {
+    opacity: 1;
+    min-width: 30px;
+}
