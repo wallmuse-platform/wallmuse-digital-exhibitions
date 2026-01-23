@@ -1,0 +1,29 @@
+.MuiBox-root > .search-form {
+    margin-top: 12px;
+}
+.MuiBox-root .MuiTextField-root.search-term {
+    margin: 0 8px;
+    width: 45%;
+    font-size: 0.875rem;
+}
+.MuiBox-root input {
+    font-size: 0.875rem;
+}
+.MuiTextField-root > .MuiFormLabel-root {
+    font-size: 0.875rem;
+}
+.search-form .MuiAutocomplete-root.search-category {
+    margin: 0 8px;
+    width: 45%;
+    font-size: 0.875rem;
+}
+.search-form .MuiAutocomplete-root.search-category > .MuiFormControl-root {
+    margin: 0;
+}
+.search-form .MuiAutocomplete-root.search-category > .MuiFormControl-root input {
+    text-transform: capitalize;
+}
+.wm-ac-option {
+    text-transform: capitalize;
+    font-size: 0.875rem;
+}

@@ -1,0 +1,19 @@
+:fullscreen, ::backdrop {
+    background-color: rgba(255,255,255,0);
+}
+
+.MuiBox-root > .MuiCircularProgress-root.wm-progress {
+    margin: 20px auto;
+    display: block;
+}
+.MuiBadge-root > .wm-badge {
+    border-radius: 2px;
+    width: 25px;
+    height: 25px;
+}
+.wm-sc-chkbox > .MuiTypography-root {
+    font-size: 0.875rem;
+}
+.wm-artwork {
+    cursor: move
+}
