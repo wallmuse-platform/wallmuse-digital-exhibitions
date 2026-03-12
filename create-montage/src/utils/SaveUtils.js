@@ -93,23 +93,28 @@ const constructTrackArtwork = (artwork, isFromMontage) => {
     return trackArtwork;
 }
 
+const boolToYesNo = val => val ? "yes" : "no";
+
 const constructTrackTitle = artwork => {
     const title = artwork.titleElement;
-    return {
+    console.log("[SaveUtils] constructTrackTitle - titleElement:", title);
+    const result = {
         tag_name: "title",
         next_count: title.nextCount,
         previous_count: title.previousCount,
         valign: title.valign,
         halign: title.halign,
-        display_title: title.displayTitle,
-        display_author: title.displayAuthor,
-        display_datation: title.displayDatation,
-        display_description: title.displayDescription,
-        display_credits: title.displayCredits,
+        display_title: boolToYesNo(title.displayTitle),
+        display_author: boolToYesNo(title.displayAuthor),
+        display_datation: boolToYesNo(title.displayDatation),
+        display_description: boolToYesNo(title.displayDescription),
+        display_credits: boolToYesNo(title.displayCredits),
         duration: artwork.duration.toString(),
-        background_color: title.backgroundColor,
-        font: title.font + 'FF',
-        color: title.color + 'FF',
+        background_color: title.backgroundColor.replace('#', ''),
+        font: title.font,
+        color: title.color.replace('#', '') + 'FF',
         size: title.size
     };
+    console.log("[SaveUtils] constructTrackTitle - result:", result);
+    return result;
 }

@@ -14,6 +14,7 @@ import * as React from "react";
 import TrackTitle from "../tools/title/TrackTitle";
 import { isTitle } from "../tools/ToolUtils";
 import { useTranslation } from "react-i18next";
+import { currentTheme } from "../../theme/ThemeUtils";
 
 export default function EditArtworkDialog({ editDialogOpen, handleEditDialogClose, artwork, handleDurationChange, handleRemove, handleEditDialogSave, titleElement, setTitleElement }) {
 
@@ -21,7 +22,7 @@ export default function EditArtworkDialog({ editDialogOpen, handleEditDialogClos
 
     const title = isTitle(artwork)
         ? t("track.title.edit")
-        : t("track.artwork.edit");
+        : t("track.artwork.edit." + currentTheme());
 
     return(
         <Dialog open={ editDialogOpen } onClose={ handleEditDialogClose } maxWidth='md'>

@@ -60,19 +60,33 @@ function constructTrackItem(item, trackNumber, trackIndex) {
     return trackArtwork;
 }
 
+function yesNoToBool(val) {
+    return val === "yes" || val === true;
+}
+
 function constructTrackTitle(trackTitle, item, trackNumber, trackIndex) {
     trackTitle.titleElement = constructDefaultTitleElement();
     trackTitle.trackId = Date.now().toString() + ToolTypes.TITLE + trackIndex + trackNumber;
     trackTitle.type = BinTypes.TOOL;
     trackTitle.toolType = ToolTypes.TITLE;
-    trackTitle.nextCount = parseInt(item.next_count);
-    trackTitle.previousCount = parseInt(item.previous_count);
-    trackTitle.displayTitle = item.display_title;
-    trackTitle.displayAuthor = item.display_author;
-    trackTitle.displayDatation = item.display_datation;
-    trackTitle.displayDescription = item.display_description;
-    trackTitle.displayCredits = item.display_credits;
-    trackTitle.backgroundColor = item.background_color;
+    // Set properties on titleElement, not trackTitle
+    trackTitle.titleElement.nextCount = parseInt(item.next_count);
+    trackTitle.titleElement.previousCount = parseInt(item.previous_count);
+    // Convert "yes"/"no" strings from API to booleans for checkboxes
+    trackTitle.titleElement.displayTitle = yesNoToBool(item.display_title);
+    trackTitle.titleElement.displayAuthor = yesNoToBool(item.display_author);
+    trackTitle.titleElement.displayDatation = yesNoToBool(item.display_datation);
+    trackTitle.titleElement.displayDescription = yesNoToBool(item.display_description);
+    trackTitle.titleElement.displayCredits = yesNoToBool(item.display_credits);
+    trackTitle.titleElement.backgroundColor = item.background_color;
+    // Restore properties that were missing
+    if (item.font) trackTitle.titleElement.font = item.font;
+    if (item.size) trackTitle.titleElement.size = item.size;
+    if (item.halign) trackTitle.titleElement.halign = item.halign;
+    if (item.valign) trackTitle.titleElement.valign = item.valign;
+    // Strip 'FF' alpha suffix that was appended during save
+    if (item.color) trackTitle.titleElement.color = item.color.replace(/FF$/, '');
+    console.log("[MontageUtils] constructTrackTitle - loaded titleElement:", trackTitle.titleElement);
 }
 function constructTrackArtwork(trackArtwork, item, trackNumber, trackIndex) {
     trackArtwork.id = item.artwork_id.toString();

@@ -18,6 +18,7 @@ import { EditOutlined } from "@mui/icons-material";
 import EditArtworkDialog from "./EditArtworkDialog";
 import { isFunctionTool, isTitle } from "../tools/ToolUtils";
 import { ToolTypes } from "../constants/ToolTypes";
+import { currentTheme } from "../../theme/ThemeUtils";
 import Box from "@mui/material/Box";
 import CenterFocusStrongIcon from "@mui/icons-material/CenterFocusStrong";
 import ExtensionIcon from "@mui/icons-material/Extension";
@@ -77,7 +78,7 @@ const TrackArtwork = function TrackArtwork({ trackId, artwork, index, updateArtw
         if (isTitle(artwork)) {
             artwork.titleElement = titleElement;
         }
-        updateArtwork(index, index, duration * 1000);
+        updateArtwork(index, index, duration * 1000, false, isTitle(artwork) ? titleElement : null);
         setEditDialogOpen(false);
     };
     const handleEditDialogClose = () => {
@@ -158,7 +159,7 @@ const TrackArtwork = function TrackArtwork({ trackId, artwork, index, updateArtw
 
     const renderEditIcon = (artwork) => {
         return (
-            <Tooltip title={ t("track.artwork.edit") }>
+            <Tooltip title={ t("track.artwork.edit." + currentTheme()) }>
                 <IconButton
                     aria-label={ `${t("track.artwork.edit-properties")} "${getName(artwork)}"` }
                     onClick={ handleOpenEditDialog }

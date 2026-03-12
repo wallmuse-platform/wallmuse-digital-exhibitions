@@ -62,7 +62,7 @@ export default function BasicGrid() {
         overflow: "auto",
     }
 
-    const [currentUser, setCurrentUser] = useState([]);
+    const [currentUser, setCurrentUser] = useState({});
     const [artworks, setArtworks] = useState([]);
     const [montages, setMontages] = useState([]);
     const [selectedChip, setSelectedChip] = useState("1")
@@ -135,6 +135,12 @@ export default function BasicGrid() {
     };
 
     const calculateNumberOfTracks = () => trackArtworks.filter(track => track.length > 0).length;
+
+    useEffect(() => {
+        getUser().then(user => {
+            if (user?.id) setCurrentUser(user);
+        }).catch(() => {});
+    }, []);
 
     useEffect(() => {
         console.log('[Grid] currentUser state changed to:', currentUser);

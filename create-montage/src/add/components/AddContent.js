@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@mui/material/styles';
-import { searchCopyrightOwner } from '../../api'
+import { searchCopyrightOwner, addCopyrightOwner } from '../../api'
 import { getUserId } from '../../utils/Utils';
 import { useUserContext } from '../../context/UserContext';
 import CopyrightOwnerSelector from './CopyrightOwnerSelector';
@@ -53,11 +53,28 @@ export function AddContent({ selectedContent }) {
   const [titleValue, setTitleValue] = useState('');
 
   const artworkAuthorRef = useRef('');
-  const [author, setAuthor] = useState('');
+  const [authorFirstName,  setAuthorFirstName]  = useState('');
+  const [authorMiddleName, setAuthorMiddleName] = useState('');
+  const [authorSurName,    setAuthorSurName]    = useState('');
+
+  // Compose the display name from split fields
+  const composeAuthorName = (first, mid, sur) =>
+    [first, mid, sur].filter(s => s && s.trim()).join(' ');
+
+  // Split a full display name into { first, middle, sur }
+  // 1 word  → sur only (single name / nickname)
+  // 2 words → first + sur
+  // 3+ words → first + middle (all middle words) + sur (last word)
+  const splitDisplayName = (displayName) => {
+    const parts = (displayName || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return { first: '', middle: '', sur: '' };
+    if (parts.length === 1) return { first: '', middle: '', sur: parts[0] };
+    if (parts.length === 2) return { first: parts[0], middle: '', sur: parts[1] };
+    return { first: parts[0], middle: parts.slice(1, -1).join(' '), sur: parts[parts.length - 1] };
+  };
 
   const languageRef = useRef('');
 
-  const [potentialCopyrightOwners, setPotentialCopyrightOwners] = useState([]);
   // const authorFieldFocused = useRef(false); //prevents unwanted nearby author popup
 
   const [localDialogVisible, setLocalDialogVisible] = useState(false);
@@ -267,10 +284,37 @@ export function AddContent({ selectedContent }) {
         });
       }
 
-      // Set the author name
+      // Set the author name — fetch real split fields from the copyright owner API
       artworkAuthorRef.current = authorName;
-      setAuthor(authorName);
       setSelectedOwnerId(authorId.toString());
+
+      // Fetch the actual first/middle/surname from the DB via searchCopyrightOwner,
+      // then match by ID so we get the correct split even for compound surnames.
+      // Fall back to splitDisplayName only if the lookup fails or returns no match.
+      if (authorName) {
+        const resolveAuthorFields = async () => {
+          try {
+            const owners = await searchCopyrightOwner(sessionId, authorName);
+            const match = owners.find(o => String(o.id) === String(authorId)) || owners[0];
+            if (match && (match.firstName || match.surName)) {
+              setAuthorFirstName(match.firstName  || '');
+              setAuthorMiddleName(match.middleName || '');
+              setAuthorSurName(match.surName       || '');
+            } else {
+              const { first, middle, sur } = splitDisplayName(authorName);
+              setAuthorFirstName(first);
+              setAuthorMiddleName(middle);
+              setAuthorSurName(sur);
+            }
+          } catch {
+            const { first, middle, sur } = splitDisplayName(authorName);
+            setAuthorFirstName(first);
+            setAuthorMiddleName(middle);
+            setAuthorSurName(sur);
+          }
+        };
+        resolveAuthorFields();
+      }
 
       console.log("[AddContent] FINAL author state:", {
         ref: artworkAuthorRef.current,
@@ -404,6 +448,7 @@ export function AddContent({ selectedContent }) {
         const mappedCredits = selectedContent.credits.map(credit => ({
           name: credit.name,
           type: credit.kind,        // Map 'kind' to 'type'
+          location: credit.country || 'ALL', // Map 'country' to 'location', NULL -> 'ALL'
           owner_id: credit.id,      // Map 'id' to 'owner_id'
           seq: credit.seq           // Preserve existing sequence
         }));
@@ -430,6 +475,9 @@ export function AddContent({ selectedContent }) {
       setContentId('');
       titleRef.current = '';
       artworkAuthorRef.current = '';
+      setAuthorFirstName('');
+      setAuthorMiddleName('');
+      setAuthorSurName('');
       setDescriptions([]);
       datationTextRef.current = '';
       datationHiddenRef.current = false;
@@ -601,6 +649,48 @@ export function AddContent({ selectedContent }) {
       const descriptionTexts = validDescriptions.map(desc => desc.description);
       const descriptionLangs = validDescriptions.map(desc => desc.language);
 
+      // Compose the full display name from split fields
+      artworkAuthorRef.current = composeAuthorName(authorFirstName, authorMiddleName, authorSurName);
+
+      // Resolve the owner ID at save time — the onBlur search may not have fired
+      // (e.g. user clicked Save without tabbing out of Surname field).
+      let resolvedOwnerId = selectedOwnerId;
+      if (resolvedOwnerId === '-1' && artworkAuthorRef.current.trim() !== '') {
+        try {
+          const sessionId = getUserId();
+          const found = await searchCopyrightOwner(sessionId, artworkAuthorRef.current);
+          const searchLower = artworkAuthorRef.current.trim().toLowerCase();
+          const exact = found.find(o =>
+            (o.displayName || '').toLowerCase() === searchLower ||
+            (o.name        || '').toLowerCase() === searchLower
+          );
+          if (exact) {
+            console.log('[AddContent] Resolved owner at save time:', exact);
+            resolvedOwnerId = exact.id;
+            setSelectedOwnerId(exact.id);
+          }
+        } catch (e) {
+          console.error('[AddContent] Owner search at save time failed:', e);
+        }
+      }
+
+      // Resolve owner IDs for credits that don't have one yet (LOC, PHO, OWN, REP)
+      const resolvedCredits = await Promise.all(credits.map(async (credit) => {
+        if (credit.owner_id && credit.owner_id !== '-1') return credit;
+        try {
+          const found = await searchCopyrightOwner(sessionId, credit.name);
+          const nameLower = credit.name.trim().toLowerCase();
+          const match = found.find(o =>
+            (o.displayName || '').toLowerCase() === nameLower ||
+            (o.name        || '').toLowerCase() === nameLower
+          );
+          if (match) return { ...credit, owner_id: match.id };
+        } catch (e) {
+          console.error('[AddContent] Credit owner search failed for:', credit.name, e);
+        }
+        return credit;
+      }));
+
       // Prepare the contentData with descriptions, rights, and other fields
       const updatedContentData = {
         title: titleRef.current,
@@ -623,15 +713,16 @@ export function AddContent({ selectedContent }) {
         sdPath: sdPath || mediaRef.current.sdPath,
         thumbPath: thumbnailPath || mediaRef.current.thumbnailPath,
         rights: rights,
-        credits: credits,
+        credits: resolvedCredits,
         streaming: contentDataRef.current.streaming,
         splittable: contentDataRef.current.splittable,
         croppable: contentDataRef.current.croppable,
         deconstructable: contentDataRef.current.deconstructable,
         // Add owner info from the copyright owner selection
         ownerInfo: {
-          id: selectedOwnerId, // From the useCopyrightOwner hook
-          name: artworkAuthorRef.current
+          id: resolvedOwnerId,
+          name: artworkAuthorRef.current,
+          displayName: artworkAuthorRef.current,
         }
       };
       console.log("[handleSubmitForm] Final data being sent:", {
@@ -722,12 +813,17 @@ export function AddContent({ selectedContent }) {
   const ClearForm = () => {
     // Clear state (for UI display)
     setTitleValue('');
-    setAuthor('');
+    setAuthorFirstName('');
+    setAuthorMiddleName('');
+    setAuthorSurName('');
     setDatationTextValue('');
     
     // Clear refs (for form submission data)
     titleRef.current = '';
     artworkAuthorRef.current = '';
+    setAuthorFirstName('');
+    setAuthorMiddleName('');
+    setAuthorSurName('');
     datationTextRef.current = '';
     
     // Clear validation states
@@ -820,8 +916,8 @@ export function AddContent({ selectedContent }) {
     const isTitleValid = titleRef.current && titleRef.current.trim() !== '';
     setTitleValid(isTitleValid);
 
-    // Author validation
-    const isAuthorValid = artworkAuthorRef.current && artworkAuthorRef.current.trim() !== '';
+    // Author validation — at least first name or surname required
+    const isAuthorValid = authorFirstName.trim() !== '' || authorSurName.trim() !== '';
     setAuthorValid(isAuthorValid);
 
     // Datation validation
@@ -896,11 +992,11 @@ export function AddContent({ selectedContent }) {
               fullWidth
             />
           </Box>
-          {/* Author field */}
+          {/* Author fields — First Name / Middle Name / Surname */}
           <Box sx={{ flex: { md: 1 }, width: 'auto' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <Typography variant="body2" component="label" htmlFor="author-field">
-                {t("ArtistName_")}
+              <Typography variant="body2" component="label">
+                {t("author.label", "Author (First — Surname/Nickname)")}
                 <RequiredFieldIndicator
                   isValid={authorValid || !submitAttempted}
                   message={t("author.required")}
@@ -908,47 +1004,48 @@ export function AddContent({ selectedContent }) {
                 />
               </Typography>
             </Box>
-            <TextField
-              id="author-field"
-              value={author}
-              // defaultValue={artworkAuthorRef.current}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                artworkAuthorRef.current = newValue;
-                setAuthor(newValue);
-
-                // Don't immediately reset to -1, just mark it for reset if no match is found
-                // Only when we confirm there's no match should we set to -1
-
-                // Validate if needed
-                if (submitAttempted) {
-                  setAuthorValid(newValue.trim() !== '');
-                }
-
-                // Trigger the debounced search as you type
-                if (newValue.trim() !== '') {
-                  console.log("[AddContent] Triggering debounced search for:", newValue);
-                  searchOwner(newValue);
-                } else {
-                  // Only if empty, reset the owner ID
-                  resetOwner(); // Reset owner if field is empty
-                }
-              }}
-              // onFocus={() => {
-              //   authorFieldFocused.current = true;
-              // }}
-              onBlur={(e) => {
-                // authorFieldFocused.current = false;
-                const value = e.target.value.trim();
-                if (value !== '') {
-                  // Cancel any pending debounced searches
-                  searchOwner(value);
-                }
-              }}
-              error={!authorValid && submitAttempted}
-              helperText={(!authorValid && submitAttempted) ? t("author.required") : ""}
-              fullWidth
-            />
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                size="small"
+                label={t("author.firstName", "First Name")}
+                value={authorFirstName}
+                onChange={(e) => {
+                  setAuthorFirstName(e.target.value);
+                  if (e.target.value.trim() === '' && authorSurName.trim() === '') resetOwner();
+                  if (submitAttempted) setAuthorValid(e.target.value.trim() !== '' || authorSurName.trim() !== '');
+                }}
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                size="small"
+                label={t("author.middleName", "Middle Name")}
+                value={authorMiddleName}
+                onChange={(e) => setAuthorMiddleName(e.target.value)}
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                size="small"
+                id="author-surname-field"
+                label={t("author.surName", "Surname/Nickname")}
+                value={authorSurName}
+                onChange={(e) => {
+                  setAuthorSurName(e.target.value);
+                  if (e.target.value.trim() === '' && authorFirstName.trim() === '') resetOwner();
+                  if (submitAttempted) setAuthorValid(e.target.value.trim() !== '' || authorFirstName.trim() !== '');
+                }}
+                onBlur={(e) => {
+                  const composed = composeAuthorName(authorFirstName, authorMiddleName, e.target.value.trim());
+                  artworkAuthorRef.current = composed;
+                  if (composed !== '' && selectedOwnerId === '-1' && composed !== authorName) {
+                    console.log('[AddContent] Author blur - triggering search for:', composed);
+                    searchOwner(composed);
+                  }
+                }}
+                error={!authorValid && submitAttempted}
+                helperText={(!authorValid && submitAttempted) ? t("author.required") : t("author.surName.hint", "Required")}
+                sx={{ flex: 1 }}
+              />
+            </Box>
           </Box>
         </Box>
 
@@ -1448,7 +1545,7 @@ export function AddContent({ selectedContent }) {
               value={selectedOwnerId}
               onChange={(e) => setSelectedOwnerId(e.target.value)}
             >
-              {potentialCopyrightOwners.map((owner) => (
+              {potentialOwners.map((owner) => (
                 <FormControlLabel
                   key={owner.id}
                   value={owner.id}
@@ -1459,13 +1556,17 @@ export function AddContent({ selectedContent }) {
               <FormControlLabel
                 value="-1"
                 control={<Radio />}
-                label={`${t("keep")} "${artworkAuthorRef.current}" (${t("create.new")})`}
+                label={`${t("keep")} "${composeAuthorName(authorFirstName, authorMiddleName, authorSurName)}" (${t("create.new")})`}
               />
             </RadioGroup>
           </FormControl>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowOwnerSelector(false)}>{t("Cancel")}</Button>
+          <Button onClick={() => {
+            // Remove focus before closing to avoid aria-hidden warning
+            document.activeElement?.blur();
+            setShowOwnerSelector(false);
+          }}>{t("Cancel")}</Button>
           <Button
             onClick={() => {
               console.log("[Add Contents Dialog] Confirm button clicked with selectedOwnerId:", selectedOwnerId);
@@ -1477,20 +1578,24 @@ export function AddContent({ selectedContent }) {
                 if (selectedOwner) {
                   console.log("[Add Contents Dialog] Selected existing author:", selectedOwner);
 
-                  const authorName = selectedOwner.displayName || selectedOwner.name;
+                  const ownerDisplayName = selectedOwner.displayName || selectedOwner.name;
+                  artworkAuthorRef.current = ownerDisplayName;
 
-                  // Update artworkAuthorRef and UI state
-                  artworkAuthorRef.current = authorName;
-                  setAuthor(authorName);
-
-                  // No need to manually call setSelectedOwnerId - it's already set via the RadioGroup
-                  console.log("[Add Contents Dialog] Updated author:", {
-                    ref: artworkAuthorRef.current,
-                    state: authorName,
-                    id: selectedOwnerId
-                  });
+                  // Pre-fill split fields from owner data if available, else split display name
+                  if (selectedOwner.firstName || selectedOwner.surName) {
+                    setAuthorFirstName(selectedOwner.firstName  || '');
+                    setAuthorMiddleName(selectedOwner.middleName || '');
+                    setAuthorSurName(selectedOwner.surName || '');
+                  } else {
+                    const { first, middle, sur } = splitDisplayName(ownerDisplayName);
+                    setAuthorFirstName(first);
+                    setAuthorMiddleName(middle);
+                    setAuthorSurName(sur);
+                  }
                 }
               }
+              // Remove focus before closing to avoid aria-hidden warning
+              document.activeElement?.blur();
               // Close the dialog
               setShowOwnerSelector(false);
             }}

@@ -129,9 +129,9 @@ export default function AlphaChannelInsertsDialog({artwork, setImage, updateAlph
                                         } }
                                         sx={ inputStyle }
                                     >
-                                        { tracks.map((track, index) => {
-                                            <MenuItem value="0">Track { index }</MenuItem>
-                                        }) }
+                                        { tracks.map((track, index) => (
+                                            <MenuItem key={index} value={index}>Track { index + 1 }</MenuItem>
+                                        )) }
                                     </Select>
                                 </Stack>) : null
                                 }
