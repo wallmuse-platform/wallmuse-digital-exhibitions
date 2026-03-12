@@ -45,10 +45,11 @@ export function useCopyrightOwner(onOwnerSelectorChange = null) {
                 if (owners.length > 0) {
                     console.log('[useCopyrightOwner] Found potential matches:', owners);
 
-                    // Check for EXACT match first
+                    // Check for EXACT match first (case-insensitive)
+                    const searchName = authorName.trim().toLowerCase();
                     const exactMatch = owners.find(owner =>
-                        owner.name === authorName.trim() ||
-                        owner.displayName === authorName.trim()
+                        (owner.name && owner.name.toLowerCase() === searchName) ||
+                        (owner.displayName && owner.displayName.toLowerCase() === searchName)
                     );
 
                     if (exactMatch) {
@@ -76,8 +77,8 @@ export function useCopyrightOwner(onOwnerSelectorChange = null) {
             }
         };
 
-        // Debounce the search
-        const timer = setTimeout(performSearch, 500);
+        // Debounce the search (1 second like legacy code)
+        const timer = setTimeout(performSearch, 1000);
         return () => clearTimeout(timer);
     }, [authorName, searchPending, sessionId]);
 

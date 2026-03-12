@@ -241,7 +241,7 @@ const Credits = ({
                     {credits.map((credit, index) => (
                         <ListItem key={index}>
                             <Chip
-                                label={`${credit.name} (${credit.type}) - ${credit.location}`}
+                                label={`${credit.name} (${credit.type}) - ${credit.location || 'ALL'}`}
                                 onClick={handleCreditClick(credit)}
                                 onDelete={handleCreditDelete(credit)}
                                 size="small"

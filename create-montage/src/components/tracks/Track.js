@@ -15,13 +15,17 @@ import { ToolTypes } from "../constants/ToolTypes";
 const Track = function Track({ trackNumber, artworks, setTrackArtworks, dropMontageIfAllowed, removeMontageFromAllTracks, removeExcessiveEmptyTracks, allowDrop, updateFunctionToolProperties }) {
 
     const getUpdatedTrackArtworks = useCallback(
-        (currentIndex, newIndex, duration, remove) => {
+        (currentIndex, newIndex, duration, remove, updatedTitleElement) => {
             // find changing artwork and make a copy of it
             const artwork = { ...artworks[currentIndex] };
 
             const newArtworks = artworks.map(a => ({...a}));
             if (duration) {
                 artwork.durationInMillis = duration;
+            }
+            // Apply updated titleElement if provided (from Edit dialog save)
+            if (updatedTitleElement) {
+                artwork.titleElement = updatedTitleElement;
             }
             newArtworks.splice(currentIndex, 1);
             if (!remove) {
@@ -57,7 +61,7 @@ const Track = function Track({ trackNumber, artworks, setTrackArtworks, dropMont
     }, [artworks, getUpdatedTrackArtworks])
 
     const updateArtwork = useCallback(
-        (currentIndex, newIndex, duration, remove) => {
+        (currentIndex, newIndex, duration, remove, updatedTitleElement) => {
             if (checkMontageSyncStartViolation(currentIndex, newIndex, duration, remove)) {
                 allowDrop(false)
                 return;
@@ -72,7 +76,7 @@ const Track = function Track({ trackNumber, artworks, setTrackArtworks, dropMont
 
             setTrackArtworks(previousTrackArtworks => {
                 const newTrackArtworks = [...previousTrackArtworks];
-                newTrackArtworks[trackNumber] = getUpdatedTrackArtworks(currentIndex, newIndex, duration, remove);
+                newTrackArtworks[trackNumber] = getUpdatedTrackArtworks(currentIndex, newIndex, duration, remove, updatedTitleElement);
                 return newTrackArtworks;
             });
             removeExcessiveEmptyTracks()

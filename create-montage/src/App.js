@@ -8,6 +8,8 @@ import { UserContext, SessionContext } from './context/UserContext';  // Import 
 import TabButtons from './commands/TabButtons';
 import AddContents from './add/AddContents';
 import BasicGrid from './components/grid/Grid'; // This is the "Create Montage/Curate" component
+import BatchUpload from './batch/BatchUpload';
+import MontageWizard from './wizard/MontageWizard';
 
 import TrialAccountOrNotWideSnackbar from './utils/TrialAccountSnackBar';
 import { ThemeProvider } from '@mui/material/styles';
@@ -59,7 +61,13 @@ function App() {
   let ComponentToRender;
   switch (section) {
     case 'addContents':
-      ComponentToRender = AddContents; // Renders the AddContents section
+      ComponentToRender = AddContents;
+      break;
+    case 'batchUpload':
+      ComponentToRender = () => <BatchUpload wpLoggedIn={wpLoggedIn} />;
+      break;
+    case 'wizard':
+      ComponentToRender = MontageWizard;
       break;
     default: // Default is 'basicGrid', which is the "Create Montage/Curate" section
       ComponentToRender = BasicGrid;
@@ -75,7 +83,7 @@ function App() {
             {/* TODO: place window.innerWidth < 1080 only for CreateMontage */}
           {(isDemo) && <TrialAccountOrNotWideSnackbar isDemo={isDemo} theme={currentTheme()} />}
           {/* Render the TabButtons component */}
-          <TabButtons t={t} setSection={setSection} />
+          <TabButtons t={t} setSection={setSection} wpLoggedIn={wpLoggedIn} />
 
           {/* Conditionally render the selected component */}
           <ComponentToRender className="rootMontageElement" />

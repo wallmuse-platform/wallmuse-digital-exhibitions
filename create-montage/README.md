@@ -70,7 +70,6 @@ Please note:
 | -------- | ------------                 |
 | Wallmuse | This is the default theme    | 
 | Sharex   | Theme for the Sharex account | 
-| AVIFF    | Theme for the AVIFF account  | 
 | OOO2     | Theme for the OOO2 account   | 
 
 
@@ -93,7 +92,6 @@ following themes are available:
 | -------- | ------------                 |
 | Wallmuse | This is the default theme    | 
 | Sharex   | Theme for the Sharex account | 
-| AVIFF    | Theme for the AVIFF account  | 
 | OOO2     | Theme for the OOO2 account   | 
 
 

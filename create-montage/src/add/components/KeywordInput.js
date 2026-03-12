@@ -39,10 +39,20 @@ export default function KeywordInput({ keywordsRef, setKeywords }) {
       <TextField
         label="Add Keyword"
         placeholder="Type and press Enter or ','"
-        onChange={handleInputChange}  // Track input change
-        onKeyDown={handleKeyPress}  // Handle key press
+        onChange={handleInputChange}
+        onKeyDown={handleKeyPress}
+        onBlur={() => {
+          // Also add keyword on blur so it's not lost if user clicks Save directly
+          const kw = inputValue.trim();
+          if (kw && !keywordsRef.current.includes(kw)) {
+            const updated = [...keywordsRef.current, kw];
+            keywordsRef.current = updated;
+            setKeywords(updated);
+            setInputValue('');
+          }
+        }}
         variant="outlined"
-        value={inputValue}  // Bind state to the value of the input field
+        value={inputValue}
       />
       <Stack direction="row" spacing={1}>
         {keywordsRef.current.map((keyword, index) => (

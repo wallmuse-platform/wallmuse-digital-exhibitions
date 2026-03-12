@@ -434,6 +434,12 @@ export const getArtworkById = async (artworkId) => {
       deconstructable: matchingArtwork.getAttribute('deconstructable') === 'Y',
       streaming: matchingArtwork.getAttribute('streaming') === 'Y',
 
+      // Keywords — stored as a comma-separated string in the XML attribute
+      keywords: (() => {
+        const raw = matchingArtwork.getAttribute('keywords') || '';
+        return raw ? raw.split(',').map(k => k.trim()).filter(Boolean) : [];
+      })(),
+
       // CRITICAL: Add individual path variables that AddContent expects
       hdPath: hdPath,
       sdPath: sdPath,
@@ -567,7 +573,7 @@ export async function searchCopyrightOwner(session, name) {
     console.log('[searchCopyrightOwner] Trying exact match API call');
 
     const response = await axios.post(
-      'https://ooo2.wallmuse.com:8443/wallmuse/ws/search_copyright_owner',
+      `${baseURL}/search_copyright_owner`,
       params,
       {
         headers: {
@@ -592,12 +598,15 @@ export async function searchCopyrightOwner(session, name) {
 
       let owners = [];
       for (let i = 0; i < copyrightOwners.length; i++) {
-        const owner = {
-          id: copyrightOwners[i].getAttribute('id'),
-          displayName: copyrightOwners[i].getAttribute('display_name'),
-          name: copyrightOwners[i].getAttribute('name'),
-        };
-        owners.push(owner);
+        const el = copyrightOwners[i];
+        owners.push({
+          id:          el.getAttribute('id'),
+          displayName: el.getAttribute('display_name'),
+          name:        el.getAttribute('name'),
+          firstName:   el.getAttribute('first_name'),
+          middleName:  el.getAttribute('middle_name'),
+          surName:     el.getAttribute('sur_name'),
+        });
       }
 
       // If we found matches, return them
@@ -629,7 +638,7 @@ export async function searchCopyrightOwner(session, name) {
         variantParams.append('kind', 'AUT');
 
         const variantResponse = await axios.post(
-          'https://ooo2.wallmuse.com:8443/wallmuse/ws/search_copyright_owner',
+          `${baseURL}/search_copyright_owner`,
           variantParams,
           {
             headers: {
@@ -646,10 +655,14 @@ export async function searchCopyrightOwner(session, name) {
         const copyrightOwners = xmlDoc.getElementsByTagName('copyright_owner');
 
         for (let i = 0; i < copyrightOwners.length; i++) {
+          const el = copyrightOwners[i];
           const owner = {
-            id: copyrightOwners[i].getAttribute('id'),
-            displayName: copyrightOwners[i].getAttribute('display_name'),
-            name: copyrightOwners[i].getAttribute('name'),
+            id:          el.getAttribute('id'),
+            displayName: el.getAttribute('display_name'),
+            name:        el.getAttribute('name'),
+            firstName:   el.getAttribute('first_name'),
+            middleName:  el.getAttribute('middle_name'),
+            surName:     el.getAttribute('sur_name'),
           };
 
           // Only add if not already in the list
@@ -712,6 +725,64 @@ export async function searchCopyrightOwner(session, name) {
   return [];
 }
 
+// Parse a single copyright_owner XML element into a plain object.
+// The Java backend has a typo — it calls sendXml("copyrigh_owner", ...) (missing 't'),
+// so we try both tag names.
+function parseCopyrightOwnerXml(xmlDoc) {
+  const el = xmlDoc.getElementsByTagName('copyright_owner')[0]
+           || xmlDoc.getElementsByTagName('copyrigh_owner')[0];
+  if (!el) {
+    console.warn('[parseCopyrightOwnerXml] No copyright_owner element found. Raw XML:', new XMLSerializer().serializeToString(xmlDoc));
+    return null;
+  }
+  return {
+    id:          el.getAttribute('id'),
+    firstName:   el.getAttribute('first_name'),
+    middleName:  el.getAttribute('middle_name'),
+    name:        el.getAttribute('name'),
+    surName:     el.getAttribute('sur_name'),
+    displayName: el.getAttribute('display_name'),
+    kind:        el.getAttribute('kind'),
+  };
+}
+
+export async function addCopyrightOwner({ firstName, middleName, name, surName, kind = 'AUT' }) {
+  const sessionId = getUserId();
+  const params = new URLSearchParams();
+  params.append('version', '1');
+  params.append('session', sessionId);
+  params.append('name', name);
+  if (firstName)  params.append('first_name',  firstName);
+  if (middleName) params.append('middle_name', middleName);
+  if (surName)    params.append('sur_name',    surName);
+  if (kind)       params.append('kind',        kind);
+
+  const response = await axios.post(`${baseURL}/add_copyright_owner`, params, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  const xmlDoc = new DOMParser().parseFromString(response.data, 'text/xml');
+  return parseCopyrightOwnerXml(xmlDoc);
+}
+
+export async function updateCopyrightOwner(ownerId, { firstName, middleName, name, surName, kind }) {
+  const sessionId = getUserId();
+  const params = new URLSearchParams();
+  params.append('version', '1');
+  params.append('session', sessionId);
+  params.append('owner', ownerId);
+  params.append('name', name);
+  if (firstName)  params.append('first_name',  firstName);
+  if (middleName) params.append('middle_name', middleName);
+  if (surName)    params.append('sur_name',    surName);
+  if (kind)       params.append('kind',        kind);
+
+  const response = await axios.post(`${baseURL}/update_copyright_owner`, params, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  const xmlDoc = new DOMParser().parseFromString(response.data, 'text/xml');
+  return parseCopyrightOwnerXml(xmlDoc);
+}
+
 // Helper function to generate name variants for better fuzzy matching
 function generateNameVariants(name) {
   const variants = [name]; // Start with the original name
@@ -772,7 +843,7 @@ export function testCopyrightOwnerSearch(name) {
   console.log('Request params:', Object.fromEntries(formData.entries()));
 
   axios
-    .post('https://wallmuse.com:8443/wallmuse/ws/search_copyright_owner', formData, {
+    .post(`${baseURL}/search_copyright_owner`, formData, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     })
     .then(response => {
@@ -805,7 +876,7 @@ export function testCopyrightOwnerSearch(name) {
         console.log('Trying broader search without name...');
 
         axios
-          .post('https://wallmuse.com:8443/wallmuse/ws/search_copyright_owner', allFormData, {
+          .post(`${baseURL}/search_copyright_owner`, allFormData, {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           })
           .then(allResponse => {
@@ -853,6 +924,152 @@ export function testCopyrightOwnerSearch(name) {
 window.testCopyrightOwnerSearch = testCopyrightOwnerSearch;
 
 const cleanupEmptyParam = param => (!param || param.trim().length === 0 ? null : param);
+
+// ─── Batch Upload API ───────────────────────────────────────────────────────
+
+const parseXML = (text) => {
+  const parser = new DOMParser();
+  return parser.parseFromString(text, 'text/xml');
+};
+
+/**
+ * Step 1 – Check files: validates the CSV and uploaded artwork filenames.
+ * @param {File} csvFile  The UTF-16 TXT metadata file
+ * @param {File[]} files  The artwork files the user has selected
+ * @returns {{ artworks?: Array<{path: string, errors: string|null}>, error?: string }}
+ */
+export const checkBatchFiles = async (csvFile, files) => {
+  const sessionId = getUserId();
+  const filenames = files.map(f => f.name).join('|');
+  const formData = new FormData();
+  formData.append('session', sessionId);
+  formData.append('version', '1');
+  formData.append('filenames', filenames);
+  formData.append('file', csvFile);
+
+  try {
+    const response = await axios.post(`${baseURL}/upload_artworks_check`, formData, {
+      responseType: 'text',
+    });
+    const xml = parseXML(response.data);
+    const errorEl = xml.querySelector('error');
+    if (errorEl) {
+      return { error: errorEl.getAttribute('message') || 'Server error during check.' };
+    }
+    const artworkEls = xml.querySelectorAll('artwork');
+    if (artworkEls.length === 0) {
+      return { error: 'Please use a proper file format.' };
+    }
+    const artworks = Array.from(artworkEls).map(el => ({
+      path: el.getAttribute('path-artwork'),
+      errors: el.getAttribute('errors') || null,
+    }));
+    return { artworks };
+  } catch (err) {
+    console.error('[api] checkBatchFiles error:', err);
+    return { error: err.message };
+  }
+};
+
+/**
+ * Step 2 – Save choices: maps CSV filenames to real uploaded filenames.
+ * @param {File} csvFile
+ * @param {File[]} files
+ */
+export const saveBatchChoices = async (csvFile, files) => {
+  const sessionId = getUserId();
+  const filenames = files.map(f => f.name).join('|');
+  const body = new URLSearchParams({
+    session: sessionId,
+    version: '1',
+    csv: csvFile.name,
+    filenames,
+    choices: filenames,
+  });
+  try {
+    const response = await axios.post(`${baseURL}/upload_artworks_choices`, body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      responseType: 'text',
+    });
+    const xml = parseXML(response.data);
+    const errorEl = xml.querySelector('error');
+    if (errorEl) {
+      console.error('[api] saveBatchChoices error:', errorEl.getAttribute('message'));
+      return { error: errorEl.getAttribute('message') };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('[api] saveBatchChoices error:', err);
+    return { error: err.message };
+  }
+};
+
+/**
+ * Step 3 – Upload a single artwork file, reporting client-side progress.
+ * @param {File} csvFile
+ * @param {File} file
+ * @param {(percent: number) => void} onProgress
+ * @returns {{ success: boolean, error?: string }}
+ */
+export const uploadBatchArtwork = async (csvFile, file, onProgress) => {
+  const sessionId = getUserId();
+  const formData = new FormData();
+  formData.append('session', sessionId);
+  formData.append('version', '1');
+  formData.append('csv', csvFile.name);
+  formData.append('file', file);
+
+  try {
+    await axios.post(`${baseURL}/upload_artwork`, formData, {
+      responseType: 'text',
+      onUploadProgress: (event) => {
+        if (event.total) {
+          onProgress?.(Math.round((event.loaded * 100) / event.total));
+        }
+      },
+    });
+    return { success: true };
+  } catch (err) {
+    console.error('[api] uploadBatchArtwork error:', file.name, err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Step 4 – Import artworks: commits uploaded files into the Wallmuse DB.
+ * @param {File} csvFile
+ * @returns {{ success: boolean, errors?: Array<{line, artwork, firstname, lastname, error}> }}
+ */
+export const importBatchArtworks = async (csvFile) => {
+  const sessionId = getUserId();
+  const body = new URLSearchParams({
+    session: sessionId,
+    version: '1',
+    csv: csvFile.name,
+  });
+  try {
+    const response = await axios.post(`${baseURL}/upload_artworks_import`, body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      responseType: 'text',
+    });
+    const xml = parseXML(response.data);
+    const errorEls = xml.querySelectorAll('error');
+    if (errorEls.length === 0) {
+      return { success: true };
+    }
+    const errors = Array.from(errorEls).map(el => ({
+      line: el.getAttribute('line'),
+      artwork: el.getAttribute('artwork'),
+      firstname: el.getAttribute('artist-firstname'),
+      lastname: el.getAttribute('artist-lastname'),
+      error: el.getAttribute('error') || el.getAttribute('message'),
+    }));
+    return { success: false, errors };
+  } catch (err) {
+    console.error('[api] importBatchArtworks error:', err);
+    return { success: false, errors: [{ error: err.message }] };
+  }
+};
 
 // #%RAML 1.0
 // title: Wallmuse API

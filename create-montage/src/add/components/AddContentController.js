@@ -379,7 +379,9 @@ export async function saveInitialArtwork(contentData) {
                 console.log("[saveInitialArtwork] Adding right to XML with owner:", { ownerId, ownerName });
 
                 // Always use owner_id (like your original working code)
-                artworkXML += `<copyright owner_id="${ownerId}" type="${right.type}" country="${right.country}" direction="A" kind="HD"/>`;
+                // Omit country attribute when ALL - backend stores NULL for all countries
+                const countryAttr = (right.country && right.country !== 'ALL') ? ` country="${right.country}"` : '';
+                artworkXML += `<copyright owner_id="${ownerId}" type="${right.type}"${countryAttr} direction="A" kind="HD"/>`;
             }
         });
     }
@@ -398,14 +400,9 @@ export async function saveInitialArtwork(contentData) {
             const description = contentData.amediadesc[i];
             const language = contentData.alanguage[i];
             if (description && language) {
-                // ✅ Only escape XML-breaking characters, not encoding
-                const xmlSafeDesc = description
-                    .replace(/&/g, '&amp;')     // Must be first
-                    .replace(/</g, '&lt;')      // Escape < for XML
-                    .replace(/>/g, '&gt;')      // Escape > for XML  
-                    .replace(/"/g, '&quot;');   // Escape quotes for attributes
-
-                artworkXML += `<description language="${language}" description="${xmlSafeDesc}"/>`;
+                // Use escapeXML to convert accented characters to numeric entities
+                // (prevents UTF-8 multi-encoding through qs.stringify/URL encoding)
+                artworkXML += `<description language="${language}" description="${escapeXML(description)}"/>`;
             }
         }
     }
@@ -431,22 +428,24 @@ export async function saveInitialArtwork(contentData) {
             if (credit.name && (credit.type || credit.kind)) {
                 const creditName = escapeXML(credit.name);
 
-                // Fix: Handle both 'owner_id' and 'id' properties
-                const ownerId = credit.owner_id || credit.id || contentData.ownerInfo?.id || "-1";
+                // Use credit's own owner_id if resolved; fall back to the artwork owner.
+                // Backend requires a valid owner_id — new entities not yet in DB will use
+                // the artwork owner as a stand-in until the backend supports creating them.
+                const rawOwnerId = credit.owner_id || credit.id;
+                const ownerId = (rawOwnerId && rawOwnerId !== '-1')
+                    ? rawOwnerId
+                    : (contentData.ownerInfo?.id && contentData.ownerInfo.id !== '-1'
+                        ? contentData.ownerInfo.id
+                        : null);
 
                 // Fix: Use either 'type' or 'kind'
                 const creditType = credit.type || credit.kind;
-
-                console.log("[saveInitialArtwork] Adding credit with owner:", {
-                    creditName,
-                    type: creditType,
-                    ownerId
-                });
+                const ownerAttr = ownerId ? ` owner_id="${ownerId}"` : '';
 
                 if (creditType === 'AUT') {
-                    artworkXML += `<credit seq="${creditSeq}" name="${creditName}" display_name="${creditName}" copyright="${creditName}" owner_id="${ownerId}" kind="AUT"/>`;
+                    artworkXML += `<credit seq="${creditSeq}" name="${creditName}" display_name="${creditName}" copyright="${creditName}"${ownerAttr} kind="AUT"/>`;
                 } else {
-                    artworkXML += `<credit seq="${creditSeq}" name="${creditName}" display_name="${creditName}" owner_id="${ownerId}" kind="${creditType}"/>`;
+                    artworkXML += `<credit seq="${creditSeq}" name="${creditName}" display_name="${creditName}" copyright="${creditName}"${ownerAttr} kind="${creditType}"/>`;
                 }
 
                 creditSeq++;
