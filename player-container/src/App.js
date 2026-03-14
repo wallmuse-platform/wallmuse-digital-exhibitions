@@ -108,6 +108,9 @@ import {
 function App({ onAppReady }) {
   console.log("[App InitMechanism] started");
 
+  const volumeRef = useRef(null);
+  const playModeRef = useRef(false);
+
   // Add useEffect to signal app ready after initial render
   useEffect(() => {
     console.log(
@@ -123,7 +126,7 @@ function App({ onAppReady }) {
       <EnvironmentsProvider>
         <PlaylistsProvider>
           <div className="App">
-            <DontStartBefore />
+            <DontStartBefore volumeRef={volumeRef} playModeRef={playModeRef} />
           </div>
         </PlaylistsProvider>
       </EnvironmentsProvider>
@@ -133,14 +136,10 @@ function App({ onAppReady }) {
 
 export default App;
 
-function DontStartBefore() {
+function DontStartBefore({ volumeRef, playModeRef }) {
   console.log("[DontStartBefore] started");
 
   // 1. ALL useState calls first
-  const volumeRef = useRef(
-    parseInt(localStorage.getItem("wallmuse-volume") || "0"),
-  );
-  const playModeRef = useRef(false);
 
   // 2. ALL context hooks
   const {
@@ -267,7 +266,7 @@ function DontStartBefore() {
   console.log("[DontStartBefore] Finished, rendering PlayerIntegration");
   return (
     <div className="PlayerIntegration">
-      <PermissionDialog theme={theme} />
+      <PermissionDialog theme={theme} t={t} />
       <PlayerIntegration
         theme={theme}
         volumeRef={volumeRef}

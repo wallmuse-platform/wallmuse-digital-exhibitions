@@ -1,11 +1,11 @@
 // index.js (main app)
 import React from "react";
-import { createRoot } from 'react-dom/client';
+import { createRoot } from "react-dom/client";
 import * as Sentry from "@sentry/react";
 import "./index.css";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
-import './i18n';
+import "./i18n";
 
 // Initialize Sentry with performance monitoring
 Sentry.init({
@@ -16,9 +16,9 @@ Sentry.init({
   initialScope: {
     tags: {
       app: "explore-app",
-      domain: window.location.hostname
-    }
-  }
+      domain: window.location.hostname,
+    },
+  },
 });
 
 // Track app loading state
@@ -28,7 +28,10 @@ let wallmuseInitFound = false;
 // Loading timeout detection
 setTimeout(() => {
   if (!appMounted) {
-    Sentry.captureMessage("React app failed to mount within 10 seconds", "error");
+    Sentry.captureMessage(
+      "React app failed to mount within 10 seconds",
+      "error",
+    );
   }
   if (!wallmuseInitFound && !window.WallmuseInit) {
     Sentry.captureMessage("WallmuseInit not found after 10 seconds", "warning");
@@ -37,42 +40,46 @@ setTimeout(() => {
 
 // Verify WallmuseInit exists
 if (!window.WallmuseInit) {
-  console.warn('[Index.js Player InitMechanism] WallmuseInit not found! Creating fallback');
+  console.warn(
+    "[Index.js Player InitMechanism] WallmuseInit not found! Creating fallback",
+  );
   Sentry.addBreadcrumb({
-    message: 'WallmuseInit not found, creating fallback',
-    level: 'warning'
+    message: "WallmuseInit not found, creating fallback",
+    level: "warning",
   });
-  
+
   // Create fallback implementation if missing
   window.WallmuseInit = {
     _playerReady: false,
     _webplayerReady: false,
     queue: [],
-    playerReady: function() {
+    playerReady: function () {
       return Promise.resolve();
     },
-    ready: function(component) {
+    ready: function (component) {
       console.log(`[WallmuseInit Fallback] ${component} ready`);
-      if (component === 'player') this._playerReady = true;
-      if (component === 'webplayer') this._webplayerReady = true;
+      if (component === "player") this._playerReady = true;
+      if (component === "webplayer") this._webplayerReady = true;
     },
-    processQueue: function() {},
-    onBothReady: function(fn) {
+    processQueue: function () {},
+    onBothReady: function (fn) {
       setTimeout(fn, 0);
-    }
+    },
   };
 } else {
-  console.log('[Index.js Player InitMechanism] WallmuseInit found and available');
+  console.log(
+    "[Index.js Player InitMechanism] WallmuseInit found and available",
+  );
   wallmuseInitFound = true;
   Sentry.addBreadcrumb({
-    message: 'WallmuseInit found successfully',
-    level: 'info'
+    message: "WallmuseInit found successfully",
+    level: "info",
   });
 }
 
 const initializeReactApp = () => {
   try {
-    const container = document.getElementById('root');
+    const container = document.getElementById("root");
     if (!container) {
       const error = new Error("Root container not found in DOM");
       Sentry.captureException(error);
@@ -83,9 +90,9 @@ const initializeReactApp = () => {
 
     root.render(
       <React.StrictMode>
-        <Sentry.ErrorBoundary 
-          fallback={({error}) => (
-            <div style={{padding: '20px', textAlign: 'center'}}>
+        <Sentry.ErrorBoundary
+          fallback={({ error }) => (
+            <div style={{ padding: "20px", textAlign: "center" }}>
               <h2>Something went wrong</h2>
               <p>Please refresh the page or try again later.</p>
               <button onClick={() => window.location.reload()}>
@@ -95,31 +102,34 @@ const initializeReactApp = () => {
           )}
           showDialog
         >
-          <App onAppReady={() => {
-            // Signal that player is ready after App is mounted and ready
-            console.log('[Index.js Player InitMechanism] App mounted, signaling player ready');
-            appMounted = true;
-            
-            Sentry.addBreadcrumb({
-              message: 'React App mounted successfully',
-              level: 'info'
-            });
-            
-            if (window.WallmuseInit) {
-              window.WallmuseInit.ready('player');
-            }
-          }} />
+          <App
+            onAppReady={() => {
+              // Signal that player is ready after App is mounted and ready
+              console.log(
+                "[Index.js Player InitMechanism] App mounted, signaling player ready",
+              );
+              appMounted = true;
+
+              Sentry.addBreadcrumb({
+                message: "React App mounted successfully",
+                level: "info",
+              });
+
+              if (window.WallmuseInit) {
+                window.WallmuseInit.ready("player");
+              }
+            }}
+          />
         </Sentry.ErrorBoundary>
-      </React.StrictMode>
+      </React.StrictMode>,
     );
 
     Sentry.addBreadcrumb({
-      message: 'React app render initiated',
-      level: 'info'
+      message: "React app render initiated",
+      level: "info",
     });
-
   } catch (error) {
-    console.error('[Index.js] Failed to initialize React app:', error);
+    console.error("[Index.js] Failed to initialize React app:", error);
     Sentry.captureException(error);
   }
 };
@@ -128,9 +138,9 @@ const initializeReactApp = () => {
 try {
   initializeReactApp();
 } catch (error) {
-  console.error('[Index.js] Critical initialization error:', error);
+  console.error("[Index.js] Critical initialization error:", error);
   Sentry.captureException(error);
-  
+
   // Show fallback UI if React fails completely
   document.body.innerHTML = `
     <div style="padding: 40px; text-align: center; font-family: Arial;">
@@ -145,16 +155,18 @@ try {
 setTimeout(() => {
   if (window.WallmuseInit) {
     if (!window.WallmuseInit._playerReady) {
-      console.log('[Index.js Player InitMechanism] Forcing player ready state after timeout');
+      console.log(
+        "[Index.js Player InitMechanism] Forcing player ready state after timeout",
+      );
       Sentry.addBreadcrumb({
-        message: 'Player ready state forced after timeout',
-        level: 'warning'
+        message: "Player ready state forced after timeout",
+        level: "warning",
       });
-      window.WallmuseInit.ready('player');
+      window.WallmuseInit.ready("player");
     }
   } else {
-    const error = new Error('WallmuseInit still not found after timeout');
-    console.error('[Index.js Player InitMechanism]', error.message);
+    const error = new Error("WallmuseInit still not found after timeout");
+    console.error("[Index.js Player InitMechanism]", error.message);
     Sentry.captureException(error);
   }
 }, 5000); // 5 second timeout
@@ -162,10 +174,12 @@ setTimeout(() => {
 // Enhanced reportWebVitals with Sentry integration
 reportWebVitals((metric) => {
   // Report poor performance metrics to Sentry
-  if (metric.name === 'LCP' && metric.value > 4000) { // Poor LCP > 4s
-    Sentry.captureMessage(`Poor LCP performance: ${metric.value}ms`, 'warning');
+  if (metric.name === "LCP" && metric.value > 4000) {
+    // Poor LCP > 4s
+    Sentry.captureMessage(`Poor LCP performance: ${metric.value}ms`, "warning");
   }
-  if (metric.name === 'FID' && metric.value > 300) { // Poor FID > 300ms
-    Sentry.captureMessage(`Poor FID performance: ${metric.value}ms`, 'warning');
+  if (metric.name === "FID" && metric.value > 300) {
+    // Poor FID > 300ms
+    Sentry.captureMessage(`Poor FID performance: ${metric.value}ms`, "warning");
   }
 });

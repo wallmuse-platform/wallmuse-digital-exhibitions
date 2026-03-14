@@ -27,7 +27,17 @@ const WebPlayer = React.memo(function WebPlayer({
   const [reloadTrigger, setReloadTrigger] = useState(0); // Trigger reload when incremented
 
   // Get loading states from useEnvironments hook
-  const { initialLoading, syncLoading, playlistLoading } = useEnvironments();
+  const { initialLoading, syncLoading, playlistLoading, refreshScreenState } = useEnvironments();
+
+  // When the webplayer registers its screen, refresh environment display without remounting the player
+  useEffect(() => {
+    const handler = (e) => {
+      logInfo('wmScreenReady received — refreshing screen state', e.detail);
+      if (refreshScreenState) refreshScreenState();
+    };
+    window.addEventListener('wmScreenReady', handler);
+    return () => window.removeEventListener('wmScreenReady', handler);
+  }, [refreshScreenState]);
 
   // Comprehensive loading logic
   const showLoading = initialLoading || syncLoading || internalLoading || playlistLoading || !isChildPlayerReady;
@@ -80,13 +90,15 @@ const WebPlayer = React.memo(function WebPlayer({
 
         let environmentId = getEnvironmentId();
         let screenId = getScreenId(environmentId);
+        let envKey = getEnvKey();
 
-        if (!environmentId || !screenId) {
+        if (!environmentId || !screenId || !envKey) {
           // If no environments exist, use fallback values - child WebPlayer will create actual environment
           logInfo("⚠️ No environment/screen found, using fallback values - child WebPlayer will create environment");
           // Use fallback values - child TypeScript app will handle environment creation
           environmentId = "0"; // Child WebPlayer will create real environment
           screenId = "0"; // Child WebPlayer will create real screen
+          envKey = null;
         }
 
         const sessionId = getUserId();
@@ -103,7 +115,7 @@ const WebPlayer = React.memo(function WebPlayer({
           environ: environmentId.toString(),
           screen: screenId.toString(),
           session: sessionId,
-          key: null,
+          key: envKey,
           ready: true,
           controlledByParent: true,
           createEnvironment: false,
@@ -115,17 +127,19 @@ const WebPlayer = React.memo(function WebPlayer({
         logInfo(`Set globals - track: ${trackNumber}, montage: ${currentMontage}`);
 
         // Build the player URL
-        // const baseUrl = `/wp-content/themes/neve-child-master/wm-player/index.html`;
-         const baseUrl = `/wp-content/themes/neve-child-master/wm-playerB/index.html`;
-        const params = new URLSearchParams({
+        const baseUrl = `/wp-content/themes/neve-child-master/wm-player/index.html`;
+        // const baseUrl = `/wp-content/themes/neve-child-master/wm-playerB/index.html`;
+        const urlParamsObj = {
           session: wallmuseParams.session,
           anticache: anticache.toString(),
           track: trackNumber.toString(),
           house: wallmuseParams.house,
           environ: wallmuseParams.environ,
           screen: wallmuseParams.screen
-        });
-        
+        };
+        if (wallmuseParams.key) urlParamsObj.key = wallmuseParams.key;
+        const params = new URLSearchParams(urlParamsObj);
+
         const playerUrl = `${baseUrl}?${params.toString()}`;
         logInfo(`Loading player from: ${playerUrl}`);
 
@@ -374,11 +388,31 @@ const WebPlayer = React.memo(function WebPlayer({
   };
 
   const getScreenId = (environmentId) => {
-    // Comment out environments dependency - child will create screen
-    // if (!environmentId || !environments?.length) return null;
-    // const environment = environments.find(env => env.id === environmentId);
-    // return environment?.screens?.length > 0 ? environment.screens[0].id : null;
-    return null; // Always return null - child will handle screen creation
+    try {
+      const wmHouseRaw = localStorage.getItem('wm-house');
+      if (wmHouseRaw) {
+        const wmHouse = JSON.parse(wmHouseRaw);
+        if (wmHouse.screenId && String(wmHouse.environId) === String(environmentId)) {
+          return wmHouse.screenId;
+        }
+      }
+    } catch (error) {
+      logError('Error getting screen ID:', error);
+    }
+    return null;
+  };
+
+  const getEnvKey = () => {
+    try {
+      const wmHouseRaw = localStorage.getItem('wm-house');
+      if (wmHouseRaw) {
+        const wmHouse = JSON.parse(wmHouseRaw);
+        return wmHouse.key || null;
+      }
+    } catch (error) {
+      logError('Error getting env key:', error);
+    }
+    return null;
   };
 
   return (

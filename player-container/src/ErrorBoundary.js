@@ -1,5 +1,5 @@
 // ErrorBoundary.js
-import React from 'react';
+import React from "react";
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -14,12 +14,12 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     // Log the error to the console
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
     this.setState({
       error: error,
-      errorInfo: errorInfo
+      errorInfo: errorInfo,
     });
-    
+
     // You could also log the error to an error reporting service
     // logErrorToService(error, errorInfo);
   }
@@ -28,19 +28,23 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       // You can render any custom fallback UI
       return (
-        <div style={{ 
-          padding: '20px', 
-          margin: '20px', 
-          border: '1px solid #f44336',
-          borderRadius: '4px',
-          backgroundColor: '#ffebee'
-        }}>
+        <div
+          style={{
+            padding: "20px",
+            margin: "20px",
+            border: "1px solid #f44336",
+            borderRadius: "4px",
+            backgroundColor: "#ffebee",
+          }}
+        >
           <h2>Something went wrong.</h2>
-          <details style={{ whiteSpace: 'pre-wrap', marginTop: '10px' }}>
+          <details style={{ whiteSpace: "pre-wrap", marginTop: "10px" }}>
             <summary>Show error details</summary>
             <p>{this.state.error && this.state.error.toString()}</p>
             <p>Component Stack:</p>
-            <pre>{this.state.errorInfo && this.state.errorInfo.componentStack}</pre>
+            <pre>
+              {this.state.errorInfo && this.state.errorInfo.componentStack}
+            </pre>
           </details>
           {this.props.fallback || null}
         </div>

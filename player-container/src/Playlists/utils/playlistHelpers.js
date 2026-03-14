@@ -4,87 +4,150 @@
  * Core function to sync playlist with backend and update UI/WebPlayer only after confirmation.
  * Exported for reuse in other flows.
  */
-export async function syncPlaylistAndUI(playlistId, handlePlaylistChange, setReadyToPlayPlaylist, currentPlaylist) {
-    console.log(`[PlaylistHelpers] Now waiting for backend confirmation...`);
-    const syncSuccess = await handlePlaylistChange(playlistId);
-    console.log(`[PlaylistHelpers] Backend sync completed with result: ${syncSuccess}`);
+export async function syncPlaylistAndUI(
+  playlistId,
+  handlePlaylistChange,
+  setReadyToPlayPlaylist,
+  currentPlaylist,
+) {
+  console.log(`[PlaylistHelpers] Now waiting for backend confirmation...`);
+  const syncSuccess = await handlePlaylistChange(playlistId);
+  console.log(
+    `[PlaylistHelpers] Backend sync completed with result: ${syncSuccess}`,
+  );
 
-    if (syncSuccess) {
-        console.log(`[PlaylistHelpers] Playlist ${playlistId} is now current.`);
-        if (setReadyToPlayPlaylist) setReadyToPlayPlaylist(true);
-        const isCurrent = (playlistId == currentPlaylist);
-        console.log('[PlaylistHelpers] currentPlaylist after sync:', currentPlaylist, 'isCurrent:', isCurrent);
-    } else {
-        console.warn(`[PlaylistHelpers] Backend sync failed or timed out for playlist ${playlistId}.`);
-    }
-    return syncSuccess;
+  if (syncSuccess) {
+    console.log(`[PlaylistHelpers] Playlist ${playlistId} is now current.`);
+    if (setReadyToPlayPlaylist) setReadyToPlayPlaylist(true);
+    const isCurrent = playlistId == currentPlaylist;
+    console.log(
+      "[PlaylistHelpers] currentPlaylist after sync:",
+      currentPlaylist,
+      "isCurrent:",
+      isCurrent,
+    );
+  } else {
+    console.warn(
+      `[PlaylistHelpers] Backend sync failed or timed out for playlist ${playlistId}.`,
+    );
+  }
+  return syncSuccess;
 }
 
+/**
+ * Auto-saves playlist updates to the backend.
+ *
+ * IMPORTANT: Uses playlistId (not playlistIndex) to identify the playlist.
+ * This avoids index mismatch issues when mono-playlists are filtered out of the UI.
+ * See PlayLists.js header comment for details on playlistIndex vs playlistId.
+ */
 export const autoSaveUpdates = async ({
-    playlistIndex,
-    playlist,
-    updatePlaylist,
-    setSaveInProgress,
-    updateSaveStatus,
-    handlePlaylistUpdate,
-    t,
-    skipStateUpdate = false,
-    currentPlaylistId, // optional
-    syncWithBackend,   // optional: function (playlistId) => Promise<boolean>
-    setReadyToPlayPlaylist, // optional
+  playlistId, // The actual playlist ID (use playlist.id)
+  playlist,
+  updatePlaylist,
+  setSaveInProgress,
+  updateSaveStatus,
+  handlePlaylistUpdate,
+  t,
+  skipStateUpdate = false,
+  currentPlaylistId, // optional
+  syncWithBackend, // optional: function (playlistId) => Promise<boolean>
+  setReadyToPlayPlaylist, // optional
 }) => {
-    console.log("[playlistHelpers] autoSaveUpdates called with: playlistIndex, playlist", playlistIndex, playlist, skipStateUpdate);
+  console.log(
+    "[playlistHelpers] autoSaveUpdates called with: playlistId, playlist",
+    playlistId,
+    playlist,
+    skipStateUpdate,
+  );
 
-    if (!playlist.changed) {
-        console.log("[playlistHelpers] No changes to save for playlist:", playlist.name);
-        return Promise.resolve(); // Return a resolved promise if no changes
-    }
+  if (!playlist.changed) {
+    console.log(
+      "[playlistHelpers] No changes to save for playlist:",
+      playlist.name,
+    );
+    return Promise.resolve(); // Return a resolved promise if no changes
+  }
 
-    console.log("[playlistHelpers] Updating changed playlist:", playlist);
-    const montageIds = playlist.montages.map(m => m.id).join(',');
-    const checks = playlist.montages.map(m => m.is_checked == "1" ? "1" : "0").join(',');
+  console.log("[playlistHelpers] Updating changed playlist:", playlist);
+  const montageIds = playlist.montages.map((m) => m.id).join(",");
+  const checks = playlist.montages
+    .map((m) => (m.is_checked == "1" ? "1" : "0"))
+    .join(",");
 
-    console.log("[playlistHelpers] Extracted montageIds and checks:", montageIds, checks);
+  console.log(
+    "[playlistHelpers] Extracted montageIds and checks:",
+    montageIds,
+    checks,
+  );
 
-    setSaveInProgress(true);
+  setSaveInProgress(true);
 
-    try {
-        const response = await updatePlaylist(playlist.id, playlist.name, montageIds, checks);
-        console.log("[playlistHelpers] Response from updatePlaylist:", response);
-        setSaveInProgress(false);
+  try {
+    const response = await updatePlaylist(
+      playlist.id,
+      playlist.name,
+      montageIds,
+      checks,
+    );
+    console.log("[playlistHelpers] Response from updatePlaylist:", response);
+    setSaveInProgress(false);
 
-        if (response.status >= 200 && response.status < 300) {
-            if (!skipStateUpdate) {
-                handlePlaylistUpdate(playlistIndex, playlist.name);
-            } else {
-                // When skipping state update, only update success flags, not the playlists
-                updateSaveStatus(true, null, undefined); // Pass undefined to prevent state update
-            }
-            console.log("[playlistHelpers] Playlist update successful for:", playlist.name);
+    if (response.status >= 200 && response.status < 300) {
+      if (!skipStateUpdate) {
+        handlePlaylistUpdate(playlistId, playlist.name);
+      } else {
+        // When skipping state update, only update success flags, not the playlists
+        updateSaveStatus(true, null, undefined); // Pass undefined to prevent state update
+      }
+      console.log(
+        "[playlistHelpers] Playlist update successful for:",
+        playlist.name,
+      );
 
-        // --- NEW LOGIC: Backend sync if current playlist ---
-        if (syncWithBackend && playlist.id === currentPlaylistId) {
-            console.log('[playlistHelpers] About to call syncWithBackend for playlist.id:', playlist.id, 'currentPlaylistId:', currentPlaylistId);
-            try {
-                const syncResult = await syncWithBackend(playlist.id);
-                console.log('[playlistHelpers] syncWithBackend result for playlist.id:', playlist.id, '=>', syncResult);
-                if (setReadyToPlayPlaylist) {
-                    console.log('[playlistHelpers] Calling setReadyToPlayPlaylist for playlist.id:', playlist.id);
-                    setReadyToPlayPlaylist(true);
-                }
-            } catch (err) {
-                console.error('[playlistHelpers] Error in syncWithBackend for playlist.id:', playlist.id, err);
-            }
+      // --- NEW LOGIC: Backend sync if current playlist ---
+      if (syncWithBackend && playlist.id === currentPlaylistId) {
+        console.log(
+          "[playlistHelpers] About to call syncWithBackend for playlist.id:",
+          playlist.id,
+          "currentPlaylistId:",
+          currentPlaylistId,
+        );
+        try {
+          const syncResult = await syncWithBackend(playlist.id);
+          console.log(
+            "[playlistHelpers] syncWithBackend result for playlist.id:",
+            playlist.id,
+            "=>",
+            syncResult,
+          );
+          if (setReadyToPlayPlaylist) {
+            console.log(
+              "[playlistHelpers] Calling setReadyToPlayPlaylist for playlist.id:",
+              playlist.id,
+            );
+            setReadyToPlayPlaylist(true);
+          }
+        } catch (err) {
+          console.error(
+            "[playlistHelpers] Error in syncWithBackend for playlist.id:",
+            playlist.id,
+            err,
+          );
         }
-            // --- END NEW LOGIC ---
-            return response;
-        } else {
-            throw new Error(`${t("error")}: ${response.statusText}`);
-        }
-    } catch (error) {
-        console.error("[playlistHelpers] Error during updatePlaylist call:", error);
-        setSaveInProgress(false);
-        updateSaveStatus(false, `${t("error")}: ${error.message}. ${t("error.generic")}`);
-        throw error;
+      }
+      // --- END NEW LOGIC ---
+      return response;
+    } else {
+      throw new Error(`${t("error")}: ${response.statusText}`);
     }
+  } catch (error) {
+    console.error("[playlistHelpers] Error during updatePlaylist call:", error);
+    setSaveInProgress(false);
+    updateSaveStatus(
+      false,
+      `${t("error")}: ${error.message}. ${t("error.generic")}`,
+    );
+    throw error;
+  }
 };

@@ -11,6 +11,18 @@
  * - Manages playlist saving, updating, and deletion
  * - Handles user permissions and guest access
  *
+ * IMPORTANT: playlistIndex vs playlistId
+ * --------------------------------------
+ * The UI displays a FILTERED list of playlists (memoizedPlaylists) that excludes
+ * mono-playlists (internal playlists named "mono-{montageId}" for single montage playback).
+ *
+ * - playlistIndex: Index in the FILTERED memoizedPlaylists array (used for UI display only)
+ * - playlistId: The actual playlist ID (used for ALL operations: update, delete, reorder, etc.)
+ *
+ * All callback functions (handleMontageReorder, removeMontageFromPlaylist, handlePlaylistUpdate,
+ * updateDeleteStatus, handleMontageClick) use playlistId to find the correct playlist in the
+ * UNFILTERED playlists array. This prevents index mismatch bugs when mono-playlists exist.
+ *
  * State Management:
  * - Uses PlaylistsContext for global playlist state
  * - Manages async operations (add, save, delete, load)
@@ -25,10 +37,10 @@
  * @param {Function} props.handlePlaylistChange - Change handler
  *
  * Key Functions:
- * - handlePlaylistUpdate: Updates playlist metadata and content
- * - handleMontageReorder: Manages drag and drop reordering
- * - moveMontageToPlaylist: Transfers montages between playlists
- * - removeMontageFromPlaylist: Deletes montages from playlists
+ * - handlePlaylistUpdate: Updates playlist metadata and content (uses playlistId)
+ * - handleMontageReorder: Manages drag and drop reordering (uses playlistId)
+ * - moveMontageToPlaylist: Transfers montages between playlists (uses playlistId)
+ * - removeMontageFromPlaylist: Deletes montages from playlists (uses playlistId)
  *
  * Performance Considerations:
  * - Uses memoization for filtered playlists
@@ -169,7 +181,7 @@ function Playlists({
   );
 
   const updateDeleteStatus = useCallback(
-    (deleteSuccess, deleteError, deletedPlaylistIndex) => {
+    (deleteSuccess, deleteError, deletedPlaylistId) => {
       // Use handleAction to handle guest account check if needed
       handleAction(
         () => {
@@ -191,9 +203,9 @@ function Playlists({
 
           setDeleteSuccess(deleteSuccess);
 
-          if (deleteSuccess && deletedPlaylistIndex !== null) {
+          if (deleteSuccess && deletedPlaylistId !== null) {
             setPlaylists((prevPlaylists) =>
-              prevPlaylists.filter((_, idx) => idx !== deletedPlaylistIndex),
+              prevPlaylists.filter((p) => p.id !== deletedPlaylistId),
             );
           }
         },
@@ -205,18 +217,32 @@ function Playlists({
 
   //TODO FRED SERVER AFFECTS CREATE M TOO/ WS: in the mean time patch that works
   const handlePlaylistUpdate = useCallback(
-    (playlistIndex, name) => {
+    (playlistId, name) => {
       handleAction(
         () => {
+          // Find the actual playlist index by ID
+          const actualPlaylistIndex = playlists.findIndex(
+            (p) => p.id === playlistId || (!p.id && !playlistId),
+          );
+
+          if (actualPlaylistIndex === -1) {
+            console.error(
+              `[PlayLists] handlePlaylistUpdate: Could not find playlist with id=${playlistId}`,
+            );
+            return;
+          }
+
           console.log(
-            "[Playlists Fred] playlistIndex:",
-            playlistIndex,
+            "[Playlists Fred] playlistId:",
+            playlistId,
+            " actualPlaylistIndex:",
+            actualPlaylistIndex,
             " name:",
             name,
           );
           // Update playlists immutably
           const newPlaylists = playlists.map((pl, idx) => {
-            if (idx === playlistIndex) {
+            if (idx === actualPlaylistIndex) {
               return {
                 ...pl,
                 ...(name && { name }), // Only update name if provided
@@ -226,16 +252,16 @@ function Playlists({
             return pl;
           });
           console.log(
-            "[Playlists Fred] playlistIndex:",
-            playlistIndex,
+            "[Playlists Fred] playlistId:",
+            playlistId,
             " newPlaylists:",
             newPlaylists,
           );
 
           console.log("[PlayLists] About to call autoSaveUpdates:", {
-            playlistIndex,
-            playlist: newPlaylists[playlistIndex],
-            montageIds: newPlaylists[playlistIndex].montages.map((m) => m.id),
+            playlistIndex: actualPlaylistIndex,
+            playlist: newPlaylists[actualPlaylistIndex],
+            montageIds: newPlaylists[actualPlaylistIndex].montages.map((m) => m.id),
           });
 
           setPlaylists(newPlaylists);
@@ -247,24 +273,34 @@ function Playlists({
   );
 
   // TODO server not passing to WebPlayer TS, so can't handle
-  //   const handleMontageChecked = useCallback((montageIndex, playlistIndex) => {
+  // Updated to use playlistId instead of playlistIndex (see header comment for details)
+  //   const handleMontageChecked = useCallback((montageIndex, playlistId) => {
+  //     // Find the actual playlist index by ID
+  //     const actualPlaylistIndex = playlists.findIndex(
+  //       (p) => p.id === playlistId || (!p.id && !playlistId),
+  //     );
+  //     if (actualPlaylistIndex === -1) {
+  //       console.error(`[PlayLists] handleMontageChecked: Could not find playlist with id=${playlistId}`);
+  //       return;
+  //     }
+  //
   //     const newPlaylists = [...playlists];
-  //     const currentState = newPlaylists[playlistIndex].montages[montageIndex].is_checked === "1";
-  //     newPlaylists[playlistIndex].montages[montageIndex].is_checked = currentState ? "0" : "1";
-  //     newPlaylists[playlistIndex].changed = true;
-
-  //     console.log('[PlayLists handleMontageClick] After toggle, updated montage:', newPlaylists[playlistIndex].montages[montageIndex]);
-  //     console.log('[PlayLists handleMontageClick] Updated playlists before setting state:', newPlaylists);
-
+  //     const currentState = newPlaylists[actualPlaylistIndex].montages[montageIndex].is_checked === "1";
+  //     newPlaylists[actualPlaylistIndex].montages[montageIndex].is_checked = currentState ? "0" : "1";
+  //     newPlaylists[actualPlaylistIndex].changed = true;
+  //
+  //     console.log('[PlayLists ] After toggle, updated montage:', newPlaylists[actualPlaylistIndex].montages[montageIndex]);
+  //     console.log('[PlayLists handleMontageChecked] Updated playlists before setting state:', newPlaylists);
+  //
   //     // Use a callback to ensure state is updated before proceeding
   //     setPlaylists(newPlaylists);
-  //     console.log('[PlayLists handleMontageClick after setPlaylist] Updated playlists before setting state:', newPlaylists);
-
-  //     console.log('[PlayLists handleMontageClick after setPlaylist] Sending montage:', newPlaylists[playlistIndex].montages[montageIndex]);
-
+  //     console.log('[PlayLists handleMontageChecked after setPlaylist] Updated playlists before setting state:', newPlaylists);
+  //
+  //     console.log('[PlayLists handleMontageChecked after setPlaylist] Sending montage:', newPlaylists[actualPlaylistIndex].montages[montageIndex]);
+  //
   //     autoSaveUpdates({
-  //         playlistIndex,
-  //         playlist: newPlaylists[playlistIndex],
+  //         playlistId: playlistId, // Use playlistId, not index
+  //         playlist: newPlaylists[actualPlaylistIndex],
   //         updatePlaylist,
   //         setSaveInProgress,
   //         updateSaveStatus,
@@ -274,33 +310,45 @@ function Playlists({
   // }, [playlists, updatePlaylist, setSaveInProgress, updateSaveStatus, handlePlaylistUpdate, t]);
 
   const handleMontageClick = useCallback(
-    (montageIndex, playlistIndex) => {
+    (montageIndex, playlistId) => {
       handleAction(
         () => {
+          // Find the actual playlist index by ID
+          const actualPlaylistIndex = playlists.findIndex(
+            (p) => p.id === playlistId || (!p.id && !playlistId),
+          );
+
+          if (actualPlaylistIndex === -1) {
+            console.error(
+              `[PlayLists] handleMontageClick: Could not find playlist with id=${playlistId}`,
+            );
+            return;
+          }
+
           const newPlaylists = [...playlists];
           const currentState =
-            newPlaylists[playlistIndex].montages[montageIndex].is_checked ===
+            newPlaylists[actualPlaylistIndex].montages[montageIndex].is_checked ===
             "1";
-          newPlaylists[playlistIndex].montages[montageIndex].is_checked =
+          newPlaylists[actualPlaylistIndex].montages[montageIndex].is_checked =
             currentState ? "0" : "1";
-          newPlaylists[playlistIndex].changed = true;
+          newPlaylists[actualPlaylistIndex].changed = true;
 
-          if (playlists.id === currentPlaylist) {
+          if (playlistId === currentPlaylist) {
             console.log(
               "[PlayLists handleMontageClick currentPlaylist] Montage changed in current playlist:",
-              playlists.id,
+              playlistId,
             );
             // No need to call setCurrentPlaylist here!
           } else {
             console.log(
               "[PlayLists handleMontageClick currentPlaylist] Montage changed in non-current playlist:",
-              playlists.id,
+              playlistId,
             );
           }
 
           console.log(
             "[PlayLists handleMontageClick] After toggle, updated montage:",
-            newPlaylists[playlistIndex].montages[montageIndex],
+            newPlaylists[actualPlaylistIndex].montages[montageIndex],
           );
           console.log(
             "[PlayLists handleMontageClick] Updated playlists before setting state:",
@@ -316,12 +364,12 @@ function Playlists({
 
           console.log(
             "[PlayLists handleMontageClick after setPlaylist] Sending montage:",
-            newPlaylists[playlistIndex].montages[montageIndex],
+            newPlaylists[actualPlaylistIndex].montages[montageIndex],
           );
 
           autoSaveUpdates({
-            playlistIndex,
-            playlist: newPlaylists[playlistIndex],
+            playlistId: playlistId, // Use playlistId, not index
+            playlist: newPlaylists[actualPlaylistIndex],
             updatePlaylist,
             setSaveInProgress,
             updateSaveStatus,
@@ -347,14 +395,26 @@ function Playlists({
   );
 
   const handleMontageReorder = useCallback(
-    (montages, playlistIndex) => {
+    (montages, playlistId) => {
       // Use handleAction to show GuestActionPopup for demo accounts
       handleAction(
         () => {
+          // Find the actual playlist index by ID
+          const actualPlaylistIndex = playlists.findIndex(
+            (p) => p.id === playlistId || (!p.id && !playlistId),
+          );
+
+          if (actualPlaylistIndex === -1) {
+            console.error(
+              `[PlayLists] handleMontageReorder: Could not find playlist with id=${playlistId}`,
+            );
+            return;
+          }
+
           // Update playlists state with new montage order
           setPlaylists((prevPlaylists) => {
             const newPlaylists = prevPlaylists.map((playlist, index) =>
-              index === playlistIndex
+              index === actualPlaylistIndex
                 ? { ...playlist, montages, changed: true }
                 : playlist,
             );
@@ -363,13 +423,13 @@ function Playlists({
 
           // Save to backend
           const updatedPlaylist = {
-            ...playlists[playlistIndex],
+            ...playlists[actualPlaylistIndex],
             montages,
             changed: true,
           };
 
           autoSaveUpdates({
-            playlistIndex,
+            playlistId: playlistId, // Use playlistId, not index
             playlist: updatedPlaylist,
             updatePlaylist,
             setSaveInProgress,
@@ -400,12 +460,12 @@ function Playlists({
   );
 
   const removeMontageFromPlaylist = useCallback(
-    async (montageIndex, playlistIndex) => {
+    async (montageIndex, playlistId) => {
       console.log(
         "[Playlists] removeMontageFromPlaylist: montageIndex:",
         montageIndex,
-        " playlistIndex:",
-        playlistIndex,
+        " playlistId:",
+        playlistId,
       );
 
       // Debounce rapid successive deletes (300ms delay)
@@ -421,25 +481,34 @@ function Playlists({
         async () => {
           // Use functional update to ensure we have the latest state
           let updatedPlaylists;
+          let actualPlaylistIndex;
 
           try {
             deleteInProgressRef.current = true;
             setDeleteInProgress(true);
 
             setPlaylists((currentPlaylists) => {
-              const playlist = currentPlaylists[playlistIndex];
+              // Find playlist by ID to get the correct index in the unfiltered array
+              actualPlaylistIndex = currentPlaylists.findIndex(
+                (p) => p.id === playlistId || (!p.id && !playlistId),
+              );
+              const playlist = currentPlaylists[actualPlaylistIndex];
               console.log(
-                "[Playlists] playlist = currentPlaylists[playlistIndex]:",
+                "[Playlists] playlist found by id:",
+                playlistId,
+                "at index:",
+                actualPlaylistIndex,
                 playlist,
               );
 
               if (
+                actualPlaylistIndex === -1 ||
                 !playlist ||
                 !playlist.montages ||
                 !playlist.montages[montageIndex]
               ) {
                 console.error(
-                  `[PlayLists] Invalid playlist or montage index: ${playlistIndex}, ${montageIndex}`,
+                  `[PlayLists] Invalid playlist or montage index: playlistId=${playlistId}, actualIndex=${actualPlaylistIndex}, montageIndex=${montageIndex}`,
                 );
                 return currentPlaylists; // Return unchanged
               }
@@ -454,7 +523,7 @@ function Playlists({
               // Update local state to reflect this change (immutably)
               // Using index-based removal to support duplicate montages in playlists
               const newPlaylists = currentPlaylists.map((pl, idx) => {
-                if (idx === playlistIndex) {
+                if (idx === actualPlaylistIndex) {
                   // Create new playlist object with filtered montages array
                   return {
                     ...pl,
@@ -469,7 +538,7 @@ function Playlists({
 
               console.log(
                 "[PlayLists] Updated playlist after montage removal:",
-                newPlaylists[playlistIndex],
+                newPlaylists[actualPlaylistIndex],
               );
 
               updatedPlaylists = newPlaylists;
@@ -480,8 +549,8 @@ function Playlists({
             // This sends the complete updated montages list to backend via updatePlaylist
             // skipStateUpdate: true because we already updated state above
             autoSaveUpdates({
-              playlistIndex,
-              playlist: updatedPlaylists[playlistIndex],
+              playlistId: playlistId, // Use playlistId, not index
+              playlist: updatedPlaylists[actualPlaylistIndex],
               updatePlaylist,
               setSaveInProgress,
               updateSaveStatus,
@@ -611,7 +680,7 @@ function Playlists({
           // Call autoSaveUpdates to sync with backend
           // skipStateUpdate: true because we already updated state above
           autoSaveUpdates({
-            playlistIndex: playlistToUpdateIndex,
+            playlistId: playlistId, // Use playlistId, not index
             playlist: updatedPlaylists[playlistToUpdateIndex],
             updatePlaylist: updatePlaylist,
             setSaveInProgress: setSaveInProgress,
@@ -694,7 +763,10 @@ function Playlists({
     t,
   ]);
 
-  // Filter and transform playlists with memoization for performance
+  // FILTERED playlists for UI display only - excludes mono-playlists
+  // IMPORTANT: The index in this array does NOT match the index in the original `playlists` array!
+  // All operations (reorder, delete, update) must use playlistId, not the index from this array.
+  // See component header comment for details on playlistIndex vs playlistId.
   const memoizedPlaylists = useMemo(() => {
     const filteredPlaylists = playlists.filter((playlist) => {
       // Hide mono-playlists (they're internal, not user-facing)

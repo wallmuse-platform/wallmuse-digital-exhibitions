@@ -1678,10 +1678,47 @@ export const getOrCreateMonoPlaylist = async (
   const existingPlaylist = playlists.find((p) => p.name === playlistName);
 
   if (existingPlaylist) {
-    console.log(
-      `[MonoPlaylist] ✓ Found existing: ${playlistName} (ID: ${existingPlaylist.id})`,
+    // Validate content: mono-playlist should contain exactly the target montage
+    // It may have been corrupted by a previous playlistIndex mismatch bug
+    const montageIds = existingPlaylist.montages?.map((m) => m.id) || [];
+    const isValid =
+      montageIds.length === 1 && montageIds[0] === montageId.toString();
+
+    if (isValid) {
+      console.log(
+        `[MonoPlaylist] ✓ Found existing (valid): ${playlistName} (ID: ${existingPlaylist.id})`,
+      );
+      return { data: { playlist_id: existingPlaylist.id }, status: 200 };
+    }
+
+    // Content is wrong - repair by overwriting with the correct montage
+    console.warn(
+      `[MonoPlaylist] ⚠ Found existing but corrupted: ${playlistName} (ID: ${existingPlaylist.id}), montages: [${montageIds}] instead of [${montageId}]. Repairing...`,
     );
-    return { data: { playlist_id: existingPlaylist.id }, status: 200 };
+    try {
+      await updatePlaylist(
+        existingPlaylist.id,
+        playlistName,
+        montageId.toString(),
+        "1",
+      );
+      // Update local state with repaired content
+      setPlaylists((prev) =>
+        prev.map((p) =>
+          p.id === existingPlaylist.id
+            ? { ...p, montages: [montage], changed: false }
+            : p,
+        ),
+      );
+      console.log(
+        `[MonoPlaylist] ✓ Repaired: ${playlistName} now contains montage ${montageId}`,
+      );
+      return { data: { playlist_id: existingPlaylist.id }, status: 200 };
+    } catch (error) {
+      console.error(`[MonoPlaylist] ✗ Failed to repair:`, error);
+      // Fall through to return the existing ID anyway
+      return { data: { playlist_id: existingPlaylist.id }, status: 200 };
+    }
   }
 
   // Create new mono-playlist

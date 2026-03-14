@@ -140,6 +140,7 @@
   "play_": "再生",
   "pause_": "一時停止",
   "stop_": "停止",
+  "disabled_in_play_mode": "Disabled during montage preview",
   "forward_": "早送り",
   "subtitles_": "字幕",
   "backward_": "巻き戻し",
