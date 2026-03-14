@@ -140,6 +140,7 @@
   "play_": "Reproduzir",
   "pause_": "Pausa",
   "stop_": "Parar",
+  "disabled_in_play_mode": "Disabled during montage preview",
   "forward_": "Avançar",
   "subtitles_": "Legendas",
   "backward_": "Retroceder",

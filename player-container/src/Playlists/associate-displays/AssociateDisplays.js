@@ -1,4 +1,12 @@
-// AssociateDisplays.js
+/**
+ * AssociateDisplays Component
+ * ---------------------------
+ * Manages display/environment associations for montages within playlists.
+ *
+ * IMPORTANT: Uses playlistId (not playlistIndex) to find the correct playlist.
+ * This avoids index mismatch issues when mono-playlists are filtered out.
+ * See PlayLists.js header comment for details on playlistIndex vs playlistId.
+ */
 
 // React and Main Libraries
 import React, { useState, useEffect, useRef } from "react";
@@ -41,7 +49,7 @@ import { selectTheme } from "../../theme/ThemeUtils";
 
 const AssociateDisplays = ({
   montageId,
-  playlistIndex,
+  playlistId,
   onClose,
   handleAction,
 }) => {
@@ -73,14 +81,19 @@ const AssociateDisplays = ({
   // Toggle for showing only active displays
   const [showOnlyActive, setShowOnlyActive] = useState(true);
 
-  // Safely filter valid playlists (exclude mono-playlists which are internal)
-  const filteredPlaylists = (Array.isArray(playlists) ? playlists : []).filter(
+  // Safely get playlists array
+  const safePlaylists = Array.isArray(playlists) ? playlists : [];
+
+  // Filter out mono-playlists for UI display purposes only
+  const filteredPlaylists = safePlaylists.filter(
     (p) => !p?.name || !p.name.startsWith("mono-"),
   );
 
-  // Extracting the selectedPlaylist and relatedMontage based on provided indices
+  // Find the selectedPlaylist by ID in the UNFILTERED array
+  // This ensures we find the playlist even if it's a mono-playlist
+  // See PlayLists.js header comment for details on playlistIndex vs playlistId
   const selectedPlaylist =
-    filteredPlaylists[playlistIndex] || filteredPlaylists[0];
+    safePlaylists.find((p) => p.id === playlistId) || filteredPlaylists[0];
   const relatedMontage = selectedPlaylist?.montages?.find(
     (m) => m.id === montageId,
   );
@@ -115,24 +128,23 @@ const AssociateDisplays = ({
       return;
     }
 
-    // Find the specific montage by ID
-    let montageIndex = playlists.findIndex((p) =>
-      p.montages?.some((m) => m.id === montageId),
-    );
-    if (montageIndex === -1) {
+    // Find the playlist by playlistId (not by searching all playlists)
+    // This ensures we get the correct montage from the current playlist
+    const currentPlaylist = safePlaylists.find((p) => p.id === playlistId);
+    if (!currentPlaylist) {
       console.error(
-        "[AssociateDisplays HandleTrackChange] Montage not found!",
-        { montageId },
+        "[AssociateDisplays HandleTrackChange] Playlist not found!",
+        { playlistId },
       );
       return;
     }
-    let montage = playlists[montageIndex]?.montages?.find(
-      (m) => m.id === montageId,
-    );
+
+    // Find the montage within the current playlist
+    let montage = currentPlaylist.montages?.find((m) => m.id === montageId);
     if (!montage) {
       console.error(
-        "[AssociateDisplays] Montage not found after index lookup:",
-        { montageId, montageIndex },
+        "[AssociateDisplays] Montage not found in current playlist:",
+        { montageId, playlistId },
       );
       return;
     }
@@ -208,15 +220,17 @@ const AssociateDisplays = ({
           }
         }
 
-        // Replace the updated montage in the playlist
-        let updatedMontages =
-          playlists[montageIndex]?.montages?.map((m) =>
-            m.id === montageId ? montage : m,
-          ) || [];
-        let updatedPlaylists = playlists.map((p, idx) =>
-          idx === montageIndex ? { ...p, montages: updatedMontages } : p,
-        );
-        setPlaylists(updatedPlaylists);
+        // Replace the updated montage in the playlist (using playlistId, not index)
+        setPlaylists((currentPlaylists) => {
+          return currentPlaylists.map((p) => {
+            if (p.id === playlistId) {
+              const updatedMontages =
+                p.montages?.map((m) => (m.id === montageId ? montage : m)) || [];
+              return { ...p, montages: updatedMontages };
+            }
+            return p;
+          });
+        });
 
         // Find the house ID for the screen
         const environment = environments?.find((e) =>
@@ -618,7 +632,7 @@ const AssociateDisplays = ({
 // PropTypes for the component
 AssociateDisplays.propTypes = {
   montageId: PropTypes.string.isRequired,
-  playlistIndex: PropTypes.oneOfType([PropTypes.string, PropTypes.number])
+  playlistId: PropTypes.string
     .isRequired,
   onClose: PropTypes.func,
   handleAction: PropTypes.func,

@@ -1,11 +1,25 @@
 // utils/MultipleEnvironmentsAlert.js
 
-import React, { useState, useEffect } from 'react';
-import { Alert, AlertTitle, Collapse, Button, Box, Typography } from '@mui/material';
-import { Warning as WarningIcon, Close as CloseIcon } from '@mui/icons-material';
-import { checkMultipleActiveEnvironments } from '../utils/environmentUtils';
+import React, { useState, useEffect } from "react";
+import {
+  Alert,
+  AlertTitle,
+  Collapse,
+  Button,
+  Box,
+  Typography,
+} from "@mui/material";
+import {
+  Warning as WarningIcon,
+  Close as CloseIcon,
+} from "@mui/icons-material";
+import { checkMultipleActiveEnvironments } from "../utils/environmentUtils";
 
-const MultipleEnvironmentsAlert = ({ environments, handleDeactivateEnvironment, theme }) => {
+const MultipleEnvironmentsAlert = ({
+  environments,
+  handleDeactivateEnvironment,
+  theme,
+}) => {
   const [show, setShow] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [multipleActiveInfo, setMultipleActiveInfo] = useState(null);
@@ -40,7 +54,7 @@ const MultipleEnvironmentsAlert = ({ environments, handleDeactivateEnvironment, 
       // Reset dismissed state so alert can show again if needed
       setDismissed(false);
     } catch (error) {
-      console.error('Error deactivating environment:', error);
+      console.error("Error deactivating environment:", error);
     }
   };
 
@@ -59,21 +73,28 @@ const MultipleEnvironmentsAlert = ({ environments, handleDeactivateEnvironment, 
             size="small"
             onClick={handleDismiss}
             startIcon={<CloseIcon />}
-            sx={{ textTransform: 'none' }}
+            sx={{ textTransform: "none" }}
           >
             ×
           </Button>
         }
         sx={{
           mb: 2,
-          '& .MuiAlert-message': {
-            width: '100%'
-          }
+          "& .MuiAlert-message": {
+            width: "100%",
+          },
         }}
       >
         <AlertTitle>Multiple Sessions Detected</AlertTitle>
-        
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 1,
+          }}
+        >
           <Typography variant="body2">
             You have {multipleActiveInfo.count} active sessions.
           </Typography>
@@ -81,29 +102,38 @@ const MultipleEnvironmentsAlert = ({ environments, handleDeactivateEnvironment, 
             size="small"
             variant="text"
             onClick={handleDismiss}
-            sx={{ textTransform: 'none', color: 'text.secondary' }}
+            sx={{ textTransform: "none", color: "text.secondary" }}
           >
             Keep All
           </Button>
         </Box>
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
           {multipleActiveInfo.environments.map((env, index) => (
             <Box
               key={env.id}
               sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
                 py: 0.5,
                 px: 1,
-                bgcolor: index === 0 ? 'rgba(76, 175, 80, 0.1)' : 'rgba(255, 152, 0, 0.1)',
+                bgcolor:
+                  index === 0
+                    ? "rgba(76, 175, 80, 0.1)"
+                    : "rgba(255, 152, 0, 0.1)",
                 borderRadius: 0.5,
-                border: `1px solid ${index === 0 ? 'rgba(76, 175, 80, 0.3)' : 'rgba(255, 152, 0, 0.3)'}`
+                border: `1px solid ${index === 0 ? "rgba(76, 175, 80, 0.3)" : "rgba(255, 152, 0, 0.3)"}`,
               }}
             >
-              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {index === 0 ? '🟢' : '🟡'} Session {index + 1} <Typography variant="caption" color="text.secondary">(ID: {env.id})</Typography>
+              <Typography
+                variant="body2"
+                sx={{ display: "flex", alignItems: "center", gap: 1 }}
+              >
+                {index === 0 ? "🟢" : "🟡"} Session {index + 1}{" "}
+                <Typography variant="caption" color="text.secondary">
+                  (ID: {env.id})
+                </Typography>
               </Typography>
 
               {/* Only show deactivate button if this isn't the first environment */}
@@ -114,11 +144,11 @@ const MultipleEnvironmentsAlert = ({ environments, handleDeactivateEnvironment, 
                   color="warning"
                   onClick={() => onDeactivateClick(env.id)}
                   sx={{
-                    minWidth: 'auto',
-                    fontWeight: 'bold',
-                    textTransform: 'none',
-                    fontSize: '0.75rem',
-                    py: 0.25
+                    minWidth: "auto",
+                    fontWeight: "bold",
+                    textTransform: "none",
+                    fontSize: "0.75rem",
+                    py: 0.25,
                   }}
                 >
                   End
@@ -128,8 +158,13 @@ const MultipleEnvironmentsAlert = ({ environments, handleDeactivateEnvironment, 
           ))}
         </Box>
 
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-          💡 Primary session stays active. End extra sessions to improve performance.
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 1, display: "block" }}
+        >
+          💡 Primary session stays active. End extra sessions to improve
+          performance.
         </Typography>
       </Alert>
     </Collapse>

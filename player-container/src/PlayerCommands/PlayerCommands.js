@@ -100,13 +100,10 @@ function PlayerCommands({
     return () => clearInterval(interval);
   }, [playModeRef, isPlayMode]);
 
-  // Create mutedRef for persistence and useState for UI updates
-  const mutedRef = useRef(
-    localStorage.getItem("wallmuse-muted")
-      ? JSON.parse(localStorage.getItem("wallmuse-muted"))
-      : true, // Default to muted for autoplay compliance
-  );
-  const [muted, setMuted] = useState(mutedRef.current);
+  // Always start muted and with null volume on page load — never read localStorage at init
+  const mutedRef = useRef(true);
+  const [muted, setMuted] = useState(true);
+  const [displayVolume, setDisplayVolume] = useState(null);
 
   // Don't send initial volume - wait for user interaction when video is ready
 
@@ -133,6 +130,7 @@ function PlayerCommands({
 
       // Always update the display volume
       volumeRef.current = newVolume;
+      setDisplayVolume(newVolume);
       // Update ref and localStorage atomically
       localStorage.setItem("wallmuse-volume", newVolume.toString());
 
@@ -181,9 +179,10 @@ function PlayerCommands({
     localStorage.setItem("wallmuse-muted", JSON.stringify(newMutedState));
 
     if (!newMutedState) {
-      // Unmuting - if volume is 0 (new user), set to default 50
-      if (volumeRef.current === 0) {
+      // Unmuting - if no volume ever set, default to 50
+      if (!volumeRef.current) {
         volumeRef.current = 50;
+        setDisplayVolume(50);
         localStorage.setItem("wallmuse-volume", "50");
         console.log(
           "[VolumeControl] Unmuting new user. Set volumeRef to 50, sending volume: 50",
@@ -191,6 +190,7 @@ function PlayerCommands({
         onVolumeChange(50);
       } else {
         // Returning user - use saved volume
+        setDisplayVolume(volumeRef.current);
         console.log(
           "[VolumeControl] Unmuting returning user. Current volumeRef:",
           volumeRef.current,
@@ -225,14 +225,16 @@ function PlayerCommands({
 
       // If unmuting, send volume to player
       if (!newMutedState) {
-        if (volumeRef.current === 0) {
+        if (!volumeRef.current) {
           volumeRef.current = 50;
+          setDisplayVolume(50);
           localStorage.setItem("wallmuse-volume", "50");
           console.log(
             "[PlayerCommands] Auto-unmute: Set volume to 50 for fresh user",
           );
           onVolumeChange(50);
         } else {
+          setDisplayVolume(volumeRef.current);
           console.log(
             "[PlayerCommands] Auto-unmute: Sending current volume:",
             volumeRef.current,
@@ -246,6 +248,13 @@ function PlayerCommands({
     return () =>
       window.removeEventListener("wallmuse-unmute", handleAutoUnmute);
   }, [onVolumeChange]);
+
+  // Reset mute/volume display when crossing mobile breakpoint
+  useEffect(() => {
+    mutedRef.current = true;
+    setMuted(true);
+    setDisplayVolume(null);
+  }, [isMobile]);
 
   // utility function for iOS or when not starting
 
@@ -394,6 +403,7 @@ function PlayerCommands({
                 />
                 <VolumeSlider
                   volumeRef={volumeRef}
+                  value={displayVolume}
                   onVolumeChange={handleVolumeChange}
                   style={iconStyle}
                 />

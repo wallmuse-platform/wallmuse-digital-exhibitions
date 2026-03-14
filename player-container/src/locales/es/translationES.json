@@ -140,6 +140,7 @@
   "play_": "Reproducir",
   "pause_": "Pausa",
   "stop_": "Detener",
+  "disabled_in_play_mode": "Disabled during montage preview",
   "forward_": "Adelante",
   "subtitles_": "Subtítulos",
   "backward_": "Atrás",

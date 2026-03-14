@@ -140,6 +140,7 @@
   "play_": "Afspelen",
   "pause_": "Pauze",
   "stop_": "Stoppen",
+  "disabled_in_play_mode": "Disabled during montage preview",
   "forward_": "Vooruit",
   "subtitles_": "Ondertitels",
   "backward_": "Achteruit",

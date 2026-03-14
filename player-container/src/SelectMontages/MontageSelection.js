@@ -176,8 +176,7 @@ const ShowMontages = (
   // Mono-playlist creation flag (prevent duplicate creation on rapid clicks)
   const [creatingMonoMid, setCreatingMonoMid] = useState(null);
 
-  // Ref to store hover timeout to prevent flickering
-  const hoverTimeoutRef = useRef(null);
+  const [hoveredIndex, setHoveredIndex] = useState(null);
 
   const { isSmartTV, isMobile } = useResponsive();
 
@@ -267,9 +266,6 @@ const ShowMontages = (
   const baseThumbnailURL = useContext(BaseThumbnailContext);
 
   //Handlers
-  const [isHovered, setIsHovered] = useState(
-    new Array(montages.length).fill(false),
-  );
 
   //Specific Icons
   const TracksIcon = () => (
@@ -686,33 +682,16 @@ const ShowMontages = (
                     borderColor: theme.palette.primary.main,
                     borderRadius: "1em",
                     margin: "2em",
-                    position: isHovered[index] === true ? "absolute" : "static",
+                    position: hoveredIndex === index ? "absolute" : "static",
                     transform:
-                      isHovered[index] === true ? "scale(1.5)" : "scale(1)",
+                      hoveredIndex === index ? "scale(1.5)" : "scale(1)",
                     transformOrigin: "center",
-                    zIndex: isHovered[index] === true ? 1 : 0,
+                    zIndex: hoveredIndex === index ? 1 : 0,
                     transition: "transform 0.5s ease-out",
                     willChange: "transform",
                   }}
-                  onMouseEnter={() => {
-                    // Clear any pending timeout
-                    if (hoverTimeoutRef.current) {
-                      clearTimeout(hoverTimeoutRef.current);
-                    }
-                    setIsHovered((prevState) => ({
-                      ...prevState,
-                      [index]: true,
-                    }));
-                  }}
-                  onMouseLeave={() => {
-                    // Add a small delay before removing hover to prevent flickering
-                    hoverTimeoutRef.current = setTimeout(() => {
-                      setIsHovered((prevState) => ({
-                        ...prevState,
-                        [index]: false,
-                      }));
-                    }, 100);
-                  }}
+                  onMouseEnter={() => setHoveredIndex(index)}
+                  onMouseLeave={() => setHoveredIndex(null)}
                 >
                   <CardContent
                     style={{ paddingBottom: "0", position: "relative" }}
@@ -865,7 +844,7 @@ const ShowMontages = (
                         </Tooltip>
                       </CardActions>
                     </div>
-                    {isHovered[index] && (
+                    {hoveredIndex === index && (
                       <span
                         style={{
                           display: "flex",
