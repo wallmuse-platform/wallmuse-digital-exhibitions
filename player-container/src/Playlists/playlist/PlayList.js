@@ -16,26 +16,18 @@
  * - Maintains playlist synchronization with backend
  * - Supports both user playlists and internal mono-playlists
  *
- * IMPORTANT: playlistIndex vs playlist.id
- * ----------------------------------------
- * - playlistIndex: Index in the FILTERED memoizedPlaylists (excludes mono-playlists).
- *   Used only for UI display purposes.
- * - playlist.id: The actual playlist ID. Used for ALL operations (reorder, delete, update).
- *   Callbacks like handleMontageReorder, removeMontageFromPlaylist, handlePlaylistUpdate,
- *   and updateDeleteStatus all expect playlist.id, NOT playlistIndex.
- *
  * @component
  * @param {Object} props
  * @param {string} props.house - House identifier
  * @param {Object} props.playlist - Current playlist data
- * @param {number} props.playlistIndex - Index in FILTERED playlists (UI display only)
+ * @param {number} props.playlistIndex - Index in playlists array
  * @param {Function} props.handleMontageClick - Selection handler
- * @param {Function} props.handleMontageReorder - Reorder handler (pass playlist.id)
+ * @param {Function} props.handleMontageReorder - Reorder handler
  * @param {Function} props.moveMontageToPlaylist - Playlist transfer handler
- * @param {Function} props.removeMontageFromPlaylist - Delete handler (pass playlist.id)
+ * @param {Function} props.removeMontageFromPlaylist - Delete handler
  * @param {Function} props.updateSaveStatus - Save status callback
- * @param {Function} props.handlePlaylistUpdate - Update handler (pass playlist.id)
- * @param {Function} props.updateDeleteStatus - Delete status callback (pass playlist.id)
+ * @param {Function} props.handlePlaylistUpdate - Update handler
+ * @param {Function} props.updateDeleteStatus - Delete status callback
  * @param {Array} props.playlists - All available playlists
  * @param {string} props.currentPlaylist - Currently playing playlist ID
  * @param {Function} props.handlePlaylistChange - Playlist change handler
@@ -253,11 +245,11 @@ function Playlist({
         //     after: newMontages.map(m => m.id)
         // });
 
-        // Update the playlist with new montage order - pass playlist.id to avoid filtered index mismatch
-        handleMontageReorder(newMontages, playlist.id);
+        // Update the playlist with new montage order
+        handleMontageReorder(newMontages, playlistIndex);
       }
     },
-    [playlist, handleMontageReorder],
+    [playlist, playlistIndex, handleMontageReorder],
   );
 
   const currentPlaylistStyle = {
@@ -334,7 +326,7 @@ function Playlist({
               `${t("error")}: ${result.code}: ${result.message}`,
             );
           } else {
-            handlePlaylistUpdate(playlist.id, name);
+            handlePlaylistUpdate(playlistIndex, name);
           }
         }
       })
@@ -356,8 +348,8 @@ function Playlist({
 
         if (result.success) {
           // Success case
-          console.log(playlist.id, "deleted [PlayList]");
-          updateDeleteStatus(true, null, playlist.id);
+          console.log(playlistIndex, "deleted [PlayList]");
+          updateDeleteStatus(true, null, playlistIndex);
         } else {
           // Error case
           let errorMessage = t("error.generic");
@@ -580,7 +572,6 @@ function Playlist({
                     montageIndex={index}
                     montage={montage}
                     playlistIndex={playlistIndex}
-                    playlistId={playlist.id}
                     handleMontageClick={handleMontageClick}
                     moveMontageToPlaylist={moveMontageToPlaylist}
                     saveInProgress={saveInProgress}

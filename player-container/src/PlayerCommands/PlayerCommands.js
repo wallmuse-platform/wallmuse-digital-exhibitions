@@ -423,23 +423,14 @@ function PlayerCommands({
               flexBasis: "auto",
             }}
           >
-            <Tooltip
-              title={isPlayMode ? t("disabled_in_play_mode") : t("backward_")}
-            >
-              <span>
-                {" "}
-                {/* Wrapper span needed for tooltip to work on disabled button */}
-                <IconButton
-                  onClick={onRew}
-                  disabled={isPlayMode}
-                  sx={{ opacity: isPlayMode ? 0.3 : 1 }} // Grey out when disabled
-                >
-                  <FastRewindIcon
-                    className={`tabs_icon ${iconClass}`}
-                    style={iconStyle}
-                  />
-                </IconButton>
-              </span>
+            <Tooltip title={t("backward_")}>
+              <IconButton onClick={onRew}>
+                <FastRewindIcon
+                  className={isPlayMode ? iconClass : `tabs_icon ${iconClass}`}
+                  color={isPlayMode ? "primary" : undefined}
+                  sx={{ cursor: "pointer" }}
+                />
+              </IconButton>
             </Tooltip>
             <Tooltip title={isPlaying ? t("pause_") : t("play_")}>
               <IconButton onClick={handlePlayPause}>
@@ -471,23 +462,14 @@ function PlayerCommands({
                 />
               </IconButton>
             </Tooltip>
-            <Tooltip
-              title={isPlayMode ? t("disabled_in_play_mode") : t("forward_")}
-            >
-              <span>
-                {" "}
-                {/* Wrapper span needed for tooltip to work on disabled button */}
-                <IconButton
-                  onClick={onFwd}
-                  disabled={isPlayMode}
-                  sx={{ opacity: isPlayMode ? 0.3 : 1 }} // Grey out when disabled
-                >
-                  <FastForwardIcon
-                    className={`tabs_icon ${iconClass}`}
-                    style={iconStyle}
-                  />
-                </IconButton>
-              </span>
+            <Tooltip title={t("forward_")}>
+              <IconButton onClick={onFwd}>
+                <FastForwardIcon
+                  className={isPlayMode ? iconClass : `tabs_icon ${iconClass}`}
+                  color={isPlayMode ? "primary" : undefined}
+                  sx={{ cursor: "pointer" }}
+                />
+              </IconButton>
             </Tooltip>
           </Grid>
           {/* TODO place on Line 2 */}

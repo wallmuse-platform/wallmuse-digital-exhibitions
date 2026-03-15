@@ -924,7 +924,9 @@ const ShowMontages = (
                       "component.playlist.exhibitions.select-playlist-default",
                     )}
                   </option>
-                  {playlists.map((playlist) => {
+                  {playlists
+                    .filter((playlist) => !playlist.name?.startsWith("mono-"))
+                    .map((playlist) => {
                     // Show all playlists including default (which has no id or empty string id)
                     const playlistId = playlist.id || "";
                     const playlistName =
