@@ -24,6 +24,7 @@ export class Item {
   public last_repeat_duration!: number;
   public background_color?: string;
   public shapes?: Shape[];
+  public texts?: any[];
 
   public constructor(json?: any) {
     if (json) {
@@ -36,6 +37,12 @@ export class Item {
     this.artwork_id = myParseInt(this.artwork_id);
     if (this.artwork_id) {
       this.artwork = new Artwork(this);
+    }
+    // Server sends title text as "texts", merge into shapes
+    if (this.texts && !this.shapes) {
+      this.shapes = this.texts;
+    } else if (this.texts && this.shapes) {
+      this.shapes = [...this.shapes, ...this.texts];
     }
     if (this.shapes) {
       this.shapes = this.shapes.map(s => {

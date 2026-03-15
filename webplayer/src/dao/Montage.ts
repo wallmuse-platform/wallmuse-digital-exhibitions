@@ -24,12 +24,10 @@ export class Montage extends MontageLight {
       console.log('[Montage] Created screens array:', {
         count: this.screens.length,
         screenIds: this.screens.map(s => s.id),
-        screensWithSeqRefs: this.screens
-          .filter((s: any) => s.seq_id)
-          .map((s: any) => ({
-            id: s.id,
-            seq_id: s.seq_id,
-          })),
+        screensWithSeqRefs: this.screens.filter((s: any) => s.seq_id).map((s: any) => ({
+          id: s.id,
+          seq_id: s.seq_id
+        }))
       });
     } else {
       console.log('[Montage] No screens data in JSON');

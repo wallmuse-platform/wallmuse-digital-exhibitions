@@ -3,37 +3,26 @@
  * Based on CreateMontage ZoomAndPanDialog specifications
  */
 
-export type ZoomAndPanPosition =
-  | 'top-left'
-  | 'top-right'
-  | 'bottom-left'
-  | 'bottom-right'
-  | 'centre';
+export type ZoomAndPanPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'centre';
 export type ZoomAndPanScaleDirection = 'height' | 'width';
-export type ZoomAndPanAnimationType =
-  | 'constant'
-  | 'ease-in'
-  | 'ease-out'
-  | 'ease-both'
-  | 'accelerate'
-  | 'decelerate';
+export type ZoomAndPanAnimationType = 'constant' | 'ease-in' | 'ease-out' | 'ease-both' | 'accelerate' | 'decelerate';
 
 export interface ZoomAndPanParams {
   enabled: boolean;
 
   start: {
     from: ZoomAndPanPosition;
-    scale: number; // 80-130% (validated in CreateMontage)
+    scale: number;              // 80-130% (validated in CreateMontage)
     scaleDirection: ZoomAndPanScaleDirection;
   };
 
   end: {
     to: ZoomAndPanPosition;
-    scale: number; // 80-130% (validated in CreateMontage)
+    scale: number;              // 80-130% (validated in CreateMontage)
     scaleDirection: ZoomAndPanScaleDirection;
   };
 
-  type: ZoomAndPanAnimationType; // Mutually exclusive - only ONE type per animation
+  type: ZoomAndPanAnimationType;  // Mutually exclusive - only ONE type per animation
 
   // FUTURE: For synchronized multi-screen animations
   // When multiple screens show the same image with same randomSeed,

@@ -15,6 +15,12 @@ if (!window.PENDING_APP_OPERATIONS) {
   );
 }
 
+// Store pending track mappings until playlist is loaded
+if (!(window as any).PENDING_TRACK_MAPPINGS) {
+  (window as any).PENDING_TRACK_MAPPINGS = null;
+  console.log('[STORAGE] Initialized PENDING_TRACK_MAPPINGS storage');
+}
+
 // URL parameter processing removed - all navigation flows through NAV commands
 
 export function mountReactApp() {
@@ -129,7 +135,7 @@ export function mountReactApp() {
     root.render(
       // TEMPORARILY DISABLED: StrictMode causes double-mounting which makes debugging impossible
       // <React.StrictMode>
-      <WallmusePlayer />
+        <WallmusePlayer />
       // </React.StrictMode>
     );
 
@@ -350,12 +356,7 @@ function setupNavigationListener() {
       resolvedPosition = position; // Keep as undefined/null
     }
 
-    console.log('[React] 🎯 NAVIGATION PARAMETERS:', {
-      playlist,
-      position: resolvedPosition,
-      montage,
-      track: resolvedTrack,
-    });
+    console.log('[React] 🎯 NAVIGATION PARAMETERS:', { playlist, position: resolvedPosition, montage, track: resolvedTrack });
 
     // Reset any existing pending values before processing new navigation
     console.log('[React] Resetting pending navigation values for new navigation event');
@@ -378,15 +379,8 @@ function setupNavigationListener() {
     }
 
     // CRITICAL FIX: Set pending montage index from position parameter
-    if (
-      resolvedPosition !== undefined &&
-      resolvedPosition !== null &&
-      typeof resolvedPosition === 'number'
-    ) {
-      console.log(
-        '[React] 🎯 NAVIGATION: Setting pending montage index from resolvedPosition:',
-        resolvedPosition
-      );
+    if (resolvedPosition !== undefined && resolvedPosition !== null && typeof resolvedPosition === 'number') {
+      console.log('[React] 🎯 NAVIGATION: Setting pending montage index from resolvedPosition:', resolvedPosition);
       console.log(
         '[React] 🔍 NAVIGATION: Position type check - resolvedPosition:',
         resolvedPosition,
@@ -509,11 +503,7 @@ function setupNavigationListener() {
 
             // CRITICAL FIX: Compare with type coercion (playlist ID can be string or number)
             if (parentPlaylist && String(parentPlaylist.id) === String(playlist)) {
-              console.log(
-                '[React] ✅ INSTANT: Found playlist in parent (attempt',
-                attempt + 1,
-                ')'
-              );
+              console.log('[React] ✅ INSTANT: Found playlist in parent (attempt', attempt + 1, ')');
 
               // CRITICAL FIX: Only call setCurrentPlaylist if it's NOT already the current playlist
               const currentPlaylist = Sequencer?.getCurrentPlaylist();
@@ -526,19 +516,13 @@ function setupNavigationListener() {
                 const playlistInstance = new Playlist(parentPlaylist);
                 setCurrentPlaylist(playlistInstance); // This will dispatch child-playlist-changed event
               } else {
-                console.log(
-                  '[React] Playlist',
-                  playlist,
-                  'already loaded, skipping duplicate load'
-                );
+                console.log('[React] Playlist', playlist, 'already loaded, skipping duplicate load');
                 // CRITICAL FIX: Even if playlist is already loaded, ensure parent is in sync
                 // This prevents the WebSocket fallback from finding the wrong playlist
                 if (window.parent && window.parent !== window) {
                   try {
                     (window.parent as any).currentPlaylist = parentPlaylist;
-                    console.log(
-                      '[React] Updated parent.currentPlaylist to prevent fallback confusion'
-                    );
+                    console.log('[React] Updated parent.currentPlaylist to prevent fallback confusion');
                   } catch (e) {
                     console.log('[React] Could not update parent.currentPlaylist');
                   }
@@ -550,11 +534,7 @@ function setupNavigationListener() {
               setTimeout(() => tryLoadFromParent(attempt + 1, maxAttempts), 50);
               return false; // Will retry
             } else {
-              console.log(
-                '[React] ⏱️ Parent data not available after',
-                maxAttempts * 50,
-                'ms - waiting for WebSocket fallback'
-              );
+              console.log('[React] ⏱️ Parent data not available after', (maxAttempts * 50), 'ms - waiting for WebSocket fallback');
               return false; // Failed after all attempts
             }
           };
@@ -763,7 +743,24 @@ function setupNavigationListener() {
       try {
         // For same-playlist navigation, call goMontage directly
         if (Sequencer && typeof Sequencer.goMontage === 'function') {
-          const trackOverride = Sequencer.getMontageTrackOverride(resolvedPosition);
+          // CRITICAL FIX: Use track from navigation params if provided (parent prevails)
+          // Only fall back to stored override if no track specified in navigation event
+          let trackOverride: number | undefined;
+          if (resolvedTrack !== undefined && resolvedTrack !== null) {
+            trackOverride = parseInt(String(resolvedTrack)) - 1; // Convert 1-based to 0-based
+            console.log(
+              '[React] 🎯 Using track from navigation params (parent prevails):',
+              resolvedTrack,
+              '→ index:',
+              trackOverride
+            );
+          } else {
+            trackOverride = Sequencer.getMontageTrackOverride(resolvedPosition);
+            console.log(
+              '[React] 🎯 No track in navigation params, using stored override:',
+              trackOverride
+            );
+          }
           console.log(
             '[React] 🎯 SAME-PLAYLIST NAVIGATION: Calling Sequencer.goMontage() directly with montage:',
             resolvedPosition,
@@ -781,6 +778,13 @@ function setupNavigationListener() {
             // Default playlist - check global montages
             const globalMontages = Object.values((window as any).Montages || {});
             montageCount = globalMontages.length;
+
+            console.log('[React] 🔍 DEFAULT PLAYLIST MONTAGES CHECK:', {
+              montageCount,
+              montageKeys: Object.keys((window as any).Montages || {}),
+              currentPlaylistIsUndefined: currentPlaylist === undefined,
+              sequencerPlaylist: Sequencer.getCurrentPlaylist()?.id
+            });
 
             // TIMING FIX: If no montages loaded yet, limit retries to prevent infinite loops
             if (montageCount === 0) {
@@ -812,8 +816,21 @@ function setupNavigationListener() {
 
           // CRITICAL: Validate bounds before calling goMontage
           if (resolvedPosition >= 0 && resolvedPosition < montageCount) {
-            Sequencer.goMontage(resolvedPosition);
-            console.log('[React] ✅ SAME-PLAYLIST NAVIGATION: goMontage() called successfully');
+            const player = require('./manager/ItemPlayer').ItemPlayer.ThePlayer;
+            const currentPos = player?.getPosition();
+            const currentMontageIndex = currentPos?.getMontageIndex();
+            const currentTrackIndex = currentPos?.getTrackIndex();
+
+            const isDuplicate =
+              currentMontageIndex === resolvedPosition &&
+              (trackOverride === undefined || trackOverride === currentTrackIndex);
+
+            if (isDuplicate && Sequencer.isPlaying()) {
+              console.log('[React] ⏭️ SKIPPING DUPLICATE NAVIGATION: Already at montage', resolvedPosition, 'track', currentTrackIndex);
+            } else {
+              Sequencer.goMontage(resolvedPosition, trackOverride);
+              console.log('[React] ✅ SAME-PLAYLIST NAVIGATION: goMontage() called successfully');
+            }
           } else {
             console.error(
               '[React] 🚨 BOUNDS ERROR: Montage index',
@@ -868,6 +885,114 @@ function setupNavigationListener() {
     );
   } catch (error) {
     console.error('[React] Error in webPlayerNavigate:', error);
+  }
+};
+
+// Function to set track mappings for all montages
+(window as any).webPlayerSetTrackMappings = (trackMappings: Record<number, string>, retryCount = 0) => {
+  console.log('[React] 🎯 Received track mappings for all montages (by montage ID):', trackMappings);
+
+  try {
+    const Sequencer = require('./manager/Sequencer').Sequencer;
+    const ItemPlayer = require('./manager/ItemPlayer').ItemPlayer;
+    const player = ItemPlayer.ThePlayer;
+    const currentPlaylist = Sequencer.getCurrentPlaylist();
+
+    // DIAGNOSTIC: Log current player state before applying mappings
+    if (player) {
+      const currentPos = player.getPosition();
+      const currentMontageIndex = currentPos?.getMontageIndex();
+      const currentTrackIndex = currentPos?.getTrackIndex();
+      console.log('[React] 📊 BEFORE TRACK MAPPING - Player state:', {
+        currentMontageIndex,
+        currentTrackIndex,
+        isPlaying: Sequencer.isPlaying(),
+        isPaused: Sequencer.isPaused()
+      });
+    }
+
+    // STORE PENDING: If playlist not loaded yet, store mappings to apply later
+    if (!currentPlaylist) {
+      console.warn(`[React] ⚠️ No current playlist loaded yet, storing track mappings to apply when playlist loads`);
+      (window as any).PENDING_TRACK_MAPPINGS = trackMappings;
+      return;
+    }
+
+    // Clear pending mappings since we're applying them now
+    (window as any).PENDING_TRACK_MAPPINGS = null;
+
+    // CRITICAL: Track mappings are now keyed by montage ID (not position)
+    // We need to find each montage's current position in the playlist
+    const montageCount = currentPlaylist.getMontagesCount();
+    const oldMappings: Record<number, number | undefined> = {};
+
+    // First pass: collect old mappings by position
+    for (let i = 0; i < montageCount; i++) {
+      oldMappings[i] = Sequencer.getMontageTrackOverride(i);
+    }
+
+    // Second pass: apply new mappings by montage ID
+    Object.entries(trackMappings).forEach(([montageId, track]) => {
+      const trackIndex = parseInt(String(track)) - 1; // Convert 1-based to 0-based
+
+      // Find the current position of this montage in the playlist
+      let montagePosition = -1;
+      for (let i = 0; i < montageCount; i++) {
+        const montage = currentPlaylist.getMontage(i);
+        if (montage && String(montage.id) === String(montageId)) {
+          montagePosition = i;
+          break;
+        }
+      }
+
+      if (montagePosition === -1) {
+        console.warn(`[React] ⚠️ Montage ID ${montageId} not found in current playlist, skipping`);
+        return;
+      }
+
+      const oldTrack = oldMappings[montagePosition];
+      const changed = oldTrack !== trackIndex;
+
+      console.log(`[React] ${changed ? '🔄 CHANGED' : '➡️'} Montage ID ${montageId} (position ${montagePosition}): ${oldTrack !== undefined ? `track ${oldTrack + 1}` : 'no override'} → track ${track} (index ${trackIndex})`);
+      Sequencer.setMontageTrackOverride(montagePosition, trackIndex);
+    });
+
+    // DIAGNOSTIC: Check if current montage track changed
+    if (player) {
+      const currentPos = player.getPosition();
+      const currentMontageIndex = currentPos?.getMontageIndex();
+      if (currentMontageIndex !== undefined) {
+        const newTrackIndex = Sequencer.getMontageTrackIndex(currentMontageIndex);
+        const oldTrackIndex = oldMappings[currentMontageIndex];
+
+        if (oldTrackIndex !== undefined && oldTrackIndex !== newTrackIndex) {
+          console.warn('[React] ⚠️ CURRENT MONTAGE TRACK CHANGED:', {
+            montageIndex: currentMontageIndex,
+            oldTrack: oldTrackIndex,
+            newTrack: newTrackIndex,
+            warning: 'Track changed for currently playing montage - may need to reload media or trigger navigation'
+          });
+
+          // CRITICAL FIX: If the current montage's track changed, we need to reload
+          // to avoid slot confusion and freezing
+          console.log('[React] 🔄 Triggering media reload for track change on current montage');
+          // Note: This will be handled by parent sending a NAV command
+        }
+      }
+    }
+
+    console.log('[React] ✅ All track mappings applied successfully');
+  } catch (error) {
+    console.error('[React] Error setting track mappings:', error);
+  }
+};
+
+// Function to apply pending track mappings (called when playlist loads)
+(window as any).applyPendingTrackMappings = () => {
+  const pendingMappings = (window as any).PENDING_TRACK_MAPPINGS;
+  if (pendingMappings) {
+    console.log('[React] 📋 Applying pending track mappings now that playlist is loaded');
+    (window as any).webPlayerSetTrackMappings(pendingMappings);
   }
 };
 
@@ -990,11 +1115,16 @@ if (document.readyState === 'loading') {
 const canWork = window.MediaSource || window.ManagedMediaSource;
 if (canWork) {
   if (Debug) {
-    start(
-      process.env.REACT_APP_TESTLOGIN!,
-      process.env.REACT_APP_TESTPWD!,
-      process.env.REACT_APP_TESTTOKEN!
-    );
+    // WordPress session tokens cannot be derived from login/pwd — use token directly.
+    // Get your token from wallmuse.com devtools: localStorage.getItem('wp_original_session_id')
+    const testToken = process.env.REACT_APP_TESTTOKEN;
+    if (testToken) {
+      console.log('[Dev] startAuthenticated with REACT_APP_TESTTOKEN');
+      startAuthenticated(testToken);
+    } else {
+      console.warn('[Dev] No REACT_APP_TESTTOKEN in .env.local — set it to your wp session token');
+      start(process.env.REACT_APP_TESTLOGIN!, process.env.REACT_APP_TESTPWD!, '');
+    }
   } else {
     const parent = document.getElementById('root');
     if (parent && parent.dataset.user) {
@@ -1004,14 +1134,18 @@ if (canWork) {
       // const token = zone!.dataset.user;
       const params = new URLSearchParams(window.location.search);
       console.log('Session: ' + params.get('session'));
-      if (params.get('house')) {
+      const environId = parseInt(params.get('environ') || '0', 10);
+      const envKey = params.get('key');
+      if (params.get('house') && environId > 0 && envKey) {
+        // Parent has a real environment with key — use it directly
         setHouse(
           parseInt(params.get('house')!, 10),
-          parseInt(params.get('environ')!, 10),
-          parseInt(params.get('screen')!, 10),
-          params.get('key')!
+          environId,
+          parseInt(params.get('screen') || '0', 10),
+          envKey
         );
       }
+      // Without a valid key, skip setHouse so checkHouse() restores from localStorage or creates fresh
       startAuthenticated(params.get('session')!);
     }
   }

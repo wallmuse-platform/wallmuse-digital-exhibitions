@@ -25,11 +25,11 @@ interface VideoProps {
   media?: VideoMediaFile | null;
   hidden: boolean;
   index: number;
-  shouldLoad?: boolean;
+  shouldLoad?: boolean; 
   onVideoLoaded?: () => void;
 }
 
-const withFragments = false; // DISABLED - chunk streaming causing server overload (200-600 parallel requests per video)
+const withFragments = false;  // DISABLED - chunk streaming causing server overload (200-600 parallel requests per video)
 
 export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
   ({ media, hidden, index, shouldLoad = true, onVideoLoaded }, ref) => {
@@ -38,7 +38,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
     const sourceBufferRef = React.useRef<SourceBuffer | null>(null);
     const objectUrlRef = React.useRef<string | null>(null);
     const initializedUrlRef = React.useRef<string | null>(null);
-
+    
     // Worker Control Refs
     const isStreamingRef = React.useRef(false);
     const abortControllerRef = React.useRef<AbortController | null>(null);
@@ -47,9 +47,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
 
     // Track state in Ref for the Worker loop (avoids dependency closures)
     const mediaRef = React.useRef(media);
-    React.useEffect(() => {
-      mediaRef.current = media;
-    }, [media]);
+    React.useEffect(() => { mediaRef.current = media; }, [media]);
 
     const getPlayerPosition = React.useCallback(() => {
       const p = Sequencer.getCurrentPosition();
@@ -71,7 +69,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
             matches: true,
             videoElementTime: videoTime,
             sequencerOffset: p?.getMediaOffset() || 0,
-            usingVideoTime: true,
+            usingVideoTime: true
           });
           (window as any)[`lastPosLog_${index}`] = now;
         }
@@ -90,24 +88,15 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
       isStreamingRef.current = true;
 
       // Dynamic chunking: 4MB for very large files (>500MB), 2MB for large (>100MB), 512KB for small
-      const CHUNK_SIZE =
-        lengthRef.current > 500 * 1024 * 1024
-          ? 4096 * 1024
-          : lengthRef.current > 100 * 1024 * 1024
-            ? 2048 * 1024
-            : 512 * 1024;
+      const CHUNK_SIZE = lengthRef.current > 500 * 1024 * 1024 ? 4096 * 1024 :
+                         lengthRef.current > 100 * 1024 * 1024 ? 2048 * 1024 : 512 * 1024;
       // Dynamic buffer ahead: Keep reasonable to avoid QuotaExceededError
       // For very large files, use smaller buffer to stay under ~200MB browser quota
-      const MAX_BUFFER_AHEAD =
-        lengthRef.current > 1000 * 1024 * 1024
-          ? 20 // >1GB: 20s
-          : lengthRef.current > 500 * 1024 * 1024
-            ? 30 // >500MB: 30s
-            : 40; // smaller files: 40s
+      const MAX_BUFFER_AHEAD = lengthRef.current > 1000 * 1024 * 1024 ? 20 :  // >1GB: 20s
+                               lengthRef.current > 500 * 1024 * 1024 ? 30 :   // >500MB: 30s
+                               40; // smaller files: 40s
 
-      console.log(
-        `🎬 [Video #${index}] Worker started: ${Math.round(lengthRef.current / 1024 / 1024)}MB file, ${Math.round(CHUNK_SIZE / 1024)}KB chunks`
-      );
+      console.log(`🎬 [Video #${index}] Worker started: ${Math.round(lengthRef.current / 1024 / 1024)}MB file, ${Math.round(CHUNK_SIZE / 1024)}KB chunks`);
 
       let lastLoggedPercent = 0;
 
@@ -118,16 +107,12 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
 
           // CRITICAL: Stop if MediaSource is not in 'open' state
           if (!ms || !sb) {
-            console.log(
-              `🎬 [Video #${index}] Worker stopped: MediaSource or SourceBuffer detached`
-            );
+            console.log(`🎬 [Video #${index}] Worker stopped: MediaSource or SourceBuffer detached`);
             break;
           }
 
           if (ms.readyState !== 'open') {
-            console.log(
-              `🎬 [Video #${index}] Worker stopped: MediaSource readyState is '${ms.readyState}' (not 'open')`
-            );
+            console.log(`🎬 [Video #${index}] Worker stopped: MediaSource readyState is '${ms.readyState}' (not 'open')`);
             break;
           }
 
@@ -135,9 +120,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           let endBuffer = 0;
           try {
             endBuffer = sb.buffered.length > 0 ? sb.buffered.end(sb.buffered.length - 1) : 0;
-          } catch (e) {
-            break;
-          }
+          } catch (e) { break; }
 
           // 1. PROACTIVE GARBAGE COLLECTION
           // Different strategies for ACTIVE (playing) vs BACKGROUND (preloading) videos
@@ -148,13 +131,9 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
             if (pos > 0) {
               // ACTIVE VIDEO (currently playing): Keep only 10s behind playback position
               if (pos > 20 && startBuffer < pos - 10) {
-                console.log(
-                  `🎬 [Video #${index}] 🧹 [ACTIVE] Cleaning: ${startBuffer.toFixed(1)}s → ${(pos - 10).toFixed(1)}s`
-                );
+                console.log(`🎬 [Video #${index}] 🧹 [ACTIVE] Cleaning: ${startBuffer.toFixed(1)}s → ${(pos - 10).toFixed(1)}s`);
                 sb.remove(0, pos - 10);
-                await new Promise(resolve => {
-                  sb.onupdateend = resolve;
-                });
+                await new Promise(resolve => { sb.onupdateend = resolve; });
               }
             } else {
               // BACKGROUND VIDEO (preloading): Limit total buffer to 20s to prevent QuotaExceededError
@@ -163,21 +142,17 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
 
               if (bufferDuration > MAX_BACKGROUND_BUFFER) {
                 const removeEnd = endBuffer - MAX_BACKGROUND_BUFFER;
-                console.log(
-                  `🎬 [Video #${index}] 🧹 [BACKGROUND] Cleaning: ${startBuffer.toFixed(1)}s → ${removeEnd.toFixed(1)}s (buffer: ${bufferDuration.toFixed(1)}s)`
-                );
+                console.log(`🎬 [Video #${index}] 🧹 [BACKGROUND] Cleaning: ${startBuffer.toFixed(1)}s → ${removeEnd.toFixed(1)}s (buffer: ${bufferDuration.toFixed(1)}s)`);
                 sb.remove(startBuffer, removeEnd);
-                await new Promise(resolve => {
-                  sb.onupdateend = resolve;
-                });
+                await new Promise(resolve => { sb.onupdateend = resolve; });
               }
             }
           }
-
+          
           // 2. BACKPRESSURE
           if (endBuffer > pos + MAX_BUFFER_AHEAD) {
             await new Promise(resolve => setTimeout(resolve, 1000));
-            continue;
+            continue; 
           }
 
           // 3. FETCH & APPEND
@@ -185,8 +160,8 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           const endByte = Math.min(startByte + CHUNK_SIZE, lengthRef.current) - 1;
 
           const response = await fetch(`${mediaRef.current.url}&frag=1`, {
-            headers: { Range: `bytes=${startByte}-${endByte}` },
-            signal: abortControllerRef.current?.signal,
+            headers: { 'Range': `bytes=${startByte}-${endByte}` },
+            signal: abortControllerRef.current?.signal
           });
 
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -196,24 +171,17 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
 
           // Check MediaSource is still open before appending
           if (mediaSourceRef.current?.readyState !== 'open') {
-            console.log(
-              `🎬 [Video #${index}] MediaSource no longer open (state: ${mediaSourceRef.current?.readyState}), stopping worker`
-            );
+            console.log(`🎬 [Video #${index}] MediaSource no longer open (state: ${mediaSourceRef.current?.readyState}), stopping worker`);
             break;
           }
 
-          if (sb.updating)
-            await new Promise(resolve => {
-              sb.onupdateend = resolve;
-            });
+          if (sb.updating) await new Promise(resolve => { sb.onupdateend = resolve; });
 
           // 4. APPEND with QuotaExceededError fallback
           try {
             // Final check before append - MediaSource must be open
             if (mediaSourceRef.current?.readyState !== 'open') {
-              console.log(
-                `🎬 [Video #${index}] MediaSource closed before append (state: ${mediaSourceRef.current?.readyState}), stopping`
-              );
+              console.log(`🎬 [Video #${index}] MediaSource closed before append (state: ${mediaSourceRef.current?.readyState}), stopping`);
               break;
             }
 
@@ -228,13 +196,12 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
                 // CRITICAL: Notify App FIRST, then start playback
                 // This ensures App can set up seek position before play() is called
                 if (downloadedRef.current === 0 && window.TheApp?.videoReadyForSeek) {
-                  window.TheApp.videoReadyForSeek(`video-${index}`);
+                   window.TheApp.videoReadyForSeek(`video-${index}`);
                 }
 
                 resolve();
               };
-              currentSb.onerror = e =>
-                reject(new Error(`SourceBuffer error: ${mediaSourceRef.current?.readyState}`));
+              currentSb.onerror = (e) => reject(new Error(`SourceBuffer error: ${mediaSourceRef.current?.readyState}`));
               currentSb.appendBuffer(arrayBuffer);
             });
 
@@ -253,18 +220,14 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
             // Start playback AFTER the first chunk is fully appended
             if (isFirstChunk && ref && typeof ref === 'object' && ref.current) {
               const shouldAutoplay = wsTools.getHouseAutostart();
-              console.log(
-                `🎬 [Video #${index}] First chunk loaded, autoplay: ${shouldAutoplay}, video state:`,
-                {
-                  paused: ref.current.paused,
-                  readyState: ref.current.readyState,
-                  currentTime: ref.current.currentTime,
-                }
-              );
+              console.log(`🎬 [Video #${index}] First chunk loaded, autoplay: ${shouldAutoplay}, video state:`, {
+                paused: ref.current.paused,
+                readyState: ref.current.readyState,
+                currentTime: ref.current.currentTime
+              });
 
               if (shouldAutoplay) {
-                ref.current
-                  .play()
+                ref.current.play()
                   .then(() => {
                     console.log(`🎬 [Video #${index}] ✅ Autoplay SUCCESS - video playing`);
                   })
@@ -277,9 +240,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
             // Progress logging every 10%
             const percent = Math.floor((downloadedRef.current / lengthRef.current) * 100);
             if (percent >= lastLoggedPercent + 10 && percent <= 100) {
-              console.log(
-                `🎬 [Video #${index}] Progress: ${percent}% (${Math.round(downloadedRef.current / 1024 / 1024)}MB / ${Math.round(lengthRef.current / 1024 / 1024)}MB)`
-              );
+              console.log(`🎬 [Video #${index}] Progress: ${percent}% (${Math.round(downloadedRef.current / 1024 / 1024)}MB / ${Math.round(lengthRef.current / 1024 / 1024)}MB)`);
               lastLoggedPercent = percent;
             }
           } catch (e: any) {
@@ -290,22 +251,16 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
                 const clearStart = Math.max(0, pos - 5);
                 const clearEnd = pos + 20;
                 if (clearStart < clearEnd) {
-                  console.log(
-                    `🎬 [Video #${index}] 🆘 Emergency clear: keep ${clearStart.toFixed(1)}s → ${clearEnd.toFixed(1)}s`
-                  );
+                  console.log(`🎬 [Video #${index}] 🆘 Emergency clear: keep ${clearStart.toFixed(1)}s → ${clearEnd.toFixed(1)}s`);
                   // Remove before
                   if (sb.buffered.start(0) < clearStart) {
                     sb.remove(sb.buffered.start(0), clearStart);
-                    await new Promise(resolve => {
-                      sb.onupdateend = resolve;
-                    });
+                    await new Promise(resolve => { sb.onupdateend = resolve; });
                   }
                   // Remove after
                   if (sb.buffered.end(sb.buffered.length - 1) > clearEnd) {
                     sb.remove(clearEnd, sb.buffered.end(sb.buffered.length - 1));
-                    await new Promise(resolve => {
-                      sb.onupdateend = resolve;
-                    });
+                    await new Promise(resolve => { sb.onupdateend = resolve; });
                   }
                 }
               }
@@ -318,26 +273,18 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
         }
 
         // Only call endOfStream if we've downloaded EVERYTHING and MediaSource is still open
-        if (
-          downloadedRef.current >= lengthRef.current &&
-          mediaSourceRef.current?.readyState === 'open'
-        ) {
-          console.log(
-            `🎬 [Video #${index}] Download complete (${Math.round(downloadedRef.current / 1024 / 1024)}MB), calling endOfStream()`
-          );
+        if (downloadedRef.current >= lengthRef.current && mediaSourceRef.current?.readyState === 'open') {
+          console.log(`🎬 [Video #${index}] Download complete (${Math.round(downloadedRef.current / 1024 / 1024)}MB), calling endOfStream()`);
           mediaSourceRef.current.endOfStream();
         } else if (downloadedRef.current < lengthRef.current) {
-          console.log(
-            `🎬 [Video #${index}] Worker stopped early: ${Math.round(downloadedRef.current / 1024 / 1024)}MB / ${Math.round(lengthRef.current / 1024 / 1024)}MB downloaded (${Math.round((downloadedRef.current / lengthRef.current) * 100)}%)`
-          );
+          console.log(`🎬 [Video #${index}] Worker stopped early: ${Math.round(downloadedRef.current / 1024 / 1024)}MB / ${Math.round(lengthRef.current / 1024 / 1024)}MB downloaded (${Math.round(downloadedRef.current / lengthRef.current * 100)}%)`);
         }
       } catch (err: any) {
         // Ignore expected errors: AbortError, MediaSource closed (normal during navigation)
-        const isExpectedError =
-          err.name === 'AbortError' ||
-          err.message?.includes('MediaSource closed') ||
-          err.message?.includes('SourceBuffer error') ||
-          mediaSourceRef.current?.readyState !== 'open';
+        const isExpectedError = err.name === 'AbortError' ||
+                                err.message?.includes('MediaSource closed') ||
+                                err.message?.includes('SourceBuffer error') ||
+                                mediaSourceRef.current?.readyState !== 'open';
         if (!isExpectedError) {
           console.error(`🎬 [Video #${index}] Worker Error:`, err);
           console.error(`🎬 [Video #${index}] Error details:`, {
@@ -345,7 +292,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
             message: err?.message,
             stack: err?.stack,
             downloadProgress: `${downloadedRef.current} / ${lengthRef.current}`,
-            mediaSourceState: mediaSourceRef.current?.readyState,
+            mediaSourceState: mediaSourceRef.current?.readyState
           });
         }
       } finally {
@@ -366,9 +313,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
         // CRITICAL FIX: Stop background worker when video becomes hidden
         // This prevents "noisy neighbor" resource contention
         if (hidden && isStreamingRef.current) {
-          console.log(
-            `🎬 [Video #${index}] Hidden - pausing background worker for: ${mediaRef.current?.filename}`
-          );
+          console.log(`🎬 [Video #${index}] Hidden - pausing background worker for: ${mediaRef.current?.filename}`);
           isStreamingRef.current = false;
           // DON'T abort - just stop the loop by setting isStreamingRef to false
           // The worker loop will exit gracefully at line 104
@@ -382,12 +327,12 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
     React.useEffect(() => {
       const videoEl = ref && typeof ref === 'object' ? ref.current : null;
       if (!shouldLoad || !media?.url || !videoEl || initializedUrlRef.current === media.url) {
-        if (!shouldLoad || !media?.url) {
-          isStreamingRef.current = false;
-          abortControllerRef.current?.abort();
-          initializedUrlRef.current = null;
-        }
-        return;
+         if (!shouldLoad || !media?.url) {
+           isStreamingRef.current = false;
+           abortControllerRef.current?.abort();
+           initializedUrlRef.current = null;
+         }
+         return;
       }
 
       console.log(`🎬 [Video #${index}] Mounting Video: ${media.filename}`);
@@ -401,9 +346,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
 
       // iOS/Safari fallback: Use direct src if MediaSource not available
       if (!mediaSourceSupported || !withFragments) {
-        console.log(
-          `🎬 [Video #${index}] Using direct src (iOS/Safari mode - browser will handle buffering)`
-        );
+        console.log(`🎬 [Video #${index}] Using direct src (iOS/Safari mode - browser will handle buffering)`);
 
         // Use URL directly - no &frag=1 needed (server streams file as-is)
         const directUrl = media.url;
@@ -412,10 +355,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
 
         // Wait for video to have enough data before calling onVideoLoaded
         const onCanPlay = () => {
-          console.log(
-            `🎬 [Video #${index}] Video ready (canplay event), readyState:`,
-            videoEl.readyState
-          );
+          console.log(`🎬 [Video #${index}] Video ready (canplay event), readyState:`, videoEl.readyState);
           if (onVideoLoaded) {
             console.log(`🎬 [Video #${index}] Calling onVideoLoaded (direct src mode)`);
             onVideoLoaded();
@@ -448,9 +388,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           const filteredCodecs = rawCodecs
             .split(',')
             .map((c: string) => c.trim())
-            .filter(
-              (c: string) => !c.includes('text') && !c.includes('wvtt') && !c.includes('stpp')
-            )
+            .filter((c: string) => !c.includes('text') && !c.includes('wvtt') && !c.includes('stpp'))
             .join(', ');
           const codecs = filteredCodecs || 'avc1.42C028, mp4a.40.2';
           console.log(`🎬 [Video #${index}] Codecs: raw="${rawCodecs}" → filtered="${codecs}"`);
@@ -458,7 +396,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           sb.mode = 'segments';
           sourceBufferRef.current = sb;
 
-          const headRes = await fetch(`${media.url}&frag=1`, { headers: { Range: 'bytes=0-1' } });
+          const headRes = await fetch(`${media.url}&frag=1`, { headers: { 'Range': 'bytes=0-1' } });
           const range = headRes.headers.get('Content-Range');
           lengthRef.current = parseFloat(range!.split('/')[1]);
           downloadedRef.current = 0;
@@ -467,7 +405,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           // NOTE: onVideoLoaded will be called from the worker AFTER the first chunk is appended
           startBufferWorker();
         } catch (e) {
-          console.error('MSE Failed, Falling back to direct src', e);
+          console.error("MSE Failed, Falling back to direct src", e);
           videoEl.src = media.url!;
         }
       };
@@ -500,7 +438,7 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           objectFit: 'cover',
           position: 'absolute',
           top: 0,
-          left: 0,
+          left: 0
           // opacity and visibility now controlled by CSS classes
         }}
         autoPlay={wsTools.getHouseAutostart()}

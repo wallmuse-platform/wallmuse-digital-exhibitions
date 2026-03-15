@@ -236,137 +236,103 @@ export const Image = React.forwardRef<HTMLImageElement, ImageProps>(
       };
     }, [index, media?.filename]); // Reduced dependencies to prevent excessive re-runs
 
-    // CRITICAL FIX: Always render image element like Video component does
-    // Don't return null based on shouldLoad - let CSS handle visibility
-    // This ensures both image-1 and image-2 slots always exist in DOM
-
     console.log(`[Image Component #${index}] Rendering:`, {
       filename: media?.filename || 'no media',
       hidden: hidden,
       shouldLoad: shouldLoad,
       url: media?.url || 'no url',
       hasMedia: !!media,
+      isTitleOnly: media?.isTitleOnly || false,
     });
 
-    // FUTURE: Object-fit mode based on croppable flag
-    // const objectFitMode = objectFit || 'cover';
-    // When copyright images come: objectFit={media.croppable !== false ? 'cover' : 'contain'}
+    // Title-only items: render background + text shapes instead of <img>
+    if (media?.isTitleOnly) {
+      const textShapes = (media.shapes || []).filter(
+        (s: any) => s.tag_name === 'text'
+      );
+      // Server sends hex colors without #, optionally with alpha (e.g. "FFFFFF" or "000000FF")
+      const parseColor = (c: string | undefined, fallback: string): string => {
+        if (!c) return fallback;
+        const hex = c.startsWith('#') ? c : `#${c}`;
+        // Convert 8-char RGBA hex to CSS rgba
+        if (hex.length === 9) {
+          const r = parseInt(hex.slice(1, 3), 16);
+          const g = parseInt(hex.slice(3, 5), 16);
+          const b = parseInt(hex.slice(5, 7), 16);
+          const a = parseInt(hex.slice(7, 9), 16) / 255;
+          return `rgba(${r},${g},${b},${a.toFixed(2)})`;
+        }
+        return hex;
+      };
 
-    // CRITICAL FIX: Always render img element, handle undefined media like Video component
-    const imgElement = (
+      return (
+        <div
+          id={`image-${index}`}
+          className={hidden ? 'image hidden' : 'image'}
+          style={{
+            width: '100%',
+            height: '100%',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            zIndex: hidden ? 0 : 2,
+            backgroundColor: parseColor(media.backgroundColor, '#000000'),
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '16px',
+            padding: '0 3%',
+            boxSizing: 'border-box',
+          }}
+        >
+          {textShapes
+            .filter((s: any) => s.text)
+            .map((shape: any, i: number) => (
+              <div
+                key={i}
+                style={{
+                  width: '100%',
+                  color: parseColor(shape.color, '#ffffff'),
+                  fontSize: shape.size ? `${shape.size}px` : '48px',
+                  fontFamily: shape.font || 'SansSerif',
+                  textAlign: (shape.halign as any) || 'center',
+                }}
+              >
+                {shape.text.replace(/\s*\{[^}]*\}/g, '').trim()}
+              </div>
+            ))}
+        </div>
+      );
+    }
+
+    // Regular image rendering
+    return (
       <img
         ref={ref}
-        src={media?.url || ''} // Empty src when no media (like Video component)
+        src={media?.url || ''}
         className={hidden ? 'image hidden' : 'image'}
         id={`image-${index}`}
-        alt="" // Add alt attribute to fix ESLint warning
+        alt=""
         style={{
           width: '100%',
           height: '100%',
-          objectFit: 'cover', // FUTURE: Use objectFitMode when croppable flag available
+          objectFit: 'cover',
           position: 'absolute',
           top: 0,
           left: 0,
-          zIndex: hidden ? 0 : 2, // Ensure visible images appear above videos
-          ...animationStyle, // Apply Ken Burns animation if enabled
+          zIndex: hidden ? 0 : 2,
+          ...animationStyle,
         }}
         onLoad={() =>
-          console.log(
-            `[Image Component #${index}] Image loaded successfully:`,
-            media?.filename || 'no filename'
-          )
+          console.log(`[Image Component #${index}] Image loaded:`, media?.filename)
         }
         onError={e => {
-          // Only log errors for images with actual media (ignore empty src errors)
           if (media?.url) {
-            console.warn(`[Image Component #${index}] Image failed to load:`, media.filename, e);
+            console.warn(`[Image Component #${index}] Image failed to load:`, media.filename);
           }
         }}
       />
     );
-
-    // CRITICAL DEBUG: Check if the ID is being set correctly in the React element
-    // console.log(`[Image Component #${index}] REACT ELEMENT DEBUG:`, {
-    //     elementType: imgElement.type,
-    //     elementProps: imgElement.props,
-    //     elementId: imgElement.props.id,
-    //     elementKey: imgElement.key
-    // });
-    // console.log(`[Image Component #${index}] Returning img element:`, imgElement);
-
-    // Additional debugging: check all images in DOM after render (reduced frequency)
-    setTimeout(() => {
-      const allImages = document.querySelectorAll('img');
-      // console.log(`[Image Component #${index}] All images in DOM (200ms):`, Array.from(allImages).map(img => ({
-      //     id: img.id,
-      //     src: img.src,
-      //     className: img.className,
-      //     style: {
-      //         display: img.style.display,
-      //         visibility: img.style.visibility,
-      //         position: img.style.position
-      //     }
-      // })));
-
-      // CRITICAL DEBUG: Check if our React ref is working
-      const refElement = ref && 'current' in ref ? ref.current : null;
-      if (refElement) {
-        const computedStyle = window.getComputedStyle(refElement);
-        // console.log(`[Image Component #${index}] REACT REF CHECK (200ms):`, {
-        //     refExists: !!refElement,
-        //     refId: refElement?.id,
-        //     refSrc: refElement?.src,
-        //     refStyle: {
-        //         display: refElement.style.display,
-        //         visibility: refElement.style.visibility,
-        //         position: refElement.style.position,
-        //         zIndex: refElement.style.zIndex
-        //     },
-        //     computedStyle: {
-        //         display: computedStyle.display,
-        //         visibility: computedStyle.visibility,
-        //         position: computedStyle.position,
-        //         zIndex: computedStyle.zIndex,
-        //         width: computedStyle.width,
-        //         height: computedStyle.height,
-        //         opacity: computedStyle.opacity
-        //     },
-        //     refParent: refElement?.parentElement?.id || refElement?.parentElement?.className,
-        //     isVisible: computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden' && computedStyle.opacity !== '0',
-        //     imageState: {
-        //         complete: refElement.complete,
-        //         naturalWidth: refElement.naturalWidth,
-        //         naturalHeight: refElement.naturalHeight,
-        //         currentSrc: refElement.currentSrc
-        //     },
-        //     parentContainer: {
-        //         parentId: refElement?.parentElement?.id,
-        //         parentClass: refElement?.parentElement?.className,
-        //         parentStyle: refElement?.parentElement ? {
-        //             display: window.getComputedStyle(refElement.parentElement).display,
-        //             visibility: window.getComputedStyle(refElement.parentElement).visibility,
-        //             width: window.getComputedStyle(refElement.parentElement).width,
-        //             height: window.getComputedStyle(refElement.parentElement).height
-        //         } : null
-        //     },
-        //     rootContainer: {
-        //         rootId: document.getElementById('root-wm-player')?.id,
-        //         rootChildren: document.getElementById('root-wm-player')?.children?.length,
-        //         rootStyle: document.getElementById('root-wm-player') ? {
-        //             display: window.getComputedStyle(document.getElementById('root-wm-player')!).display,
-        //             visibility: window.getComputedStyle(document.getElementById('root-wm-player')!).visibility,
-        //             width: window.getComputedStyle(document.getElementById('root-wm-player')!).width,
-        //             height: window.getComputedStyle(document.getElementById('root-wm-player')!).height
-        //         } : null
-        //     }
-        // });
-      } else {
-        // console.log(`[Image Component #${index}] REACT REF CHECK (200ms):`, {
-        //     refExists: false
-        // });
-      }
-    }, 200);
-
-    return imgElement;
   }
 );
