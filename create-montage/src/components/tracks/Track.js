@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { useDrop } from 'react-dnd'
 import { Stack, useTheme } from "@mui/material";
 import { DragableTypes } from "../constants/DragableTypes";
@@ -82,7 +82,8 @@ const Track = function Track({ trackNumber, artworks, setTrackArtworks, dropMont
             removeExcessiveEmptyTracks()
         }, [setTrackArtworks, artworks, trackNumber, checkMontageSyncStartViolation, getUpdatedTrackArtworks, removeExcessiveEmptyTracks, removeMontageFromAllTracks, allowDrop])
 
-    const handleMontageDrop = artwork => dropMontageIfAllowed(artwork, trackNumber)
+    const handleMontageDropRef = useRef(null)
+    handleMontageDropRef.current = artwork => dropMontageIfAllowed(artwork, trackNumber)
 
     const updateHoveredByTool = (artwork, toolType) => {
         // don't change anything if it's the same artwork
@@ -112,7 +113,7 @@ const Track = function Track({ trackNumber, artworks, setTrackArtworks, dropMont
                 artwork.droppedTrack = trackNumber;
 
                 if (isMontage(artwork)) {
-                    handleMontageDrop(artwork);
+                    handleMontageDropRef.current(artwork);
                 } else if (isArtwork(artwork) || isTitle(artwork)) {
                     artwork.durationInMillis = getArtworkDurationInMillis(artwork);
                     if (isTitle(artwork)) {
@@ -134,11 +135,10 @@ const Track = function Track({ trackNumber, artworks, setTrackArtworks, dropMont
                 isOver: monitor.isOver(),
                 canDrop: monitor.canDrop(),
             }),
-        }), [artworks, isMontage, isArtwork, Date.now()]
+        }), [trackNumber, setTrackArtworks]
     )
     const isActive = canDrop && isOver
     const backgroundColor = selectBackgroundColor(isActive, canDrop)
-
     const renderArtworks = () => {
         let currentEndTime = 0;
         return artworks.map((artwork, index) => {
@@ -163,7 +163,7 @@ const Track = function Track({ trackNumber, artworks, setTrackArtworks, dropMont
     return (
         <Stack
             direction="row"
-            sx={{ borderBottom: 1, borderColor: theme.palette.primary.main, backgroundColor: { backgroundColor }, padding: "5px 0", overflowX: "auto" }}
+            sx={{ borderBottom: 1, borderColor: theme.palette.primary.main, backgroundColor: backgroundColor, padding: "5px 0", overflowX: "auto" }}
             ref={ drop }
             minHeight={160} >
             {
