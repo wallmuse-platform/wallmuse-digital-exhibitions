@@ -109,7 +109,7 @@ const constructTrackTitle = artwork => {
         display_datation: boolToYesNo(title.displayDatation),
         display_description: boolToYesNo(title.displayDescription),
         display_credits: boolToYesNo(title.displayCredits),
-        duration: artwork.duration.toString(),
+        duration: (artwork.durationInMillis / 1000).toString(),
         background_color: title.backgroundColor.replace('#', ''),
         font: title.font,
         color: title.color.replace('#', '') + 'FF',

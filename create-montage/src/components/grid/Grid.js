@@ -417,7 +417,7 @@ export default function BasicGrid() {
         setLanguage(droppedMontage.language)
         setDescriptions(droppedMontage.descriptions);
         setRights(droppedMontage.rights)
-        setTrackArtworks(droppedMontage.artworks)
+        setTrackArtworks([...droppedMontage.artworks, []])
     }
 
     const handleCloseAsyncOpFeedback = () => {
