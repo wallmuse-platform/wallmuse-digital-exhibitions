@@ -18,6 +18,20 @@ export class ImageMediaFile extends MediaFile {
   // public splittable?: boolean;   // For multi-screen spanning
   // public deconstructable?: boolean;
 
+  public isTitleOnly: boolean = false;
+
+  public static getTitle(
+    id: string,
+    offset: number,
+    duration: number,
+    shapes: Shape[] | undefined,
+    backgroundColor: string | undefined
+  ): ImageMediaFile {
+    const imf = new ImageMediaFile(0, id, '', 'title', offset, duration, shapes, backgroundColor);
+    imf.isTitleOnly = true;
+    return imf;
+  }
+
   public static getImage(
     aid: number,
     id: string,

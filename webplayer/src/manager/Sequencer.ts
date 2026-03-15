@@ -33,7 +33,13 @@ export class Sequencer {
   private static pauseStartTime = 0; // When pause started
 
   // ESSENTIAL: Track override system (for benchmarks 2 & 4)
-  private static montageTrackOverrides: Map<number, number> = new Map();
+  // CRITICAL: Use montage ID (not position) to track overrides
+  // This ensures track assignments persist across montage reordering
+  private static montageTrackOverrides: Map<string, number> = new Map();
+
+  // TEMPORARY: Store overrides by position when montages aren't loaded yet
+  // These get converted to ID-based once montages load
+  private static pendingPositionOverrides: Map<number, number> = new Map();
 
   // ESSENTIAL: Navigation state (for benchmark 4)
   private static pendingMontageIndex = 0;
@@ -356,28 +362,74 @@ export class Sequencer {
 
   // ESSENTIAL: Track override system (for benchmarks 2 & 4)
   public static setMontageTrackOverride(montageIndex: number, trackIndex: number) {
-    this.montageTrackOverrides.set(montageIndex, trackIndex);
-    LogHelper.log(
-      'Sequencer.setMontageTrackOverride',
-      `Set montage ${montageIndex} to use track ${trackIndex}`
-    );
+    // Get montage ID (not position) to make overrides persistent across reordering
+    let montageId: string | undefined;
+    if (this._playlist) {
+      const montage = this._playlist.getMontage(montageIndex);
+      montageId = montage?.id?.toString();
+    }
+
+    if (montageId) {
+      // Montage loaded - use ID-based override
+      this.montageTrackOverrides.set(montageId, trackIndex);
+      // Also remove from pending if it was there
+      this.pendingPositionOverrides.delete(montageIndex);
+      LogHelper.log(
+        'Sequencer.setMontageTrackOverride',
+        `Set montage ${montageIndex} (ID: ${montageId}) to use track ${trackIndex}`
+      );
+    } else {
+      // Montage not loaded yet - store by position temporarily
+      this.pendingPositionOverrides.set(montageIndex, trackIndex);
+      console.log(
+        `[Sequencer.setMontageTrackOverride] ⏳ Montage ${montageIndex} not loaded yet, storing position-based override for track ${trackIndex} (will convert to ID when montage loads)`
+      );
+    }
   }
 
   public static getMontageTrackIndex(montageIndex: number): number {
-    const override = this.montageTrackOverrides.get(montageIndex);
-    if (override !== undefined) {
-      return override;
+    // FIRST: Check if there's a pending position-based override (before montage loaded)
+    const pendingOverride = this.pendingPositionOverrides.get(montageIndex);
+    if (pendingOverride !== undefined) {
+      console.log(`[Sequencer.getMontageTrackIndex] Montage ${montageIndex}: Using pending position-based override track ${pendingOverride} (montage not fully loaded yet)`);
+      return pendingOverride;
     }
 
-    // Use montage default track from playlist or global montages
+    // Get montage ID to look up override
+    let montageId: string | undefined;
     let montage;
+
     if (this._playlist) {
       montage = this._playlist.getMontage(montageIndex);
+      montageId = montage?.id?.toString();
+
+      // If montage just loaded and has pending override, convert it to ID-based
+      if (montageId && this.pendingPositionOverrides.has(montageIndex)) {
+        const track = this.pendingPositionOverrides.get(montageIndex)!;
+        this.montageTrackOverrides.set(montageId, track);
+        this.pendingPositionOverrides.delete(montageIndex);
+        console.log(`[Sequencer.getMontageTrackIndex] ✅ Converted pending override: Montage ${montageIndex} (ID: ${montageId}) now uses track ${track}`);
+        return track;
+      }
     } else {
       // For default playlists (undefined), use global montages
       montage = Object.values(Montages)[montageIndex];
+      montageId = montageIndex.toString(); // Fallback to position
     }
-    return montage?.getTrackIndex() || 0;
+
+    // Check override by montage ID (not position!)
+    if (montageId) {
+      const override = this.montageTrackOverrides.get(montageId);
+      if (override !== undefined) {
+        console.log(`[Sequencer.getMontageTrackIndex] Montage ${montageIndex} (ID: ${montageId}): Using override track ${override}`);
+        return override;
+      }
+    }
+
+    // Use montage default track
+    const defaultTrack = montage?.getTrackIndex() || 0;
+    console.log(`[Sequencer.getMontageTrackIndex] Montage ${montageIndex} (ID: ${montageId || 'unknown'}): No override, using montage default track ${defaultTrack} (${montage?.name || 'unknown'})`);
+    return defaultTrack;
   }
 
   public static setPendingMontageIndex(index: number) {
@@ -390,7 +442,16 @@ export class Sequencer {
   }
 
   public static getMontageTrackOverride(montageIndex: number): number | undefined {
-    return this.montageTrackOverrides.get(montageIndex);
+    // Get montage ID to look up override
+    let montageId: string | undefined;
+    if (this._playlist) {
+      const montage = this._playlist.getMontage(montageIndex);
+      montageId = montage?.id?.toString();
+    } else {
+      montageId = montageIndex.toString();
+    }
+
+    return montageId ? this.montageTrackOverrides.get(montageId) : undefined;
   }
 
   public static setVolume(volume: number) {
@@ -577,14 +638,92 @@ export class Sequencer {
     }
     if (!montage) return false;
 
-    const track = montage.seqs[position.getTrackIndex()];
-    if (!track) return false;
+    let track = montage.seqs[position.getTrackIndex()];
+    if (!track) {
+      // Track doesn't exist in this montage - fall back to track 0
+      console.warn(
+        `[Sequencer.showMedia] ⚠️ Track ${position.getTrackIndex()} not found in montage ${position.getMontageIndex()} (has ${montage.seqs.length} tracks), falling back to track 0`
+      );
+      track = montage.seqs[0];
+      if (!track) {
+        console.error(
+          `[Sequencer.showMedia] ❌ CRITICAL: Track 0 also not found in montage ${position.getMontageIndex()}. Montage has no tracks!`
+        );
+        return false;
+      }
+
+      // CRITICAL FIX: Update the track override to prevent infinite loop
+      this.setMontageTrackOverride(position.getMontageIndex(), 0);
+      LogHelper.log(
+        'Sequencer.showMedia',
+        `✅ Track override updated: montage ${position.getMontageIndex()} now uses track 0`
+      );
+
+      // Update position to use track 0
+      position = this.createPosition(position.getMontageIndex(), 0, position.getItemIndex());
+      // Update player position
+      ItemPlayer.ThePlayer?.setPosition(position);
+    }
 
     const item = track.items[position.getItemIndex()];
     if (!item) return false;
 
     const artwork = item.artwork;
-    if (!artwork) return false;
+
+    // Title-only items: no artwork, display as image with shapes/background
+    if (!artwork) {
+      if (!item.shapes && !item.background_color) return false;
+
+      LogHelper.log(
+        'Sequencer.showMedia',
+        `${load ? 'Loading' : 'Preloading'} title-only item from montage ${position.getMontageIndex()}`
+      );
+
+      if (load && TheApp?.showImage) {
+        // TEMPORARY: Client-side text fill until server implements Option A
+        // (see docs/features/TITLE_TEXT_FILL.md)
+        const shapes = item.shapes ? item.shapes.map((s: any) => ({ ...s })) : [];
+
+        // Apply title size field: "large" scales up text shapes by 1.5x
+        const titleSizeField = (item as any).size;
+        if (titleSizeField === 'large') {
+          shapes.forEach((s: any) => {
+            if (s.tag_name === 'text' && s.size) {
+              s.size = Math.round(s.size * 1.5);
+            }
+          });
+        }
+
+        const emptyTexts = shapes.filter((s: any) => s.tag_name === 'text' && !s.text);
+        if (emptyTexts.length > 0) {
+          const lines: string[] = [];
+          const nextCount = (item as any).next_count ?? 1;
+          const prevCount = (item as any).previous_count ?? 0;
+          const refIndex = nextCount > 0
+            ? position.getItemIndex() + nextCount
+            : position.getItemIndex() - (prevCount || 1);
+          const refItem = track.items[refIndex];
+          if (refItem?.artwork?.title) lines.push(refItem.artwork.title);
+          if ((montage as any).author) lines.push((montage as any).author);
+          for (let i = 0; i < Math.min(emptyTexts.length, lines.length); i++) {
+            (emptyTexts[i] as any).text = lines[i];
+          }
+        }
+
+        const titleFile = ImageMediaFile.getTitle(
+          `title-m${position.getMontageIndex()}-i${position.getItemIndex()}`,
+          0,
+          item.duration || 5,
+          shapes,
+          item.background_color
+        );
+        TheApp.showImage(titleFile);
+        this.startTime = Date.now();
+        this.startOffset = 0;
+        this.offset = 0;
+      }
+      return true;
+    }
 
     LogHelper.log(
       'Sequencer.showMedia',
@@ -592,7 +731,6 @@ export class Sequencer {
     );
 
     if (load) {
-      // ESSENTIAL: Integrate with App.tsx for video display
       if (artwork.type === 'VID' && TheApp) {
         const videoFile = new VideoMediaFile(
           artwork.artwork_id || 0,
@@ -600,38 +738,35 @@ export class Sequencer {
           artwork.url,
           artwork.codecs || '',
           artwork.filename || 'unknown',
-          0, // offset
+          0,
           artwork.duration || 30,
-          false, // loop
-          undefined, // shapes
-          undefined // backgroundColor
+          false,
+          item.shapes,
+          item.background_color
         );
         if (TheApp.showVideo) {
           TheApp.showVideo(videoFile);
         }
       } else if (artwork.type === 'IMG' && TheApp) {
-        // Handle images similarly
         const imageFile = ImageMediaFile.getImage(
           artwork.artwork_id || 0,
           `image-${artwork.artwork_id || 'unknown'}`,
           artwork.url,
           artwork.filename || 'unknown',
-          0, // offset
+          0,
           artwork.duration || 30,
-          undefined, // shapes
-          undefined // backgroundColor
+          item.shapes,
+          item.background_color
         );
         if (TheApp.showImage) {
           TheApp.showImage(imageFile);
         }
       }
 
-      // Update timing for new media
       this.startTime = Date.now();
       this.startOffset = 0;
       this.offset = 0;
     } else {
-      // Preload logic
       if (artwork.type === 'VID' && TheApp?.preloadVideo) {
         const videoFile = new VideoMediaFile(
           artwork.artwork_id || 0,
@@ -639,24 +774,23 @@ export class Sequencer {
           artwork.url,
           artwork.codecs || '',
           artwork.filename || 'unknown',
-          0, // offset
+          0,
           artwork.duration || 30,
-          false, // loop
-          undefined, // shapes
-          undefined // backgroundColor
+          false,
+          item.shapes,
+          item.background_color
         );
         TheApp.preloadVideo(videoFile);
       } else if (artwork.type === 'IMG' && TheApp?.preloadImage) {
-        // Preload images similarly to videos
         const imageFile = ImageMediaFile.getImage(
           artwork.artwork_id || 0,
           `image-${artwork.artwork_id || 'unknown'}`,
           artwork.url,
           artwork.filename || 'unknown',
-          0, // offset
+          0,
           artwork.duration || 30,
-          undefined, // shapes
-          undefined // backgroundColor
+          item.shapes,
+          item.background_color
         );
         TheApp.preloadImage(imageFile);
       }
@@ -684,7 +818,8 @@ export class Sequencer {
         `trying next item: I${nextItemIndex}`
     );
 
-    if (currentMontage && nextItemIndex < currentMontage.seqs[p.getTrackIndex()].items.length) {
+    const currentTrack = currentMontage?.seqs?.[p.getTrackIndex()];
+    if (currentMontage && currentTrack && nextItemIndex < currentTrack.items.length) {
       LogHelper.log('Sequencer.getNextPosition', `Next item found: I${nextItemIndex}`);
       return this.createPosition(p.getMontageIndex(), p.getTrackIndex(), nextItemIndex);
     }
@@ -693,7 +828,7 @@ export class Sequencer {
     const nextMontageIndex = p.getMontageIndex() + 1;
     LogHelper.log(
       'Sequencer.getNextPosition',
-      `No more items in current montage, trying next montage: M${nextMontageIndex}`
+      `No more items in current track, trying next montage: M${nextMontageIndex}`
     );
 
     // Check if next montage exists (for both defined playlists and default playlists)
@@ -701,21 +836,33 @@ export class Sequencer {
       ? this._playlist.getMontagesCount()
       : Object.keys(Montages).length;
     if (nextMontageIndex < montageCount) {
-      // ESSENTIAL: Preserve track across montages
-      const currentTrack = p.getTrackIndex();
+      const targetTrack = this.getMontageTrackIndex(nextMontageIndex);
       LogHelper.log(
         'Sequencer.getNextPosition',
-        `Next montage found: M${nextMontageIndex}, preserving track ${currentTrack}`
+        `Next montage found: M${nextMontageIndex}, using montage track: ${targetTrack}`
       );
-      this.setMontageTrackOverride(nextMontageIndex, currentTrack);
-
-      return this.createPosition(nextMontageIndex, currentTrack);
+      return this.createPosition(nextMontageIndex, targetTrack);
     }
 
     // Loop back to start if enabled OR for default playlists
     if (this._playlist?.loop || !this._playlist) {
       const firstTrack = this.getMontageTrackIndex(0);
       LogHelper.log('Sequencer.getNextPosition', 'Looping back to start: M0');
+
+      // Skip title-only items (no artwork) on loop-back — they only show on first play
+      const firstMontage = this._playlist
+        ? this._playlist.getMontage(0)
+        : Object.values(Montages)[0];
+      const firstTrackObj = firstMontage?.seqs?.[firstTrack];
+      if (
+        firstTrackObj?.items?.[0] &&
+        !firstTrackObj.items[0].artwork &&
+        firstTrackObj.items.length > 1
+      ) {
+        LogHelper.log('Sequencer.getNextPosition', 'Skipping title-only item at I0 on loop-back');
+        return this.createPosition(0, firstTrack, 1);
+      }
+
       return this.createPosition(0, firstTrack);
     }
 

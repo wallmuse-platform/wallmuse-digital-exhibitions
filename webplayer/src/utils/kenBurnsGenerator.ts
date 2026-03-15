@@ -67,10 +67,7 @@ export function generateRandomKenBurns(randomSeed?: number): ZoomAndPanParams {
 
   // Ensure we have different positions (retry once if same)
   if (startPos === endPos) {
-    endPos = randomChoice(
-      positions.filter(p => p !== startPos),
-      rng
-    );
+    endPos = randomChoice(positions.filter(p => p !== startPos), rng);
   }
 
   // Generate random scales within validated range (80-130%)
@@ -115,7 +112,10 @@ export function generateRandomKenBurns(randomSeed?: number): ZoomAndPanParams {
  * @param scale - The scale percentage (100-130)
  * @returns CSS translate string (e.g., "-3%, -2%")
  */
-export function calculateTranslateForPosition(position: ZoomAndPanPosition, scale: number): string {
+export function calculateTranslateForPosition(
+  position: ZoomAndPanPosition,
+  scale: number
+): string {
   // Calculate available pan range
   // Since translate is applied to scaled image, we need to divide by scale
   // to get the actual viewport movement

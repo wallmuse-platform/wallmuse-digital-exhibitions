@@ -11,6 +11,7 @@ export class Line extends Shape {
 
   public constructor(json?: any) {
     super(json);
+    if (json) Object.assign(this, json);
     this.line_size = myParseInt(this.line_size);
     this.x1 = myParseInt(this.x1);
     this.y1 = myParseInt(this.y1);

@@ -79,9 +79,10 @@ const detectPlaylistContentTypes = (playlist: Playlist | undefined) => {
                 hasImages = true;
               } else if (item.artwork && item.artwork.type === 'VID') {
                 hasVideos = true;
+              } else if (!item.artwork && (item.shapes || item.background_color)) {
+                hasImages = true; // title-only items render in image slot
               }
 
-              // Early exit if we found both types
               if (hasImages && hasVideos) {
                 break;
               }
@@ -105,6 +106,8 @@ const detectPlaylistContentTypes = (playlist: Playlist | undefined) => {
                 hasImages = true;
               } else if (item.artwork && item.artwork.type === 'VID') {
                 hasVideos = true;
+              } else if (!item.artwork && (item.shapes || item.background_color)) {
+                hasImages = true;
               }
               if (hasImages && hasVideos) break;
             }
@@ -161,10 +164,7 @@ export const setCurrentPlaylist = (p: Playlist | undefined) => {
     if (window.parent && window.parent !== window) {
       try {
         (window.parent as any).currentPlaylist = p;
-        LogHelper.log(
-          'setCurrentPlaylist',
-          `Updated parent window.currentPlaylist: ${p?.id || 'undefined'}`
-        );
+        LogHelper.log('setCurrentPlaylist', `Updated parent window.currentPlaylist: ${p?.id || 'undefined'}`);
       } catch (e) {
         LogHelper.log('setCurrentPlaylist', 'Cannot update parent window (cross-origin)');
       }
@@ -208,37 +208,25 @@ export const setCurrentPlaylist = (p: Playlist | undefined) => {
     if (window.parent && window.parent !== window) {
       try {
         (window.parent as any).currentPlaylist = p;
-        LogHelper.log(
-          'setCurrentPlaylist',
-          `Updated parent window.currentPlaylist: ${p.id} (${p.name})`
-        );
+        LogHelper.log('setCurrentPlaylist', `Updated parent window.currentPlaylist: ${p.id} (${p.name})`);
 
         // CRITICAL FIX: Try multiple methods to update parent's React state
         try {
           // Method 1: Call parent's exposed function if available
           if ((window.parent as any).setCurrentPlaylistFromChild) {
             (window.parent as any).setCurrentPlaylistFromChild(p.id);
-            LogHelper.log(
-              'setCurrentPlaylist',
-              `Called parent setCurrentPlaylistFromChild for playlist ${p.id}`
-            );
+            LogHelper.log('setCurrentPlaylist', `Called parent setCurrentPlaylistFromChild for playlist ${p.id}`);
           }
 
           // Method 2: Dispatch events (both document and window)
           const event = new CustomEvent('child-playlist-changed', {
-            detail: { playlistId: p.id, playlist: p, timestamp: Date.now() },
+            detail: { playlistId: p.id, playlist: p, timestamp: Date.now() }
           });
           window.parent.document.dispatchEvent(event);
           window.parent.dispatchEvent(event);
-          LogHelper.log(
-            'setCurrentPlaylist',
-            `Dispatched child-playlist-changed events to parent for playlist ${p.id}`
-          );
+          LogHelper.log('setCurrentPlaylist', `Dispatched child-playlist-changed events to parent for playlist ${p.id}`);
         } catch (eventError) {
-          LogHelper.log(
-            'setCurrentPlaylist',
-            'Could not update parent state (cross-origin or not available)'
-          );
+          LogHelper.log('setCurrentPlaylist', 'Could not update parent state (cross-origin or not available)');
         }
       } catch (e) {
         LogHelper.log('setCurrentPlaylist', 'Cannot update parent window (cross-origin)');
@@ -266,10 +254,7 @@ export const addMontage = (montage: Montage) => {
   // This handles the case where playlist was loaded before montages arrived via WebSocket
   const currentPlaylist = ThePlaylist;
   if (currentPlaylist) {
-    LogHelper.log(
-      'addMontage',
-      `Montage ${montage.id} added, re-detecting content types for playlist ${currentPlaylist.id}`
-    );
+    LogHelper.log('addMontage', `Montage ${montage.id} added, re-detecting content types for playlist ${currentPlaylist.id}`);
     detectPlaylistContentTypes(currentPlaylist);
   }
 };

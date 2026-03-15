@@ -12,6 +12,7 @@ export class Rect extends Shape {
 
   public constructor(json?: any) {
     super(json);
+    if (json) Object.assign(this, json);
     this.line_size = myParseInt(this.line_size);
     this.left = myParseInt(this.left);
     this.top = myParseInt(this.top);

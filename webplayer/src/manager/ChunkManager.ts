@@ -33,8 +33,8 @@ export class ChunkManager {
 
   private constructor() {
     this.config = {
-      chunkSize: 512 * 1024, // 512KB chunks for better real-time performance
-      aheadTime: 5, // 5 seconds ahead
+      chunkSize: 500000, // 500KB chunks (legacy config)
+      aheadTime: 2, // 2 seconds ahead (legacy config)
       maxConcurrentChunks: 1, // Reduced: Prevent connection pool exhaustion
       retryAttempts: 2,
       retryDelay: 1000,
@@ -59,10 +59,13 @@ export class ChunkManager {
     endByte: number,
     priority: 'high' | 'normal' | 'low' = 'normal'
   ): Promise<ChunkResponse> {
+    console.log(`[ChunkManager.requestChunk] ENTRY: bytes=${startByte}-${endByte}, activeRequests=${this.activeRequests.size}, maxConcurrent=${this.config.maxConcurrentChunks}, queueLength=${this.requestQueue.length}`);
+
     const requestId = `${url}-${startByte}-${endByte}`;
 
     // Check if already requested
     if (this.activeRequests.has(requestId)) {
+      console.log(`[ChunkManager.requestChunk] Request already exists, calling waitForRequest: ${requestId}`);
       const existing = this.activeRequests.get(requestId)!;
       if (priority === 'high' && existing.priority !== 'high') {
         // Upgrade priority
@@ -82,11 +85,13 @@ export class ChunkManager {
       abortController,
     };
 
-    this.activeRequests.set(requestId, request);
-
+    // Check if we can process immediately BEFORE adding to activeRequests
     if (this.activeRequests.size < this.config.maxConcurrentChunks) {
+      console.log(`[ChunkManager.requestChunk] Processing immediately (under concurrent limit)`);
+      this.activeRequests.set(requestId, request);
       return this.processRequest(requestId, request);
     } else {
+      console.log(`[ChunkManager.requestChunk] Adding to queue (at concurrent limit)`);
       // Add to queue
       this.requestQueue.push(request);
       this.reorderQueue();
@@ -100,16 +105,20 @@ export class ChunkManager {
 
     while (attempts <= this.config.retryAttempts) {
       try {
+        console.log(`[ChunkManager] Attempt ${attempts}: Fetching ${request.url} with Range: bytes=${request.startByte}-${request.endByte}`);
+
         // Create timeout with AbortController for browser compatibility (Safari 15, older browsers)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
-        const response = await fetch(request.url + '&frag=1', {
+        const response = await fetch(request.url, {
           headers: {
             Range: `bytes=${request.startByte}-${request.endByte}`,
           },
           signal: controller.signal,
         });
+
+        console.log(`[ChunkManager] Response received: status=${response.status}, ok=${response.ok}`);
 
         clearTimeout(timeoutId);
 
@@ -117,7 +126,9 @@ export class ChunkManager {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
+        console.log(`[ChunkManager] Reading response body as ArrayBuffer...`);
         const data = await response.arrayBuffer();
+        console.log(`[ChunkManager] ArrayBuffer received: ${data.byteLength} bytes`);
         const loadTime = Date.now() - startTime;
 
         // LogHelper.log('ChunkManager', `Chunk loaded: ${request.startByte}-${request.endByte} in ${loadTime}ms`);

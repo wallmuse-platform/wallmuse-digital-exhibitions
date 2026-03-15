@@ -17,12 +17,13 @@ export class Text extends Shape {
 
   public constructor(json?: any) {
     super(json);
+    // Re-assign all props: Babel field initializers overwrite Object.assign from super()
+    if (json) Object.assign(this, json);
     this.size = myParseFloat(this.size);
     this.x = myParseInt(this.x);
     this.y = myParseInt(this.y);
     this.width = myParseInt(this.width);
     this.height = myParseInt(this.height);
-    // Other
     this.size = this.size || this.height * 0.9;
     if (this.font === 'serif') {
       this.font = 'Serif';

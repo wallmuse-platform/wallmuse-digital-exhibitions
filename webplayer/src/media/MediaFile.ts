@@ -15,9 +15,9 @@ export abstract class MediaFile {
   protected usePlaceholder = false;
   // TODO
   // private List<CompoundAnimation> animations = new ArrayList<>();
-  protected shapes: Shape[];
+  public shapes: Shape[];
   private shapesAdded = false;
-  protected backgroundColor?: string;
+  public backgroundColor?: string;
 
   public static init() {
     // TODO
