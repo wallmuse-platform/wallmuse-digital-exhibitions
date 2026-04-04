@@ -1,12 +1,13 @@
 // Configure.js - Updated with environment management
 
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import { useEnvironments } from "../contexts/EnvironmentsContext.js";
 import {
   removeScreen,
   removeEnvironment,
   deactivateEnvironment,
   deactivateScreen,
+  detailsUser,
 } from "../utils/api.js";
 import Loading from "../utils/Loading";
 import { useResponsive } from "../utils/useResponsive";
@@ -23,6 +24,14 @@ export function ConfigureDisplays({ t, onClose, handleAction }) {
   console.log("Configure component is called");
 
   const { houses, house, environments, setEnvironments } = useEnvironments();
+
+  // Silently refresh environments when Configure modal opens (no loading state touched)
+  useEffect(() => {
+    detailsUser(Date.now()).then((response) => {
+      const envs = response?.data?.houses?.[0]?.environments || [];
+      if (envs.length > 0) setEnvironments(envs);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Enhanced environmentGroup with validation
   const environmentGroup = useMemo(() => {

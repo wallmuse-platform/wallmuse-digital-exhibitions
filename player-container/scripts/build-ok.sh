@@ -30,7 +30,7 @@ for chunk_file in build/static/js/*.chunk.js; do
     if [ -f "$chunk_file" ]; then
         chunk_name=$(basename "$chunk_file")
         echo "Found chunk: $chunk_name"
-        CHUNK_SCRIPTS="$CHUNK_SCRIPTS<script src=\"/wp-content/themes/neve-child-master/play-v4-assets/js/$chunk_name?v=$TIMESTAMP\" async></script>\n"
+        CHUNK_SCRIPTS="$CHUNK_SCRIPTS<script src=\"/wp-content/themes/neve-child-master/play-v4-assets/static/js/$chunk_name?v=$TIMESTAMP\" async></script>\n"
     fi
 done
 
@@ -40,16 +40,16 @@ echo "CSS Filename: $CSS"
 echo "Chunk scripts: $CHUNK_SCRIPTS"
 
 # Modify PHP file with new JS/CSS filenames and timestamp
-perl -pi -e "s#css/main[^\"]+#css/$CSS?v=$TIMESTAMP#" /tmp/wm_v4_player_static.php
-perl -pi -e "s#js/main[^\"]+#js/$JS?v=$TIMESTAMP#" /tmp/wm_v4_player_static.php
+perl -pi -e "s#(?:static/)?css/main[^\"]+#static/css/$CSS?v=$TIMESTAMP#" /tmp/wm_v4_player_static.php
+perl -pi -e "s#(?:static/)?js/main[^\"]+#static/js/$JS?v=$TIMESTAMP#" /tmp/wm_v4_player_static.php
 
-# Remove existing chunk script tags first
-perl -pi -e "s#<script src=\"/wp-content/themes/neve-child-master/play-v4-assets/js/[^/]+\.chunk\.js[^>]*></script>\s*##g" /tmp/wm_v4_player_static.php
+# Remove existing chunk script tags first (match both old and new paths)
+perl -pi -e "s#<script src=\"/wp-content/themes/neve-child-master/play-v4-assets/(?:static/)?js/[^/]+\.chunk\.js[^>]*></script>\s*##g" /tmp/wm_v4_player_static.php
 
 # Insert chunk script tags BEFORE the main script tag
 if [ -n "$CHUNK_SCRIPTS" ]; then
     echo "Adding chunk scripts to PHP file..."
-    perl -pi -e "s#(<script src=\"/wp-content/themes/neve-child-master/play-v4-assets/js/main[^\"]+\")#$CHUNK_SCRIPTS\$1#" /tmp/wm_v4_player_static.php
+    perl -pi -e "s#(<script src=\"/wp-content/themes/neve-child-master/play-v4-assets/(?:static/)?js/main[^\"]+\")#$CHUNK_SCRIPTS\$1#" /tmp/wm_v4_player_static.php
     echo "Chunk scripts added successfully"
 else
     echo "No chunk scripts to add"
@@ -63,7 +63,7 @@ head -n 20 /tmp/wm_v4_player_static.php
 rsync -Pav /tmp/wm_v4_player_static.php akhan@wallmuse.com:/data/www/wallmuse-wp/wp-content/themes/neve-child-master/
 
 # Upload static assets - IMPORTANT: This includes all chunks
-rsync -Pav --delete build/static/ akhan@wallmuse.com:/data/www/wallmuse-wp/wp-content/themes/neve-child-master/play-v4-assets/
+rsync -Pav --delete build/static/ akhan@wallmuse.com:/data/www/wallmuse-wp/wp-content/themes/neve-child-master/play-v4-assets/static/
 
 echo "All files uploaded"
 
