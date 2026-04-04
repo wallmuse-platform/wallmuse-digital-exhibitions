@@ -131,7 +131,13 @@ The backend server infrastructure provides REST APIs, WebSocket services, conten
 
 ## API Documentation
 
-Full API documentation will be provided using Swagger/OpenAPI specification.
+Full API documentation is available as an OpenAPI 3.0 specification:
+
+**[`openapi.yaml`](openapi.yaml)** — covers all ~100 endpoints, grouped by tag, with
+parameter descriptions, authentication notes, and end-to-end use-case flows.
+
+You can explore it interactively by pasting the file into [Swagger Editor](https://editor.swagger.io)
+or importing it into Postman / Insomnia.
 
 ## Contributing
 
