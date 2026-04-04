@@ -9,7 +9,7 @@ import "./i18n";
 
 // Initialize Sentry with performance monitoring
 Sentry.init({
-  dsn: "https://15395dd2b9f63595123e97d7bda5ee4d@o4509439815385088.ingest.de.sentry.io/4509439837470800",
+  dsn: "", // Set your Sentry DSN here — omitted from public repository
   environment: process.env.NODE_ENV,
   sendDefaultPii: true,
   tracesSampleRate: 0.3, // 30% sampling for performance
