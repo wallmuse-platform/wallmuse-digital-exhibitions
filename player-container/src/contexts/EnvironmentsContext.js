@@ -1201,22 +1201,6 @@ export const EnvironmentsProvider = ({ children }) => {
     }
   }, [fetchEnvironmentDetails]); // Re-run when fetchEnvironmentDetails changes
 
-  // Lightweight refresh: updates environment data without setting initialLoading,
-  // so it doesn't cause WebPlayer to remount.
-  const refreshScreenState = useCallback(async () => {
-    try {
-      const response = await detailsUser(Date.now());
-      const housesData = response?.data?.houses || [];
-      if (housesData.length > 0) {
-        const houseEnvironments = housesData[0]?.environments || [];
-        setEnvironments(houseEnvironments);
-        console.log('[EnvironmentsContext] refreshScreenState: updated environments:', houseEnvironments.length);
-      }
-    } catch (e) {
-      console.warn('[EnvironmentsContext] refreshScreenState failed:', e);
-    }
-  }, []);
-
   // Memoized context value with all loading states
   const contextValue = useMemo(
     () => ({
@@ -1240,7 +1224,6 @@ export const EnvironmentsProvider = ({ children }) => {
       setNeedsRefresh,
       resetRefreshNeeded,
       fetchEnvironmentDetails,
-      refreshScreenState,
     }),
     [
       initialLoading,
@@ -1256,7 +1239,6 @@ export const EnvironmentsProvider = ({ children }) => {
       handlePlaylistChange,
       resetRefreshNeeded,
       fetchEnvironmentDetails,
-      refreshScreenState,
     ],
   );
 
