@@ -129,20 +129,7 @@ export const handlePlayMontageEnd = async (
       `[MonoPlaylist:End:${sessionId}] ${syncSuccess ? "✓" : "✗"} Sync result: ${syncSuccess}`,
     );
 
-    // Check currentPlaylist immediately after sync
-    if (syncSuccess) {
-      const afterHandleCurrentPlaylist = currentPlaylist;
-      const isCurrent = playlistToLoad == afterHandleCurrentPlaylist;
-      console.log(
-        `[MonoPlaylist:End:${sessionId}] Current playlist now: ${afterHandleCurrentPlaylist} (${isCurrent ? "correct" : "MISMATCH"})`,
-      );
-
-      if (!isCurrent) {
-        console.warn(
-          `[MonoPlaylist:End:${sessionId}] ⚠ SYNC ISSUE: Expected ${playlistToLoad}, got ${afterHandleCurrentPlaylist}`,
-        );
-      }
-    } else {
+    if (!syncSuccess) {
       console.warn(`[MonoPlaylist:End:${sessionId}] ✗ Backend sync failed`);
     }
 
@@ -168,9 +155,8 @@ export const handlePlayMontageEnd = async (
 
 // Save previous playlist ID to localStorage
 export const savePreviousPlaylistId = (playlistId) => {
-  if (playlistId) {
+  if (playlistId && !localStorage.getItem("previousPlaylistId")) {
     localStorage.setItem("previousPlaylistId", playlistId);
-    console.log(`[localStorage] Saved previous playlist ID: ${playlistId}`);
   }
 };
 

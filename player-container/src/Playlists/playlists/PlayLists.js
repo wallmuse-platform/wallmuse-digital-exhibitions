@@ -214,36 +214,35 @@ function Playlists({
             " name:",
             name,
           );
-          // Update playlists immutably
-          const newPlaylists = playlists.map((pl, idx) => {
-            if (idx === playlistIndex) {
-              return {
-                ...pl,
-                ...(name && { name }), // Only update name if provided
-                changed: false,
-              };
-            }
-            return pl;
+          // Use the functional updater form of setPlaylists so the map always runs
+          // against the freshest state. Without this, the playlists reference captured
+          // in the useCallback closure may be stale by the time the async updatePlaylist
+          // .then() fires (e.g. if another operation updated playlists in the meantime),
+          // causing the name change to silently disappear or revert.
+          setPlaylists((prevPlaylists) => {
+            const newPlaylists = prevPlaylists.map((pl, idx) => {
+              if (idx === playlistIndex) {
+                return {
+                  ...pl,
+                  ...(name && { name }), // Only update name if provided
+                  changed: false,
+                };
+              }
+              return pl;
+            });
+            console.log(
+              "[Playlists Fred] playlistIndex:",
+              playlistIndex,
+              " newPlaylists name at index:",
+              newPlaylists[playlistIndex]?.name,
+            );
+            return newPlaylists;
           });
-          console.log(
-            "[Playlists Fred] playlistIndex:",
-            playlistIndex,
-            " newPlaylists:",
-            newPlaylists,
-          );
-
-          console.log("[PlayLists] About to call autoSaveUpdates:", {
-            playlistIndex,
-            playlist: newPlaylists[playlistIndex],
-            montageIds: newPlaylists[playlistIndex].montages.map((m) => m.id),
-          });
-
-          setPlaylists(newPlaylists);
         },
         false, // Not related to premium content
       );
     },
-    [playlists, setPlaylists, handleAction],
+    [setPlaylists, handleAction],
   );
 
   // TODO server not passing to WebPlayer TS, so can't handle

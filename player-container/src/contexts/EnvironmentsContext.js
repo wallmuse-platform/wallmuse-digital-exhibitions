@@ -58,7 +58,6 @@ export const EnvironmentsProvider = ({ children }) => {
   // Get session data from SessionContext
   const sessionData = useSession();
   // Use safe property access with defaults
-  const isLoggedIn = sessionData?.isLoggedIn || true;
   const isDemo = sessionData?.isDemo || false;
   const userDetails = sessionData?.userDetails || null;
 
@@ -871,21 +870,82 @@ export const EnvironmentsProvider = ({ children }) => {
           currentPlaylist === undefined &&
           backendCurrentPlaylist !== undefined
         ) {
+          // Read the saved previous playlist from localStorage.
+          // IMPORTANT: savedPreviousId must only be used if the backend is currently stuck on
+          // a mono-playlist. It must NOT be used unconditionally — if playMode ended normally
+          // but handlePlayMontageEnd crashed or was skipped, savedPreviousId may be stale
+          // (leftover from that aborted session) while the backend already has the correct
+          // real playlist. Using it blindly would override a valid backend state with an old ID.
+          //
+          // We therefore always start from backendCurrentPlaylist and defer the decision
+          // about savedPreviousId to the getPlaylistById callback below, where we can
+          // read the playlist name and confirm whether it is actually mono before acting.
+          const savedPreviousId = localStorage.getItem("previousPlaylistId");
+
+          // Tentatively set to what the backend reports; may be corrected below.
           setCurrentPlaylist(backendCurrentPlaylist);
 
-          // CRITICAL FIX: Also fetch and store full playlist data for child player
-          // This ensures window.currentPlaylist is available on page load
-          console.log(
-            "[EnvironmentsContext] Fetching initial playlist data for:",
-            backendCurrentPlaylist,
-          );
+          // Fetch the full playlist object so we can read its name — the only reliable way
+          // to detect a mono-playlist (IDs are plain numbers; "mono-" is a name prefix only).
+          // Two recovery cases are handled here:
+          //
+          //   Layer 1 — backend is on mono AND savedPreviousId is present:
+          //     The user refreshed while playMode was active. savedPreviousId holds the real
+          //     playlist the user was on before entering playMode. Recover to that.
+          //
+          //   Layer 2 — backend is on mono AND savedPreviousId is absent:
+          //     Either localStorage was cleared, or a prior Layer-1 recovery already consumed
+          //     savedPreviousId. No breadcrumb remains — recover to undefined (default/idle).
+          //
+          //   Normal path — backend is NOT on mono:
+          //     savedPreviousId is stale (playMode ended normally but localStorage wasn't
+          //     cleaned up — e.g., crash or unexpected navigation). Discard it silently and
+          //     trust the backend's current_playlist as-is.
           getPlaylistById(backendCurrentPlaylist)
             .then((playlistData) => {
-              window.currentPlaylist = playlistData;
-              console.log(
-                "[EnvironmentsContext] Stored initial playlist in window.currentPlaylist:",
-                playlistData.name || playlistData.id,
-              );
+              if (playlistData?.name?.startsWith("mono-")) {
+                // ── Mono recovery (Layer 1 or Layer 2) ──────────────────────────────────
+                const recoveryId = savedPreviousId || undefined;
+                console.log(
+                  "[EnvironmentsContext] ⚠️ Mono-playlist detected on initial load — backend has stale state.",
+                  `Mono ID: ${backendCurrentPlaylist} (${playlistData.name}).`,
+                  recoveryId
+                    ? `Recovering to previousPlaylistId: ${recoveryId} (Layer 1 — localStorage).`
+                    : "Recovering to default (undefined) — Layer 2 fallback.",
+                );
+                // Fix backend so the next page load is already clean (not just this session).
+                loadPlaylist(houseId, recoveryId).catch((err) =>
+                  console.error("[EnvironmentsContext] Mono recovery loadPlaylist failed:", err),
+                );
+                // Override the tentative React state set above.
+                setCurrentPlaylist(recoveryId);
+                window.currentPlaylist = undefined;
+                // Clear localStorage regardless — the key was either just used (Layer 1)
+                // or was already absent (Layer 2); must not persist into future loads.
+                if (savedPreviousId) {
+                  localStorage.removeItem("previousPlaylistId");
+                  console.log(
+                    "[EnvironmentsContext] ✓ Cleared previousPlaylistId from localStorage (mono recovery Layer 1).",
+                  );
+                }
+              } else {
+                // ── Normal path: backend has a real, non-mono playlist ───────────────────
+                // If savedPreviousId is still set here, it is stale — playMode ended and
+                // the backend was already reset to a real playlist, but the localStorage
+                // cleanup in handlePlayMontageEnd didn't run (crash, unexpected navigation).
+                // Discard it to prevent it from incorrectly overriding a future page load.
+                if (savedPreviousId) {
+                  localStorage.removeItem("previousPlaylistId");
+                  console.warn(
+                    "[EnvironmentsContext] ⚠️ Cleared stale previousPlaylistId from localStorage.",
+                    `Backend was already on real playlist ${backendCurrentPlaylist} — savedPreviousId ${savedPreviousId} was stale and discarded.`,
+                  );
+                }
+                // Store full playlist data for child WebPlayer.
+                // window.currentPlaylist is the shared-window contract between the manager
+                // and wm-playerB (they run in the same window context, not across iframes).
+                window.currentPlaylist = playlistData;
+              }
             })
             .catch((error) => {
               console.error(
@@ -1010,7 +1070,23 @@ export const EnvironmentsProvider = ({ children }) => {
         );
       };
 
-      // CRITICAL FIX: Use provided playlist object instead of fetching from backend
+      // FURTHER TRACK AND SIGNATURE CHANGE OF PLAYLIST TESTING (introduced in commit e4256ac):
+      // When a track order or montage signature changes inside a playlist, the WebPlayer needs
+      // the updated playlist object before it navigates — otherwise it plays the stale version
+      // and only a full page refresh fixes it. To avoid the refresh, this block fetches the
+      // latest playlist data from the backend and pushes it into window.currentPlaylist BEFORE
+      // dispatching webplayer-navigate, effectively acting as a soft remount of the playlist.
+      //
+      // Two sequential async steps gate the navigation event:
+      //   1. getPlaylistById(newPlaylistId) — re-fetches the full playlist object (tracks,
+      //      montages, signature) so window.currentPlaylist is always up-to-date.
+      //      Skipped when the caller passes playlistObject directly (fast path).
+      //   2. loadPlaylist(house, newPlaylistId) — persists the new current_playlist on the
+      //      backend so the next page load restores the correct playlist.
+      //
+      // TODO: investigate whether a targeted soft remount (re-initialising only the affected
+      // playlist data inside the WebPlayer rather than re-fetching the whole object) could
+      // make track/signature reorders apply instantly without any network round-trip.
       console.log(
         "[handlePlaylistChange] Preparing playlist data for child player",
       );
@@ -1018,14 +1094,16 @@ export const EnvironmentsProvider = ({ children }) => {
         let playlistData;
 
         if (playlistObject) {
-          // Use the playlist object that was passed in (already in memory!)
+          // Fast path: caller supplied the full playlist object (already in memory).
+          // getPlaylistById fetch is skipped — no extra network round-trip needed here.
           playlistData = playlistObject;
           console.log(
             "[handlePlaylistChange] Using provided playlist object:",
             playlistData.name,
           );
         } else {
-          // Fallback: Fetch from backend if no object provided
+          // Fetch latest playlist from backend — ensures track order and signature
+          // changes are reflected in window.currentPlaylist before the WebPlayer navigates.
           console.log(
             "[handlePlaylistChange] No playlist object provided, fetching from backend:",
             newPlaylistId,
@@ -1033,17 +1111,20 @@ export const EnvironmentsProvider = ({ children }) => {
           playlistData = await getPlaylistById(newPlaylistId);
         }
 
-        // Store in window for child player
+        // Must be set before dispatching webplayer-navigate so the WebPlayer reads
+        // the updated object synchronously on receipt of the event.
         window.currentPlaylist = playlistData;
         console.log(
           "[handlePlaylistChange] Stored full playlist data in window.currentPlaylist:",
           playlistData.name || playlistData.id,
         );
 
-        // Now dispatch navigation event (child will find playlist data immediately)
+        // Dispatch only after window.currentPlaylist is populated — prevents the
+        // WebPlayer from racing ahead with stale or missing playlist data.
         dispatchNavigationEvent();
 
-        // Also trigger backend load_playlist API
+        // Persist current_playlist on the backend so the next page load restores
+        // the correct playlist (not a stale or mono one).
         await loadPlaylist(house, newPlaylistId);
         console.log(
           "[handlePlaylistChange] Playlist loaded successfully via API",
