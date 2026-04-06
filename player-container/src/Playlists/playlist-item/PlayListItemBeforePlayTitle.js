@@ -27,9 +27,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from "react-i18next";
 import AssociateDisplays from "../associate-displays/AssociateDisplays";
 import { useResponsive } from '../../utils/useResponsive';
-import { getCurrentPosition, updatePosition } from '../../App';
 import PropTypes from 'prop-types'; // Added missing import
-import useGuestActionPopup from '../../accounts/useGuestActionPopup';
 
 //overrides of wp theme 
 const NumberOfTracksButtonContainer = styled('div')(({ theme }) => ({
@@ -73,48 +71,36 @@ const TypographyStyle = styled(Typography)(({ theme }) => ({
     fontSize: '16px',
     lineHeight: '30px',
     alignSelf: 'center',  // Centers vertically in a flex container
-    // cursor: 'pointer',    // Add cursor pointer to indicate it's clickable
-    // '&:hover': {
-    //     textDecoration: 'underline', // Add underline on hover for better UX
-    //     color: theme.palette.primary.contrast, // Change color on hover
-    // },
     [theme.breakpoints.up('tv')]: {
         fontSize: '24px',  // Larger font size for SmartTV
         lineHeight: '40px'
     }
 }));
 
-function PlayListItem({
-    montageIndex,
-    montage,
-    playlistIndex,
-    handleMontageClick,
-    moveMontageToPlaylist,
-    handleMontageReorder,
-    saveInProgress,
-    playlists,
-    isDefaultPlaylist,
-    removeMontageFromPlaylist,
-    currentPlaylist,
-    handleSendCommand,
-    doLoadPlaylist,
-    handlePlaylistChange,
-    house,
-    onMontageNavigation,
-    selectedPlaylistPosition
-}) {
+function PlayListItem({ montageIndex, montage, playlistIndex, handleMontageClick, moveMontageToPlaylist, handleMontageReorder, saveInProgress, playlists, isDefaultPlaylist, removeMontageFromPlaylist }) {
+
+    // console.log('[PlayListItem] playlistIndex:', playlistIndex, ' playlists:', playlists);
 
     const theme = selectTheme();
     const responsiveProps = useResponsive();
     const { isMobile } = responsiveProps;
 
-    const [isHovered, setIsHovered] = useState(false);
-
     const [openPlaylistSelection, setOpenPlaylistSelection] = React.useState(false);
-    const [openAssociateDisplays, setOpenAssociateDisplays] = useState(false);
 
-    // Use guest action popup hook
-    const { handleAction, popup } = useGuestActionPopup();
+    // useEffect(() => {
+    //     if (playlists) {
+    //         console.log('[PlayListItem] Current montages:', playlists.map((playlist, playlistIndex) => playlist.montages ? playlist.montages.map((m, index) => ({playlistIndex, index, id: m.id})) : []));
+    //     }
+    // }, [playlists]);
+
+    // useEffect(() => {
+    //     console.log('PlayListItem mounted/updated:', {
+    //         montageIndex,
+    //         id: montage.id
+    //     });
+    // }, [montage, montageIndex]);
+
+    const [openAssociateDisplays, setOpenAssociateDisplays] = useState(false);
 
     const handleOpenAssociateDisplays = () => setOpenAssociateDisplays(true);
     const handleCloseAssociateDisplays = () => setOpenAssociateDisplays(false);
@@ -122,11 +108,9 @@ function PlayListItem({
     const openPlaylistSelectionDialog = () => {
         setOpenPlaylistSelection(true)
     }
-
     const handlePlaylistSelectionDialogClose = (event, reason) => {
         setOpenPlaylistSelection(false);
     }
-
     const handlePlaylistSelectionChange = event => {
         const playlistId = event.target.value;
         console.log('PlaylistItem: handlePlaylistSelectionChange', montage, playlistId);
@@ -134,36 +118,17 @@ function PlayListItem({
             moveMontageToPlaylist(montage, playlistId)
         }
     }
-
     const removeMontage = () => {
         removeMontageFromPlaylist(montageIndex, playlistIndex);
         console.log('[PlayListItem] removeMontageFromPlaylist:', montageIndex, playlistIndex);
     }
 
-    // New function to handle title click and play this specific montage
-    const handleTitleClick = async () => {
-        try {
-        // Clear naming: what we have vs what we want
-        const selectedPlaylistId = playlists[playlistIndex].id; 
-        const selectedPlaylistPosition = montageIndex; // The montage position we want
-        const isSelectedCurrentPlaylist = selectedPlaylistId === currentPlaylist;
-        console.log(`[MONTAGE_NAVIGATION] Current: ${currentPlaylist}, Target: ${selectedPlaylistId}, MontagePos: ${selectedPlaylistPosition}`);
+    // console.log('[PlayListItem] Setting up useSortable:', {
+    //     id: String(montage.id),
+    //     montageIndex,
+    //     montage
+    // });
 
-        if (!isSelectedCurrentPlaylist) {
-            // Navigate to different playlist
-            console.log(`[MONTAGE_NAVIGATION] Loading different playlist: ${currentPlaylist} → ${selectedPlaylistId}`);
-            await doLoadPlaylist(selectedPlaylistId, selectedPlaylistPosition);
-        } else {
-            // Same playlist, different montage (or same montage - user wants to jump there)
-            console.log(`[MONTAGE_NAVIGATION] Same playlist, navigating to montage: ${selectedPlaylistPosition}`);
-            // Pass force=true to override duplicate detection (user explicitly clicked goMontage)
-            onMontageNavigation(selectedPlaylistId, selectedPlaylistPosition, true);
-        }
-
-        } catch (error) {
-        console.error(`[MONTAGE_NAVIGATION] Error: ${error.message}`);
-        }
-    };
 
     // Create a unique ID combining montage ID and position
     const uniqueId = `${montage.id}-${montageIndex}`;
@@ -225,14 +190,14 @@ function PlayListItem({
     }), [style, isDragging]);
 
     // Debug logging
-    // useEffect(() => {
-    //     console.log('[PlayListItem] Item rendered:', {
-    //         montageIndex,
-    //         playlistIndex,
-    //         isDragging,
-    //         montageData: montage
-    //     });
-    // }, [montageIndex, playlistIndex, isDragging, montage]);
+    useEffect(() => {
+        console.log('[PlayListItem] Item rendered:', {
+            montageIndex,
+            playlistIndex,
+            isDragging,
+            montageData: montage
+        });
+    }, [montageIndex, playlistIndex, isDragging, montage]);
 
     const { t } = useTranslation();
 
@@ -261,28 +226,22 @@ function PlayListItem({
     }, []);
 
     return (
+        // <div ref={setNodeRef} {...attributes}>
         <div
             ref={setNodeRef}
             {...attributes}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
         >
-            <Stack 
-                direction="row" 
-                spacing={1} 
-                alignItems="center" 
-                sx={isDragging ? draggingStyle : style}
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-            >
-                {/* TODO AS NOT SHOWING: backend needs to pass to webplayer value of is_checked currently missing */}
+            <Stack direction="row" spacing={1} alignItems="center" sx={isDragging ? draggingStyle : style}>
+                {/* NOT SHOWING: backend needs to pass to webplayer is_checked */}
                 {/* <Checkbox
                     label={"Selected"}
                     checked={montage.is_checked === "1"}
                     disabled={saveInProgress}
                     onChange={() => {
                         console.log("[PlayListItem] Before change, montage is_checked:", montage.is_checked); // Log before state change
-                        handleMontageChecked(montageIndex, playlistIndex); //renamed from handleMontageClick
+                        handleMontageClick(montageIndex, playlistIndex);
                     }}
                 /> */}
                 <NumberOfTracksButtonContainer className="numberOfTracksButtonContainer">
@@ -291,41 +250,32 @@ function PlayListItem({
                 <TypographyStyle
                     variant="subtitle1"
                     gutterBottom
-                    onClick={handleTitleClick} // Add click handler to the title
                     sx={{
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        paddingRight: isHovered ? '120px' : '80px',
-                        transition: 'padding-right 0.1s ease-in-out',
-                        cursor: 'pointer', // Show it's clickable
-                        '&:hover': {
-                            textDecoration: 'underline' // Underline on hover
-                        }
+                        paddingRight: '120px'
                     }}
                 >
                     {montage.name}
                 </TypographyStyle>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ position: "absolute", right: "0" }}>
-
-                    {/* Delete Icon - only show on hover */}
-                    {isHovered && (
-                        <Tooltip title={t("component.playlist.exhibitions.item.delete")}>
-                            <DeleteOutlineIcon
-                                sx={{ cursor: "pointer", opacity: 0.7 }}
-                                color="primary"
-                                onClick={removeMontage}
-                            />
-                        </Tooltip>
-                    )}
-                    {/* Add Icon - only show on hover + Add MontageSelection choice of playlist + duplicated allowed */}
-                    {isHovered && (
-                        <Tooltip title={t("component.playlist.exhibitions.add-to-playlist")}>
-                            <PlaylistAddIcon sx={{ cursor: "pointer" }}
-                                color="primary"
-                                onClick={openPlaylistSelectionDialog} />
-                        </Tooltip>
-                    )}
+                    {/* top: "10px", */}
+                    {
+                        isDefaultPlaylist ?
+                            <Tooltip title={t("component.playlist.exhibitions.add-to-playlist")}>
+                                <PlaylistAddIcon sx={{ cursor: "pointer" }}
+                                    color="primary"
+                                    onClick={openPlaylistSelectionDialog} />
+                            </Tooltip> : null
+                    }
+                    <Tooltip title={t("component.playlist.exhibitions.item.delete")}>
+                        <DeleteOutlineIcon
+                            sx={{ cursor: "pointer" }}
+                            color="primary"
+                            onClick={removeMontage}
+                        />
+                    </Tooltip>
                     <div>
                         <Tooltip title={t("component.playlist.exhibitions.associate-displays")}>
                             <SettingsIcon
@@ -354,19 +304,19 @@ function PlayListItem({
                                     position: 'absolute',
                                     top: '20%',
                                     bottom: '5%',
-                                    width: isMobile ? '95vw' : '90vw',
+                                    width: isMobile ? '95vw' : '90vw', // Use a ternary operator to conditionally set the width
                                     overflow: 'auto',
                                     borderRadius: '10px',
                                     background: `${theme.palette.primary.contrastText}`,
-                                    border: `5px solid ${theme.palette.primary.main}`,
+                                    border: `5px solid ${theme.palette.primary.main}`, // Add this line
                                 }}
                             >
                                 <AssociateDisplays
                                     montageId={montage.id}
                                     playlistIndex={playlistIndex}
-                                    onClose={handleCloseAssociateDisplays}
-                                    handleAction={handleAction}
+                                    onClose={handleCloseAssociateDisplays} 
                                 />
+                                {/* <Button onClick={handleCloseAssociateDisplays}>Close</Button> */}
                                 <IconButton
                                     aria-label="close"
                                     onClick={handleCloseAssociateDisplays}
@@ -378,25 +328,27 @@ function PlayListItem({
                         </Modal>
                     </div>
                     <Tooltip title={t("component.playlist.exhibitions.item.drag")}>
-                        <IconButton
+                        {/* IMPORTANT CHANGE: Only apply the listeners to the DragHandle icon with improved styling */}
+                        <DragHandle
+                            {...listeners}
                             color="primary"
                             sx={{
                                 cursor: isDragging ? 'grabbing' : 'grab',
-                                touchAction: 'none',
+                                touchAction: 'none', // Improves touch device behavior
                                 '&:hover': {
                                     color: theme.palette.primary.dark,
                                 }
                             }}
                             onMouseDown={(e) => {
+                                // Prevent text selection when starting drag
                                 e.preventDefault();
+                                // Optional: add a specific class to the body when drag starts from handle
                                 document.body.classList.add('handle-dragging');
                             }}
                             onMouseUp={() => {
                                 document.body.classList.remove('handle-dragging');
                             }}
-                        >
-                            <DragHandle {...listeners} />
-                        </IconButton>
+                        />
                     </Tooltip>
                 </Stack>
             </Stack>
@@ -404,7 +356,7 @@ function PlayListItem({
                 <DialogTitle>{t("component.playlist.exhibitions.add-montage")}</DialogTitle>
                 <DialogContent>
                     <Box component="form" sx={{ display: 'flex', flexWrap: 'wrap' }}>
-                        <FormControl fullWidth sx={{ m: 1 }}>
+                        <FormControl sx={{ m: 1, minWidth: 120 }}>
                             <InputLabel htmlFor="playlist-dialog-native">{t("component.playlist.exhibitions.playlist")}</InputLabel>
                             <Select
                                 native
@@ -413,14 +365,10 @@ function PlayListItem({
                             >
                                 <option key="-1" value="-1">{t("component.playlist.exhibitions.select-playlist-default")}</option>
                                 {
-                                    playlists.filter(playlist => !playlist.name?.startsWith("mono-")).map(playlist => {
-                                        // Show all playlists including default (which has no id or empty string id).
-                                        // mono-playlists are internal single-montage playlists and must never appear
-                                        // in user-facing dropdowns — they are filtered out above.
-                                        const playlistId = playlist.id || '';
-                                        const playlistName = playlist.name || t("component.playlist.exhibitions.default-name");
+                                    playlists.filter(playlist => playlist.id && !playlist.name?.startsWith("mono-")).map(playlist => {
+                                        // mono-playlists are internal single-montage playlists — hidden from all user-facing dropdowns
                                         return (
-                                            <option key={playlistId || 'default'} value={playlistId}>{playlistName}</option>
+                                            <option key={playlist.id} value={playlist.id}>{playlist.name}</option>
                                         )
                                     })
                                 }
@@ -432,12 +380,24 @@ function PlayListItem({
                     <Button onClick={handlePlaylistSelectionDialogClose}>Ok</Button>
                 </DialogActions>
             </Dialog>
-            {popup}
         </div>
     );
 }
 
-// Update propTypes to include new props
+export default React.memo(PlayListItem, (prev, next) => {
+    const prevMontages = prev.playlists[prev.playlistIndex]?.montages;
+    const nextMontages = next.playlists[next.playlistIndex]?.montages;
+
+    return (
+        prev.montage.id === next.montage.id &&
+        prev.montageIndex === next.montageIndex &&
+        prev.playlistIndex === next.playlistIndex &&
+        prev.montage.is_checked === next.montage.is_checked &&
+        prev.saveInProgress === next.saveInProgress &&
+        prevMontages?.length === nextMontages?.length
+    );
+});
+
 PlayListItem.propTypes = {
     montageIndex: PropTypes.number.isRequired,
     montage: PropTypes.shape({
@@ -452,26 +412,5 @@ PlayListItem.propTypes = {
     saveInProgress: PropTypes.bool,
     playlists: PropTypes.array.isRequired,
     isDefaultPlaylist: PropTypes.bool,
-    removeMontageFromPlaylist: PropTypes.func.isRequired,
-    // New props for playlist playback
-    currentPlaylist: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    handleSendCommand: PropTypes.func,
-    doLoadPlaylist: PropTypes.func,
-    handlePlaylistChange: PropTypes.func,
-    house: PropTypes.string
+    removeMontageFromPlaylist: PropTypes.func.isRequired
 };
-
-export default React.memo(PlayListItem, (prev, next) => {
-    const prevMontages = prev.playlists[prev.playlistIndex]?.montages;
-    const nextMontages = next.playlists[next.playlistIndex]?.montages;
-
-    return (
-        prev.montage.id === next.montage.id &&
-        prev.montageIndex === next.montageIndex &&
-        prev.playlistIndex === next.playlistIndex &&
-        prev.montage.is_checked === next.montage.is_checked &&
-        prev.saveInProgress === next.saveInProgress &&
-        prev.currentPlaylist === next.currentPlaylist &&
-        prevMontages?.length === nextMontages?.length
-    );
-});
