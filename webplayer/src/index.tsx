@@ -970,13 +970,13 @@ function setupNavigationListener() {
             montageIndex: currentMontageIndex,
             oldTrack: oldTrackIndex,
             newTrack: newTrackIndex,
-            warning: 'Track changed for currently playing montage - may need to reload media or trigger navigation'
           });
 
-          // CRITICAL FIX: If the current montage's track changed, we need to reload
-          // to avoid slot confusion and freezing
-          console.log('[React] 🔄 Triggering media reload for track change on current montage');
-          // Note: This will be handled by parent sending a NAV command
+          // Immediately reload the current montage on the new track.
+          // The parent app cannot reliably send a NAV command at the right moment
+          // (race with stale-data useEffect), so we own the reload here.
+          console.log('[React] 🔄 Reloading current montage on new track', newTrackIndex);
+          Sequencer.goMontage(currentMontageIndex, newTrackIndex);
         }
       }
     }

@@ -528,6 +528,25 @@ export class WsTools {
 				note: 'Parent NAV prevails for same-browser, WebSocket sync for peer browsers'
 			});
 
+			// Sync previousEnvironmentState before handleEnvironmentUpdate().
+			// If previousEnvironmentState still holds data from the PREVIOUS playlist
+			// (e.g. playlist 2321 before switching to 2349), handleEnvironmentUpdate()
+			// would see playlistChanged=true (stale ID) AND signatureChanged=true
+			// (different montage IDs) — causing it to skip track-change processing
+			// (playlistChanged gate) AND spuriously reload on every track change
+			// (signatureChanged fires on every message because 2321's montage IDs
+			// never match 2349's). Fix: update both playlistId AND montageSignature
+			// so handleEnvironmentUpdate() sees a clean baseline for 2349.
+			if (this.previousEnvironmentState) {
+				this.previousEnvironmentState.playlistId = newPlaylist.id;
+				// Recompute signature the same way handleEnvironmentUpdate() does
+				const newSig = Array.from(
+					{ length: newPlaylist.getMontagesCount() },
+					(_, i) => newPlaylist.getMontage(i)?.id || i
+				).join(',');
+				this.previousEnvironmentState.montageSignature = newSig;
+			}
+
 			setCurrentPlaylist(newPlaylist);
 
 			// PEER SYNCHRONIZATION: Check for environment changes
@@ -1230,6 +1249,7 @@ export class WsTools {
                             environId: this.environ.environId,
                             screenId: this.screenId,
                             houseId: this.environ.houseId,
+                            isPlaying: Sequencer.isPlaying(),
                         }
                     }));
                 }

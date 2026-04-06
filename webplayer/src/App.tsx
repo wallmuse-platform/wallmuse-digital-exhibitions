@@ -2623,10 +2623,11 @@ export default class WallmusePlayer extends React.Component {
     return (
       <div id="wm-player-contents" className="wm-player-contents">
         {!isShown && canWork && !loading && (
+          // Show spinner while waiting for media to start (e.g. deferred start on
+          // browser refresh while montage cache is being populated via WebSocket).
+          // "Ready to play" / pause icon was confusing for end users.
           <div className="placeholder">
-            ⏸️
-            <br />
-            Ready to play
+            <div className="spinner"></div>
           </div>
         )}
         {!canWork && (
