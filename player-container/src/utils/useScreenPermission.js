@@ -100,9 +100,24 @@ export default function useScreenPermission(options = {}) {
 
         console.log("[useScreenPermission] Checking permission status");
 
-        // Check if already requested in this session
-        const alreadyRequested = sessionStorage.getItem('screenPermissionRequested');
+        // If we already have a definitive answer from a previous session (stored in
+        // localStorage), honour it immediately — no dialog, no getDisplayMedia call.
+        // This prevents the browser's screen-picker from firing on every new tab/session
+        // even when the user has already granted or declined permission before.
+        // This is especially important for multi-monitor setups where the picker shows
+        // all connected displays and is very intrusive.
+        const storedStatus = localStorage.getItem('screenPermissionStatus');
+        const definitiveStatuses = ['granted', 'denied', 'unsupported', 'user-declined'];
+        if (storedStatus && definitiveStatuses.includes(storedStatus) && !forceRequest) {
+            console.log("[useScreenPermission] Using stored permission status from localStorage:", storedStatus);
+            setPermissionStatus(storedStatus);
+            setPermissionRequested(true);
+            sessionStorage.setItem('screenPermissionRequested', 'true'); // keep session in sync
+            return;
+        }
 
+        // Check if already requested in this session (sessionStorage guards within a tab)
+        const alreadyRequested = sessionStorage.getItem('screenPermissionRequested');
         if (alreadyRequested && !forceRequest) {
             console.log("[useScreenPermission] Permission already requested in this session");
             setPermissionRequested(true);

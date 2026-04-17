@@ -1154,6 +1154,10 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
       setAccountCreatedSuccess(true);
 
       // Clear any leftover flags
+      // activationComplete must be removed here — if left in localStorage it causes
+      // this "completed" branch to re-trigger on every subsequent page load, showing
+      // the "Account created!" snackbar repeatedly to existing users.
+      localStorage.removeItem("activationComplete");
       localStorage.removeItem("activationInProgress");
       localStorage.removeItem("refreshAttempts");
       localStorage.removeItem("currentSetupPhase");

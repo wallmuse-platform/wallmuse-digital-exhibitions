@@ -70,7 +70,11 @@ const AssociateDisplays = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
-  // Toggle for showing only active displays
+  // Toggle for showing only active displays. Defaults to true so Mrs Smith sees only
+  // her live screen without being overwhelmed by inactive/unused environments.
+  // NOTE: screen.on comes from the REST API loaded at app start. If a screen connected
+  // after the last environments load it may still read on === "0" here, causing an empty
+  // list. The user can turn off the filter to see all environments in that edge case.
   const [showOnlyActive, setShowOnlyActive] = useState(true);
 
   // playlistIndex is an index into the full playlists array (including mono-playlists),
@@ -264,6 +268,16 @@ const AssociateDisplays = ({
           );
           console.log("[AssociateDisplays] Server updated successfully");
           setSaveSuccess(true);
+
+          // Server confirmed the change — NOW push the correct track to the webplayer.
+          // We do this after await (not before) because the stale track-mappings
+          // useEffect in App.js fires synchronously during setPlaylists() and would
+          // overwrite an earlier call with old data. At this point the stale effect
+          // has already run and lost; our call here is the last word.
+          if (window.webPlayerSetTrackMappings) {
+            console.log('[AssociateDisplays] ✅ Server confirmed — pushing track to webplayer:', montageId, '→ track', trackNumber);
+            window.webPlayerSetTrackMappings({ [montageId]: String(trackNumber) });
+          }
         } catch (error) {
           console.error("[AssociateDisplays] Failed to update server", error);
           setSaveError(error.message);
