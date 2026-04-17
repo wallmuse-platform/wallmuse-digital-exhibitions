@@ -974,13 +974,25 @@ export class WsTools {
 
     private checkHouse() {
         console.log('[WS-TOOLS] checkHouse called');
-        
+
+        // If parent passed environ=0 it means environments weren't ready yet at load time.
+        // Skip localStorage restore so we don't connect on a stale environment/screen that would
+        // cause the server to push wrong content and override the intended playlist.
+        // We do NOT clear localStorage here — the fresh env created below will overwrite it on save,
+        // and clearing aggressively could wipe a valid env if environ=0 is ever passed by mistake.
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlEnvironId = parseInt(urlParams.get('environ') || '0', 10);
+        const skipLocalStorageRestore = urlEnvironId === 0;
+        if (skipLocalStorageRestore) {
+            console.log('[WS-TOOLS] environ=0 in URL — skipping localStorage restore, will create fresh environment');
+        }
+
         // SAME-BROWSER PREVENTION: Only check fingerprint-specific localStorage for reliable detection
         const deviceFingerprint = getFingerprint();
         const deviceSpecificKey = `wm-house-${deviceFingerprint}`;
-        
+
         // Only check device-specific localStorage to avoid false positives from stale cross-browser data
-        const existingDeviceEnvironment = window.localStorage.getItem(deviceSpecificKey);
+        const existingDeviceEnvironment = skipLocalStorageRestore ? null : window.localStorage.getItem(deviceSpecificKey);
         if (existingDeviceEnvironment && !this.environ) {
             try {
                 const deviceData = JSON.parse(existingDeviceEnvironment);
@@ -1034,7 +1046,7 @@ export class WsTools {
         
         // Only proceed if we don't already have an environment
         if (!this.environ) {
-            const data = window.localStorage.getItem('wm-house');
+            const data = skipLocalStorageRestore ? null : window.localStorage.getItem('wm-house');
             let environ = new GlobalData();
             this.environ = environ;
             
@@ -1167,9 +1179,60 @@ export class WsTools {
         return Promise.resolve('mock-token');
     }
 
-    assumeToken(token: string): Promise<boolean> {
+    assumeToken(token: string, retryCount = 0): Promise<boolean> {
         this.token = token;
-        
+
+        // FAST-START: Cache the get_joomla_user response in localStorage so that
+        // on browser reload we can skip the API call (which can take 10-17 seconds
+        // on a slow server) and connect to WebSocket immediately. The cache is
+        // keyed by token and expires after 10 minutes. A background revalidation
+        // fires after connect to refresh it, so it stays current during long sessions.
+        const CACHE_KEY = 'wm_user_cache';
+        const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+        const tryCache = (): any | null => {
+            try {
+                const raw = localStorage.getItem(CACHE_KEY);
+                if (!raw) return null;
+                const { t, data, cachedToken } = JSON.parse(raw);
+                if (cachedToken !== token) return null; // token changed, must re-auth
+                if (Date.now() - t > CACHE_TTL_MS) return null; // expired
+                return data;
+            } catch { return null; }
+        };
+
+        const saveCache = (data: any) => {
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data, cachedToken: token }));
+            } catch { /* storage full or unavailable */ }
+        };
+
+        const applyUser = (u: any) => {
+            if (u.tag_name === 'error') {
+                this.user = new User({id: 1, name: 'Local Dev User', type: 'DEV'});
+                console.log('[WS-TOOLS] Using mock user for local development');
+            } else {
+                this.user = new User(u);
+                console.log('[WS-TOOLS] User loaded:', this.user.name);
+            }
+        };
+
+        const cached = tryCache();
+        if (cached) {
+            console.log('[WS-TOOLS] ⚡ Fast-start: using cached user data, skipping get_joomla_user');
+            applyUser(cached);
+            if (!this.user.houses || this.user.houses.length === 0) {
+                // Unusual — fall through to full auth
+            } else {
+                this.checkHouse();
+                // Revalidate in background so cache stays fresh
+                this.get<any>('get_joomla_user').then(u => {
+                    if (u && u.tag_name !== 'error') saveCache(u);
+                }).catch(() => {});
+                return Promise.resolve(true);
+            }
+        }
+
         return this.get<any>('get_joomla_user')
             .then(u => {
                 // If API returns error, create a mock user for local development
@@ -1179,20 +1242,28 @@ export class WsTools {
                 } else {
                     this.user = new User(u);
                     console.log('[WS-TOOLS] User loaded:', this.user.name);
+                    saveCache(u);
                 }
-                
+
                 if (!this.user.houses || this.user.houses.length === 0) {
                     return this.get<House>('add_house?name=Web player')
                         .then(h => {
                             return this.assumeToken(token);
                         });
                 }
-                
+
                 this.checkHouse();
                 return true;
             })
             .catch(error => {
-                console.error('[WS-TOOLS] Authentication failed:', error);
+                // Retry once on timeout — server can be slow to respond on first
+                // connection after a browser reload, especially on cold starts.
+                if (retryCount === 0) {
+                    console.warn('[WS-TOOLS] Authentication failed, retrying once:', error);
+                    return new Promise(resolve => setTimeout(resolve, 2000))
+                        .then(() => this.assumeToken(token, 1));
+                }
+                console.error('[WS-TOOLS] Authentication failed after retry:', error);
                 return false;
             });
     }
@@ -1372,7 +1443,7 @@ export class WsTools {
             headers: {
                 'Accept': 'text/x-json',
             },
-            signal: AbortSignal.timeout(10000)
+            signal: AbortSignal.timeout(30000)
         })
         .then(response => {
             if (!response.ok) {

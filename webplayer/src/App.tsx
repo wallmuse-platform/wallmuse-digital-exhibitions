@@ -323,7 +323,12 @@ export default class WallmusePlayer extends React.Component {
         }
       );
     }
-    // If image1 is preloading, switch to show it (always update media in case it's a title bypassing preload)
+    // If image1 is preloading, switch to show it.
+    // IMPORTANT: always write media into the slot even though preloadImage() already put something
+    // there. Title-only items skip the preload step and call showImage() directly, so by the time
+    // showImage() fires the slot may still contain the *previous* title (imagePreloading was left
+    // at 1 after a video played and reset imageShown to 0 without clearing imagePreloading).
+    // Without the explicit assignment, the stale title content is shown again instead of the new one.
     else if (this.state.imagePreloading === 1) {
       console.log('[App.showImage] Image1 was preloading - now switching to show it');
       this.setState(
@@ -336,7 +341,7 @@ export default class WallmusePlayer extends React.Component {
         }
       );
     }
-    // If image2 is preloading, switch to show it (always update media in case it's a title bypassing preload)
+    // Same reasoning for slot 2 — always write media.
     else if (this.state.imagePreloading === 2) {
       console.log('[App.showImage] Image2 was preloading - now switching to show it');
       this.setState(
