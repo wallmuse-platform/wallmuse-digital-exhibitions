@@ -2,7 +2,8 @@
 import React from 'react';
 import { CustomSnackbar, CustomAlert } from "../CustomComponents";
 import { useTranslation } from "react-i18next";
-import BusinessIcon from '@mui/icons-material/Business'; // Professional icon
+// import BusinessIcon from '@mui/icons-material/Business'; // Professional icon
+import MuseumIcon from '@mui/icons-material/Museum'; // Museum icon
 import i18n from 'i18next';
 import { useTheme } from '@mui/material/styles';
 
@@ -97,7 +98,7 @@ const ProfessionalServicesSnackbar = ({ isDemo, theme: themeName, transitionDura
                 onClose={handleClose}
                 severity="info"
                 iconMapping={{
-                    info: <BusinessIcon style={{ color: '#E91E63' }} /> // ShareX red color
+                    info: <MuseumIcon style={{ color: '#E91E63' }} /> // ShareX red color
                 }}
                 sx={{
                     // ShareX red theme colors

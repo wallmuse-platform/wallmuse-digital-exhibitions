@@ -294,6 +294,15 @@ export const EnvironmentsProvider = ({ children }) => {
               );
               localStorage.setItem("playlistsCopied", "true");
 
+              // Playlists were copied AFTER App.js useEffect already ran, so the
+              // needsSecondRefresh localStorage flag won't be caught on this mount.
+              // 1. Dispatch event first so App.js snackbar UI shows feedback to the user.
+              // 2. Auto-reload after a short delay to populate playlists in the UI
+              //    (useInitialData fetched playlists before the copy happened, so a
+              //    fresh page load is the only reliable way to get them into React state).
+              window.dispatchEvent(new CustomEvent("screen-needs-refresh"));
+              setTimeout(() => window.location.reload(), 1500);
+
               // IMPORTANT: Clear account creation flags after successful copy
               localStorage.removeItem("accountJustCreated");
               localStorage.removeItem("newAccountHouseId");
@@ -760,95 +769,92 @@ export const EnvironmentsProvider = ({ children }) => {
                 }
               }
             } else if (houseId) {
-              // COMMENTED OUT: Parent environment creation - let child WebPlayer handle this
-              console.log(
-                "[fetchEnvironmentDetails] No environments found - Child WebPlayer will create them",
-              );
+              // RESTORED (was removed in commit e4256ac "Refactor" by mistake):
+              //
+              // The child WebPlayer creates environments via WebSocket, but those environments
+              // are NOT returned by the REST API (get_wp_user). This means the parent
+              // EnvironmentsContext and the Configure section would always show 0 environments
+              // for new accounts, even though the player works fine.
+              //
+              // We must create the environment here via the REST API (createDefaultEnvironment)
+              // so that get_wp_user returns it in subsequent calls and Configure can display it.
+              // The child WebPlayer may also create its own environment via WebSocket — the
+              // needsSecondRefresh / cleanup logic in the existing account path handles deduplication.
+              try {
+                console.log(
+                  "[fetchEnvironmentDetails] No environments found — creating via REST API for house:",
+                  houseId,
+                );
+                const envResult = await createDefaultEnvironment(houseId);
 
-              // ACCOUNT CREATION PROCESS DUMP - comment/uncomment to toggle
-              const accountCreationProcess = {
-                timestamp: new Date().toISOString(),
-                milestone: "environment_creation_deferred",
-                houseId: houseId,
-                action: "defer_to_child_webplayer",
-                trigger: "no_existing_environments",
-                flags: {
-                  accountJustCreated:
-                    localStorage.getItem("accountJustCreated"),
-                  activationComplete:
-                    localStorage.getItem("activationComplete"),
-                  needsRefresh: localStorage.getItem("needsRefresh"),
-                },
-              };
-              // localStorage.setItem('accountProcess_' + Date.now(), JSON.stringify(accountCreationProcess));
+                if (envResult.success && envResult.environmentId) {
+                  console.log(
+                    "[fetchEnvironmentDetails] Environment created with ID:",
+                    envResult.environmentId,
+                  );
 
-              // Signal that environment creation is needed (child WebPlayer will handle)
-              localStorage.setItem("environmentCreationNeeded", "true");
+                  const screenResult = await createDefaultScreen(
+                    envResult.environmentId,
+                  );
+                  console.log(
+                    "[fetchEnvironmentDetails] Screen creation result:",
+                    screenResult,
+                  );
 
-              /* COMMENTED OUT: Let child WebPlayer handle environment creation
-                            try {
-                                // Create environment
-                                console.log('[fetchEnvironmentDetails] 🔨 CREATING NEW ENVIRONMENT for house:', houseId);
-                                const envResult = await createDefaultEnvironment(houseId);
+                  // Re-fetch to get the screen ID assigned by the backend
+                  const screenRefreshResponse = await detailsUser(Date.now());
+                  let screenId = null;
 
-                                if (envResult.success && envResult.environmentId) {
-                                    console.log("[fetchEnvironmentDetails] Environment created with ID:", envResult.environmentId);
+                  if (screenRefreshResponse?.data?.houses?.[0]?.environments) {
+                    const env = screenRefreshResponse.data.houses[0].environments.find(
+                      (e) => e.id === envResult.environmentId,
+                    );
+                    if (env?.screens?.length > 0) {
+                      screenId = env.screens[0].id;
+                      console.log(
+                        "[fetchEnvironmentDetails] Found screen ID:",
+                        screenId,
+                      );
+                      try {
+                        const dimensions = {
+                          width: window.screen.width || 1920,
+                          height: window.screen.height || 1080,
+                        };
+                        await activateScreenWithParams(
+                          screenId,
+                          1,
+                          dimensions,
+                          sessionId,
+                        );
+                        console.log(
+                          "[fetchEnvironmentDetails] Screen activated with dimensions",
+                        );
+                        localStorage.setItem("needsRefresh", "true");
+                      } catch (activateError) {
+                        console.error(
+                          "[fetchEnvironmentDetails] Error activating screen:",
+                          activateError,
+                        );
+                      }
+                    }
+                  }
 
-                                    // First, request screen permission before creating anything
-                                    console.log("[fetchEnvironmentDetails] Requesting screen permission before environment creation");
-                                    const permissionResult = await requestScreenPermissionForEnvironment();
-
-                                    // Get dimensions from permission result
-                                    const dimensions = permissionResult.dimensions;
-                                    console.log("[fetchEnvironmentDetails] Got dimensions from permission:", dimensions);
-
-                                    // Create a screen for the environment
-                                    const screenResult = await createDefaultScreen(envResult.environmentId);
-                                    console.log("[fetchEnvironmentDetails] Screen creation result:", screenResult);
-
-                                    // Get latest data to find screen ID if not returned directly
-                                    const screenRefreshResponse = await detailsUser(Date.now());
-                                    let screenId = null;
-
-                                    if (screenRefreshResponse?.data?.houses?.[0]?.environments) {
-                                        const env = screenRefreshResponse.data.houses[0].environments.find(
-                                            e => e.id === envResult.environmentId
-                                        );
-
-                                        if (env && env.screens && env.screens.length > 0) {
-                                            screenId = env.screens[0].id;
-                                            console.log("[fetchEnvironmentDetails] Found screen ID:", screenId);
-
-                                            // Activate the screen with all parameters in one call
-                                            if (screenId) {
-                                                try {
-                                                    // Use dimensions from permission result
-                                                    await activateScreenWithParams(screenId, 1, dimensions, sessionId);
-                                                    console.log("[fetchEnvironmentDetails] Screen activated with dimensions");
-
-                                                    // Set needsRefresh flag during environment creation
-                                                    console.log("[fetchEnvironmentDetails] Setting needsRefresh during environment creation");
-                                                    localStorage.setItem('needsRefresh', 'true');
-                                                } catch (activateError) {
-                                                    console.error("[fetchEnvironmentDetails] Error activating screen:", activateError);
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Final refresh to get updated data
-                                    console.log("[fetchEnvironmentDetails] Final refresh after setup");
-                                    const finalRefresh = await detailsUser(Date.now());
-
-                                    if (finalRefresh?.data?.houses?.[0]?.environments) {
-                                        setEnvironments(finalRefresh.data.houses[0].environments);
-                                        console.log("[fetchEnvironmentDetails] Updated environments:", finalRefresh.data.houses[0].environments);
-                                    }
-                                }
-                            } catch (error) {
-                                console.error("[fetchEnvironmentDetails] Error setting up environment:", error);
-                            }
-                            */
+                  // Final fetch to populate environments state so Configure shows the new env
+                  const finalRefresh = await detailsUser(Date.now());
+                  if (finalRefresh?.data?.houses?.[0]?.environments) {
+                    setEnvironments(finalRefresh.data.houses[0].environments);
+                    console.log(
+                      "[fetchEnvironmentDetails] Updated environments:",
+                      finalRefresh.data.houses[0].environments,
+                    );
+                  }
+                }
+              } catch (error) {
+                console.error(
+                  "[fetchEnvironmentDetails] Error creating environment:",
+                  error,
+                );
+              }
             }
           } catch (playlistError) {
             console.error(
