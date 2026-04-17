@@ -257,7 +257,10 @@ export class Sequencer {
       `Going to montage ${montageIndex}, track ${trackIndex} (playlist: ${this._playlist?.id || 'default'})`
     );
 
-    // ESSENTIAL: Preserve track override
+    // PARENT PREVAILS: if trackIndex is supplied (from parent-app navigation params),
+    // it takes priority and is stored as the override for this montage.
+    // If not supplied, getMontageTrackIndex() falls back to any existing stored override,
+    // then to the montage default — so peer WebSocket sync is respected when parent is silent.
     if (trackIndex !== undefined) {
       this.setMontageTrackOverride(montageIndex, trackIndex);
     }
@@ -697,6 +700,13 @@ export class Sequencer {
         const emptyTexts = shapes.filter((s: any) => s.tag_name === 'text' && !s.text);
         if (emptyTexts.length > 0) {
           const lines: string[] = [];
+          // Title items carry next_count / previous_count set in the admin UI:
+          //   next_count > 0  → title is a PREVIEW of the artwork that comes AFTER it
+          //                     (e.g. next_count=1 means look at items[itemIndex + 1])
+          //   next_count = 0  → title looks BACKWARD at the artwork that came before
+          //                     (use previous_count to determine the offset)
+          // Old-format title items (tag_name="item", no artwork_id) don't carry these fields;
+          // default to next_count=1 (forward preview) to match the most common pattern.
           const nextCount = (item as any).next_count ?? 1;
           const prevCount = (item as any).previous_count ?? 0;
           const refIndex = nextCount > 0
@@ -756,7 +766,8 @@ export class Sequencer {
           0,
           artwork.duration || 30,
           item.shapes,
-          item.background_color
+          item.background_color,
+          item.zoomAndPan
         );
         if (TheApp.showImage) {
           TheApp.showImage(imageFile);
@@ -790,7 +801,8 @@ export class Sequencer {
           0,
           artwork.duration || 30,
           item.shapes,
-          item.background_color
+          item.background_color,
+          item.zoomAndPan
         );
         TheApp.preloadImage(imageFile);
       }

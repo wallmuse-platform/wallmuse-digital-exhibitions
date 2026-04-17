@@ -571,14 +571,27 @@ function setupNavigationListener() {
                   const parentPlaylist = (window.parent as any)?.currentPlaylist;
                   // CRITICAL FIX: Compare with type coercion
                   if (parentPlaylist && String(parentPlaylist.id) === String(playlist)) {
-                    console.log(
-                      '[React] Found target playlist in parent globals, calling setCurrentPlaylist'
-                    );
-                    const { setCurrentPlaylist } = require('./manager/Globals');
-                    const { Playlist } = require('./dao/Playlist');
-                    // Convert plain object to Playlist instance
-                    const playlistInstance = new Playlist(parentPlaylist);
-                    setCurrentPlaylist(playlistInstance);
+                    // Guard: only switch if all montages in the target playlist are already cached.
+                    // If they're not, the child is on the wrong environment (stale wm-house) and the
+                    // server never pushed those montages — force-switching would crash the player.
+                    const { getMontage } = require('./manager/Globals');
+                    const montageIds: number[] = (parentPlaylist.montages || []).map((m: any) => m.id);
+                    const allCached = montageIds.length > 0 && montageIds.every((id: number) => !!getMontage(id));
+                    if (!allCached) {
+                      console.log(
+                        '[React] ⚠️ Fallback blocked: target playlist montages not in cache',
+                        { playlistId: playlist, montageIds, cachedIds: montageIds.filter((id: number) => !!getMontage(id)) },
+                        '— likely wrong environment (stale wm-house). Keeping current playback.'
+                      );
+                    } else {
+                      console.log(
+                        '[React] Found target playlist in parent globals, calling setCurrentPlaylist'
+                      );
+                      const { setCurrentPlaylist } = require('./manager/Globals');
+                      const { Playlist } = require('./dao/Playlist');
+                      const playlistInstance = new Playlist(parentPlaylist);
+                      setCurrentPlaylist(playlistInstance);
+                    }
                   } else {
                     console.log('[React] Could not find playlist data in parent globals');
                   }
