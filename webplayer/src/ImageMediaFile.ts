@@ -54,12 +54,20 @@ export class ImageMediaFile extends MediaFile {
       backgroundColor
     );
 
-    // Auto-generate Ken Burns parameters if enabled and not explicitly provided
     if (KEN_BURNS_ENABLED) {
+      // Use server-provided params if present, otherwise auto-generate
       imf.zoomAndPan = zoomAndPan || generateRandomKenBurns();
-
-      console.log(`[ImageMediaFile] Generated Ken Burns for ${filename}:`, imf.zoomAndPan);
+      console.log(
+        `[ImageMediaFile] ${zoomAndPan ? 'Server' : 'Auto-generated'} Ken Burns for ${filename}:`,
+        imf.zoomAndPan
+      );
     }
+
+    // FUTURE: Store copyright/croppable flags
+    // imf.copyright = copyright;
+    // imf.croppable = croppable;
+    // imf.splittable = splittable;
+    // imf.deconstructable = deconstructable;
 
     return imf;
   }

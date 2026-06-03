@@ -39,6 +39,9 @@ export class CommandsManager {
   }
 
   private loadPlaylist(p: Playlist) {
+    // Flow: WebSocket → loadPlaylist() → setCurrentPlaylist() → Sequencer.assumeNewPlaylist()
+    // setCurrentPlaylist() guards against re-sending the same playlist ID, so
+    // assumeNewPlaylist() (which restarts the sequencer) only fires on an actual change.
     LogHelper.log('CommandsManager.loadPlaylist', 'Loading playlist:', p.id || p.name);
     setCurrentPlaylist(p);
   }
