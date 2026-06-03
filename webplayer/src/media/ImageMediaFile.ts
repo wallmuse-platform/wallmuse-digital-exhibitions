@@ -40,13 +40,8 @@ export class ImageMediaFile extends MediaFile {
     offset: number,
     duration: number,
     shapes: Shape[] | undefined,
-    backgroundColor: string | undefined
-    // FUTURE: Backend will provide these parameters via WebSocket
-    // zoomAndPan?: ZoomAndPanParams,     // Explicit zoom/pan from updateImageZoomAndPan tool
-    // copyright?: boolean,                // Copyright flag
-    // croppable?: boolean,                // If false, use 'contain' mode (fit)
-    // splittable?: boolean,               // For multi-screen image spanning
-    // deconstructable?: boolean           // For shape-based content extraction
+    backgroundColor: string | undefined,
+    zoomAndPan?: ZoomAndPanParams
   ) {
     const imf = new ImageMediaFile(
       aid,
@@ -61,20 +56,10 @@ export class ImageMediaFile extends MediaFile {
 
     // Auto-generate Ken Burns parameters if enabled and not explicitly provided
     if (KEN_BURNS_ENABLED) {
-      // FUTURE: When backend sends zoomAndPan parameter, use it instead:
-      // imf.zoomAndPan = zoomAndPan || generateRandomKenBurns();
-
-      // For now: Always auto-generate random Ken Burns
-      imf.zoomAndPan = generateRandomKenBurns();
+      imf.zoomAndPan = zoomAndPan || generateRandomKenBurns();
 
       console.log(`[ImageMediaFile] Generated Ken Burns for ${filename}:`, imf.zoomAndPan);
     }
-
-    // FUTURE: Store copyright/croppable flags
-    // imf.copyright = copyright;
-    // imf.croppable = croppable;
-    // imf.splittable = splittable;
-    // imf.deconstructable = deconstructable;
 
     return imf;
   }

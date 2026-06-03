@@ -10,6 +10,14 @@ export let TheScreen: string;
 export let Montages: { [key: string]: Montage } = {};
 export let TheApp: WallmusePlayer;
 
+// Tracks which playlist ID has already had assumeNewPlaylist() fired from addMontage.
+// Prevents triple-fire when the server streams montages one-by-one and each arrival
+// finds allLoaded=true for a single-montage playlist (or a fully-cached playlist).
+// Reset to undefined whenever setCurrentPlaylist() calls assumeNewPlaylist() directly,
+// so a newly-switched playlist can still get its deferred start if montages haven't
+// arrived yet at switch time.
+let deferredStartFiredForPlaylistId: string | undefined;
+
 // ===== KEN BURNS CONFIGURATION =====
 // Global toggle for Ken Burns effect on images
 // Set to true to enable auto-generated zoom/pan animations on all images
@@ -192,6 +200,7 @@ export const setCurrentPlaylist = (p: Playlist | undefined) => {
     }
 
     if (p) {
+      deferredStartFiredForPlaylistId = String(p.id ?? 'undefined');
       Sequencer.assumeNewPlaylist(p);
     }
   } else if (p === undefined) {
@@ -214,6 +223,7 @@ export const setCurrentPlaylist = (p: Playlist | undefined) => {
     }
 
     // Always notify sequencer of playlist change, even for undefined playlists
+    deferredStartFiredForPlaylistId = 'undefined';
     Sequencer.assumeNewPlaylist(p);
   } else if (p.id !== ThePlaylist?.id) {
     // ID guard: only restart the sequencer when the playlist actually changes.
@@ -258,6 +268,7 @@ export const setCurrentPlaylist = (p: Playlist | undefined) => {
     }
 
     if (p) {
+      deferredStartFiredForPlaylistId = String(p.id);
       Sequencer.assumeNewPlaylist(p);
     }
   } else {
@@ -274,11 +285,10 @@ export const setCurrentPlaylist = (p: Playlist | undefined) => {
       );
       ThePlaylist = p;
       detectPlaylistContentTypes(p);
+      deferredStartFiredForPlaylistId = String(p.id);
       Sequencer.assumeNewPlaylist(p);
     } else {
       LogHelper.log('setCurrentPlaylist', `Playlist ${p.id} already set, ignoring duplicate call`);
-      // Still detect content types even for duplicate calls in case montages were updated
-      detectPlaylistContentTypes(p);
     }
   }
 };
@@ -292,21 +302,29 @@ export const addMontage = (montage: Montage) => {
 
   const currentPlaylist = ThePlaylist;
   if (currentPlaylist) {
-    detectPlaylistContentTypes(currentPlaylist);
-
     // DEFERRED START: If setCurrentPlaylist() was called before any montages were
     // cached (browser refresh race condition), assumeNewPlaylist() was skipped.
-    // Now that the cache has at least one montage, check whether all montages
-    // needed by the playlist are present and start playback if so.
+    // Check whether all montages needed by the playlist are now present.
     const montageCount = currentPlaylist.getMontagesCount();
     const allLoaded = Array.from({ length: montageCount }, (_, i) => {
       const light = (currentPlaylist as any).montages?.[i];
       return light ? !!Montages['m' + light.id] : false;
     }).every(Boolean);
 
-    if (allLoaded && !Sequencer.isPlaying() && !Sequencer.isPaused()) {
-      LogHelper.log('addMontage', `All ${montageCount} montages now cached — starting deferred playback for playlist ${currentPlaylist.id}`);
-      Sequencer.assumeNewPlaylist(currentPlaylist);
+    if (allLoaded) {
+      const playlistKey = String(currentPlaylist.id ?? 'undefined');
+      if (deferredStartFiredForPlaylistId !== playlistKey
+          && !Sequencer.isPlaying() && !Sequencer.isPaused()) {
+        deferredStartFiredForPlaylistId = playlistKey;
+        // Scan content types once — only when all montages are loaded for the
+        // first time for this playlist. Partial or repeated scans are wasteful
+        // and each one triggers a React re-render via forcePlaylistContentTypeRerender.
+        detectPlaylistContentTypes(currentPlaylist);
+        LogHelper.log('addMontage', `All ${montageCount} montages now cached — starting deferred playback for playlist ${currentPlaylist.id}`);
+        Sequencer.assumeNewPlaylist(currentPlaylist);
+      } else {
+        LogHelper.log('addMontage', `Montage ${montage.id} added — all ${montageCount} loaded, deferred start already fired or sequencer active`);
+      }
     } else {
       LogHelper.log('addMontage', `Montage ${montage.id} added (${Object.keys(Montages).length}/${montageCount} loaded)`);
     }

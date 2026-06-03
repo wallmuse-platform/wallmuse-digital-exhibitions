@@ -1,3 +1,8 @@
+// ABANDONED — custom chunk streaming was disabled (Jan 2026).
+// Root cause: every navigation restart re-fetched video from byte 0, causing 200-600
+// parallel Range requests per video and server overload under normal use.
+// Current approach: direct <video src="..."> — browser handles Range requests natively
+// with a single connection per video. This file is kept for reference only.
 import { LogHelper } from './LogHelper';
 
 interface ChunkRequest {

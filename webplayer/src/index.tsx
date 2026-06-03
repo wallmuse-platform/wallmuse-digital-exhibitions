@@ -510,6 +510,20 @@ function setupNavigationListener() {
               const currentPlaylistId = currentPlaylist?.id;
 
               if (String(currentPlaylistId) !== String(playlist)) {
+                // Guard: only switch if all montages in the target playlist are already cached.
+                // If the child is on the wrong environment, those montages were never pushed by
+                // the server and getMontage() will return null → getMontage call in Sequencer crashes.
+                const { getMontage } = require('./manager/Globals');
+                const montageIds: number[] = (parentPlaylist.montages || []).map((m: any) => m.id);
+                const allCached = montageIds.length > 0 && montageIds.every((id: number) => !!getMontage(id));
+                if (!allCached) {
+                  console.log(
+                    '[React] ⚠️ Instant load blocked: target playlist montages not in cache',
+                    { playlistId: playlist, montageIds, cachedIds: montageIds.filter((id: number) => !!getMontage(id)) },
+                    '— waiting for WebSocket to push correct montages.'
+                  );
+                  return false; // Let retry loop or 5s fallback handle it once montages arrive
+                }
                 console.log('[React] Loading playlist from parent:', playlist);
                 const { setCurrentPlaylist } = require('./manager/Globals');
                 const { Playlist } = require('./dao/Playlist');

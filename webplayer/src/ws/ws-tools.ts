@@ -478,13 +478,21 @@ export class WsTools {
 		// Build playlist object early for id logging
         const newPlaylist = new Playlist(data);
 
-		// Suppress repeated identical playlist messages arriving back-to-back
+		// Suppress repeated identical playlist messages arriving back-to-back.
+		// Exception: always let through if the montage order signature changed — a reorder
+		// arriving within the debounce window would otherwise silently fail to update the sequencer.
 		if ((this as any)._lastPlaylistMsgId === newPlaylist.id && (nowTs - (this as any)._lastPlaylistMsgAt) < DEBOUNCE_MS) {
-			console.log('[WS-TOOLS] Skipping duplicate playlist message due to debounce:', newPlaylist.id);
-			return;
+			const lastSig = (this as any)._lastPlaylistMsgSig;
+			const newSig = newPlaylist.montageOrderSignature;
+			if (!lastSig || !newSig || lastSig === newSig) {
+				console.log('[WS-TOOLS] Skipping duplicate playlist message due to debounce:', newPlaylist.id);
+				return;
+			}
+			console.log('[WS-TOOLS] Signature changed within debounce window, allowing through:', lastSig, '->', newSig);
 		}
 		(this as any)._lastPlaylistMsgId = newPlaylist.id;
 		(this as any)._lastPlaylistMsgAt = nowTs;
+		(this as any)._lastPlaylistMsgSig = newPlaylist.montageOrderSignature;
 
 		const currentPlaylist = Sequencer.getCurrentPlaylist();
 
