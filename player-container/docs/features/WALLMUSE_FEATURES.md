@@ -42,6 +42,25 @@
 - **Memory optimization** - Prevent memory leaks in long-running sessions
 - **Network efficiency** - Smart API calls and caching strategies
 
+## **📲 QR Code Generation (Descriptions modal)**
+
+The Descriptions modal (`src/Descriptions/Descriptions.js`) provides two modes, toggled by a tab bar at the top:
+
+### Screen QR Codes (default)
+- Generates a QR code per display screen pointing to `{wmm_url}/info/?screen=SCREEN_ID`
+- Toggle: **Only Active Displays** — filters to screens with `on === "1"`, or shows all
+
+### Artwork QR Codes
+- Designed for **permanent physical installations** (museums, galleries, street prints)
+- Each QR code points to `{wmm_url}/info/?screen=SCREEN_ID&artwork_id=ARTWORK_ID`
+- The `artwork_id` parameter pins the visitor to a specific artwork regardless of what is currently playing on the screen; auto-advance is disabled, manual prev/next browsing remains available
+- Active screen resolved automatically: first screen with `on === "1"`, fallback to `screens[0]`
+- Artworks fetched via `searchArtworks` (`search_artworks` WS, scoped by session — returns all artworks the user can access based on access rights: public domain, creative commons, licensed)
+- Grid layout: thumbnail (250×250 THUMBNAIL url from response) | title + author(s) + datation | QR code + full URL below
+- Pagination: 50 artworks per page, "Load more" button if result set hits the limit
+
+**TODO:** My Artworks / All Artworks toggle — deferred pending a backend endpoint to distinguish uploader vs viewer access rights.
+
 ## **🛡️ Enterprise Features**
 - **Multiple environments** - Support for complex multi-display setups
 - **Screen validation** - Ensure proper display configurations

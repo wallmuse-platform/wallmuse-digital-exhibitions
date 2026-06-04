@@ -159,9 +159,16 @@ class NavigationManager {
       
       console.log(`[NAV-MANAGER] ✅ Command processed successfully`);
       
-      // Reset processing flag after a brief delay
+      // Reset processing flag after a brief delay, then drain any command that arrived
+      // while the lock was held. This handles the case where a playlist-change re-render
+      // triggers the track-change effect (sending position 0) just before onMontageNavigation
+      // sends the user's actual target position — the second command would be queued and
+      // never processed without this drain.
       setTimeout(() => {
         this.processingCommand = false;
+        if (this.commandQueue.length > 0) {
+          this.processQueuedCommands();
+        }
       }, 500);
       
     } catch (error) {

@@ -53,6 +53,8 @@ function PlayerCommands({
   onFwd,
   iconClass,
   t,
+  // volumeRef lives in App(), not here — DontStartBefore can remount this component,
+  // which would reset a locally-defined ref to null mid-session (losing the user's volume).
   volumeRef,
   onVolumeChange,
   onPlayStart,
@@ -100,12 +102,12 @@ function PlayerCommands({
     return () => clearInterval(interval);
   }, [playModeRef, isPlayMode]);
 
-  // Always start muted and with null volume on page load — never read localStorage at init
+  // Always start muted with null displayVolume — volume is NOT read from localStorage at init.
+  // null displayVolume → slider renders at 0, signaling to the user they need to set volume.
+  // wallmuse-volume in localStorage is written after each interaction but never read at startup.
   const mutedRef = useRef(true);
   const [muted, setMuted] = useState(true);
   const [displayVolume, setDisplayVolume] = useState(null);
-
-  // Don't send initial volume - wait for user interaction when video is ready
 
   const iconStyle = {
     color: theme.palette.secondary.text, // Use theme color
@@ -550,6 +552,9 @@ PlayerCommands.propTypes = {
   setSyncLoading: PropTypes.func,
 };
 
+// Custom memo comparator: skip re-render unless something that affects UI actually changed.
+// playModeRef.current / volumeRef.current are compared directly because the ref objects
+// themselves never change identity — only their .current values do.
 export default React.memo(PlayerCommands, (prevProps, nextProps) => {
   return (
     prevProps.currentPlaylist === nextProps.currentPlaylist &&

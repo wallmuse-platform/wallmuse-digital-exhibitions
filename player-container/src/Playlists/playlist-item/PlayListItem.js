@@ -150,9 +150,21 @@ function PlayListItem({
         console.log(`[MONTAGE_NAVIGATION] Current: ${currentPlaylist}, Target: ${selectedPlaylistId}, MontagePos: ${selectedPlaylistPosition}`);
 
         if (!isSelectedCurrentPlaylist) {
-            // Navigate to different playlist
+            // Mirror the handleDoPlayPlaylist pattern: cluster signal → data prep → navigation.
+            // Default playlist (id: undefined) is handled correctly throughout this chain:
+            // - doLoadPlaylist(undefined) → loadPlaylist(house, undefined) → backend confirms currentPlaylist=undefined ✓
+            // - handlePlaylistChange(undefined) → getPlaylistById uses (!id && !playlistId) match ✓
+            // - onMontageNavigation(undefined, pos) → dispatches webplayer-navigate correctly ✓
+            // doLoadPlaylist only sends the cluster signal and polls for backend confirmation;
+            // it does NOT navigate. handlePlaylistChange populates window.currentPlaylist so
+            // NavigationManager can dispatch with the correct object. onMontageNavigation then
+            // fires with the specific position the user clicked (not position 0).
             console.log(`[MONTAGE_NAVIGATION] Loading different playlist: ${currentPlaylist} → ${selectedPlaylistId}`);
-            await doLoadPlaylist(selectedPlaylistId, selectedPlaylistPosition);
+            await doLoadPlaylist(selectedPlaylistId);
+            const syncSuccess = await handlePlaylistChange(selectedPlaylistId, null);
+            if (syncSuccess && onMontageNavigation) {
+                onMontageNavigation(selectedPlaylistId, selectedPlaylistPosition, true);
+            }
         } else {
             // Same playlist, different montage (or same montage - user wants to jump there)
             console.log(`[MONTAGE_NAVIGATION] Same playlist, navigating to montage: ${selectedPlaylistPosition}`);

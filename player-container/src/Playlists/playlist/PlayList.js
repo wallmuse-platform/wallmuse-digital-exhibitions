@@ -105,7 +105,6 @@ import { savePreviousPlaylistId } from "../../Play/playModeUtils";
 
 // Style Utils
 import { styled } from "@mui/material/styles";
-import { usePlaylistSync } from "../utils/playlistSyncUtils";
 
 function Playlist({
   playlist,
@@ -415,14 +414,13 @@ function Playlist({
         // Set ready state to true after successful sync
         setReadyToPlayPlaylist(true);
 
-        // Now check if it's the current playlist AFTER sync is complete
-        const isCurrent = playlistId == currentPlaylist;
-        console.log(
-          "[Playlist] currentPlaylist after sync:",
-          currentPlaylist,
-          "isCurrent:",
-          isCurrent,
-        );
+        // Single authoritative navigation dispatch — called here and only here.
+        // handlePlaylistChange has already populated window.currentPlaylist with fresh
+        // data from the backend, so NavigationManager dispatches with the correct object.
+        // doLoadPlaylist no longer triggers navigation; autoSaveUpdates never should.
+        if (onMontageNavigation) {
+          onMontageNavigation(playlistId, 0);
+        }
       } else {
         console.warn(
           `[Playlist handleDoPlayPlaylist] Backend sync failed or timed out for playlist ${playlistId}.`,

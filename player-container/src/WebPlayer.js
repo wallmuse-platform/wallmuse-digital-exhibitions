@@ -26,6 +26,8 @@ const WebPlayer = React.memo(function WebPlayer({
   const [currentMontage, setCurrentMontage] = useState(undefined);
   const hasLoadedOnce = useRef(false); // Track if we've loaded once
   const [reloadTrigger, setReloadTrigger] = useState(0); // Trigger reload when incremented
+  const prevSignatureRef = useRef(undefined); // Last montage order signature within current playlist
+  const prevPlaylistRef = useRef(undefined);  // Which playlist prevSignatureRef belongs to
 
   // Get loading states from useEnvironments hook
   const { initialLoading, syncLoading, playlistLoading } = useEnvironments();
@@ -115,7 +117,7 @@ const WebPlayer = React.memo(function WebPlayer({
 
         logInfo(`Set globals - track: ${trackNumber}, montage: ${currentMontage}`);
 
-        // Build the player URL
+        // Build the player URL wm-playerB is for test version / wm-player prod
         const baseUrl = `/wp-content/themes/neve-child-master/wm-player/index.html`;
         // const baseUrl = `/wp-content/themes/neve-child-master/wm-playerB/index.html`;
         const params = new URLSearchParams({
@@ -352,23 +354,44 @@ const WebPlayer = React.memo(function WebPlayer({
 
   // Handle montage order changes (trigger playlist refetch)
   useEffect(() => {
-    if (montageOrderSignature && isPlayerLoaded && currentPlaylist) {
-      logInfo('Montage order signature changed:', montageOrderSignature);
-      logInfo('🔄 Triggering playlist data refetch for:', currentPlaylist);
+    if (!montageOrderSignature || !isPlayerLoaded || !currentPlaylist) return;
 
-      if (window.Sequencer && window.Sequencer.reloadPlaylist) {
-        window.Sequencer.reloadPlaylist(currentPlaylist);
-        logInfo('✅ Playlist reload triggered via Sequencer.reloadPlaylist()');
-      } else if (window.webPlayerNavigate) {
-        window.webPlayerNavigate({
-          playlist: currentPlaylist,
-          position: { montage: currentMontage || 0 },
-          forceReload: true
-        });
-        logInfo('✅ Playlist reload triggered via webPlayerNavigate()');
-      } else {
-        logInfo('⚠️ No reload mechanism available - montage order change not applied');
-      }
+    // Playlist changed — record new baseline, do not treat as a reorder
+    if (prevPlaylistRef.current !== currentPlaylist) {
+      prevPlaylistRef.current = currentPlaylist;
+      prevSignatureRef.current = montageOrderSignature;
+      logInfo('Playlist changed — resetting signature baseline:', currentPlaylist, montageOrderSignature);
+      return;
+    }
+
+    // First signature seen for this playlist — initialise, do not fire
+    if (prevSignatureRef.current === undefined) {
+      prevSignatureRef.current = montageOrderSignature;
+      logInfo('Montage order signature initialized:', montageOrderSignature);
+      return;
+    }
+
+    // Same signature — nothing to do
+    if (prevSignatureRef.current === montageOrderSignature) return;
+
+    // Genuine reorder within the same playlist
+    logInfo('Montage order signature changed:', prevSignatureRef.current, '->', montageOrderSignature);
+    prevSignatureRef.current = montageOrderSignature;
+
+    logInfo('🔄 Triggering playlist data refetch for:', currentPlaylist);
+
+    if (window.Sequencer && window.Sequencer.reloadPlaylist) {
+      window.Sequencer.reloadPlaylist(currentPlaylist);
+      logInfo('✅ Playlist reload triggered via Sequencer.reloadPlaylist()');
+    } else if (window.webPlayerNavigate) {
+      window.webPlayerNavigate({
+        playlist: currentPlaylist,
+        position: { montage: currentMontage || 0 },
+        forceReload: true
+      });
+      logInfo('✅ Playlist reload triggered via webPlayerNavigate()');
+    } else {
+      logInfo('⚠️ No reload mechanism available - montage order change not applied');
     }
   }, [montageOrderSignature, isPlayerLoaded, currentPlaylist, currentMontage]);
 

@@ -1678,47 +1678,10 @@ export const getOrCreateMonoPlaylist = async (
   const existingPlaylist = playlists.find((p) => p.name === playlistName);
 
   if (existingPlaylist) {
-    // Validate content: mono-playlist should contain exactly the target montage
-    // It may have been corrupted by a previous playlistIndex mismatch bug
-    const montageIds = existingPlaylist.montages?.map((m) => m.id) || [];
-    const isValid =
-      montageIds.length === 1 && montageIds[0] === montageId.toString();
-
-    if (isValid) {
-      console.log(
-        `[MonoPlaylist] ✓ Found existing (valid): ${playlistName} (ID: ${existingPlaylist.id})`,
-      );
-      return { data: { playlist_id: existingPlaylist.id }, status: 200 };
-    }
-
-    // Content is wrong - repair by overwriting with the correct montage
-    console.warn(
-      `[MonoPlaylist] ⚠ Found existing but corrupted: ${playlistName} (ID: ${existingPlaylist.id}), montages: [${montageIds}] instead of [${montageId}]. Repairing...`,
+    console.log(
+      `[MonoPlaylist] ✓ Found existing: ${playlistName} (ID: ${existingPlaylist.id})`,
     );
-    try {
-      await updatePlaylist(
-        existingPlaylist.id,
-        playlistName,
-        montageId.toString(),
-        "1",
-      );
-      // Update local state with repaired content
-      setPlaylists((prev) =>
-        prev.map((p) =>
-          p.id === existingPlaylist.id
-            ? { ...p, montages: [montage], changed: false }
-            : p,
-        ),
-      );
-      console.log(
-        `[MonoPlaylist] ✓ Repaired: ${playlistName} now contains montage ${montageId}`,
-      );
-      return { data: { playlist_id: existingPlaylist.id }, status: 200 };
-    } catch (error) {
-      console.error(`[MonoPlaylist] ✗ Failed to repair:`, error);
-      // Fall through to return the existing ID anyway
-      return { data: { playlist_id: existingPlaylist.id }, status: 200 };
-    }
+    return { data: { playlist_id: existingPlaylist.id }, status: 200 };
   }
 
   // Create new mono-playlist
@@ -2177,6 +2140,66 @@ export const searchMontages = async (
       : response.data.montages;
   } catch (error) {
     console.error("[api] Error searching montages:", error);
+    return [];
+  }
+};
+
+/**
+ * Searches artworks accessible to the current session.
+ * Called with no term returns all artworks the user can access (access rights determined
+ * server-side by session — public domain, creative commons, licensed content, etc.).
+ *
+ * TODO: A future "My Artworks / All Artworks" toggle may be possible once a backend
+ * endpoint exists to distinguish uploader vs viewer access rights. For now the session-
+ * scoped result is the correct default for artwork QR code generation.
+ *
+ * @param {string} term - Free-text search (desc). Omit or pass null for all artworks.
+ * @param {string} keywords - Keyword filter
+ * @param {string} author - Author name filter
+ * @param {string} categories - Category filter
+ * @param {number} page - Page number (0-based)
+ * @param {number} size - Page size (default 50)
+ * @param {string} sort - Sort order
+ * @returns {Promise<Array>} Array of artwork objects, each containing:
+ *   - id, title, datation, authors[], urls[] (with kind: "THUMBNAIL"|"SD"|"HD")
+ *
+ * WS: "/search_artworks", "int version, String desc, String keywords, String sauthor,
+ *      String categories, int page, int page_size, String sort, String session"
+ */
+export const searchArtworks = async (term, keywords, author, categories, page, size, sort) => {
+  const sessionId = getUserId();
+  console.log('[api] searchArtworks: Starting artwork search with params:', {
+    term, keywords, author, categories, page, size, sort,
+  });
+
+  try {
+    const response = await axios.get(`${baseURL}/search_artworks`, {
+      headers: {
+        Accept: 'text/x-json',
+      },
+      params: {
+        version: 1,
+        desc: term || undefined,
+        keywords: keywords || undefined,
+        sauthor: author || undefined,
+        categories: categories || undefined,
+        page: page,
+        page_size: size,
+        sort: sort || undefined,
+        session: sessionId,
+      },
+    });
+
+    if (response.data?.tag_name === 'error') {
+      console.error('[api] searchArtworks: Server error:', response.data.message);
+      return [];
+    }
+
+    const artworks = typeof response.data.artworks === 'undefined' ? [] : response.data.artworks;
+    console.log('[api] searchArtworks: Found', artworks.length, 'artworks');
+    return artworks;
+  } catch (error) {
+    console.error('[api] searchArtworks: Failed to search artworks:', error);
     return [];
   }
 };

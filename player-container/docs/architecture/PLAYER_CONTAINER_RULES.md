@@ -35,7 +35,7 @@ SessionContext (User/House)
 **Purpose**: Manages user authentication and session state **Key Features**:
 
 - User authentication and session management
-- Account types (Demo, Guest, Premium)
+- Account types (Demo, Guest, Logged in Free/Premium)
 - House information storage
 - Session persistence across page reloads
 

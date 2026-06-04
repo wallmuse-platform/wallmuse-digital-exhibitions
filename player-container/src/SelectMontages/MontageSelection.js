@@ -404,6 +404,9 @@ const ShowMontages = (
     }
   };
 
+  // Mono-playlist pattern: each montage gets a persistent playlist named "mono-{montageId}".
+  // Reused on subsequent plays, hidden from the UI, never deleted on stop.
+  // See docs/features/MONO_PLAYLIST_PLAYMODE.md for the full flow.
   const handlePlayMontage = async (montageId) => {
     console.time("[MonoPlaylist] Total execution time");
 
@@ -447,8 +450,8 @@ const ShowMontages = (
       const monoPlaylistId = response.data.playlist_id;
       console.log(`[MonoPlaylist] ✓ Using mono-playlist ID: ${monoPlaylistId}`);
 
-      // Save current playlist ONLY if it's not already a mono-playlist
-      // This prevents saving mono-1559 when replaying the same montage
+      // Don't overwrite previousPlaylistId if already on a mono-playlist.
+      // e.g. switching mono-A → mono-B must still restore the original real playlist on Stop.
       const currentPlaylistObj = playlists.find(
         (p) => p.id === currentPlaylist,
       );

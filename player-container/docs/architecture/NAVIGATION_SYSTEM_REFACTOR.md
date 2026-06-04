@@ -1,204 +1,182 @@
-# Navigation System Refactor - Enhanced with Queue Support
+# Navigation System — Architecture Reference
 
-## Problem Analysis
+## Overview
 
-The original navigation system had several issues:
+Navigation (moving the WebPlayer to a specific playlist + montage position) flows through a
+single path. `NavigationManager` is the only component that dispatches `webplayer-navigate`.
+Every other component that wants to navigate calls into it explicitly.
 
-1. **Log Noise**: Too many console logs with loops made debugging difficult
-2. **Re-render Issues**: App re-renders caused navigation state loss
-3. **Complex State Management**: Multiple navigation handlers with different signatures
-4. **Async Loading Problems**: Navigation commands sent before player was ready
-5. **Queue Management**: No proper handling of queued navigation events
+---
 
-## Solution: Enhanced NavigationManager with Queue System
+## Call Chain — Playlist Switch ("Play" button)
 
-### Key Features
+```
+User clicks Play on a playlist
+  → handleDoPlayPlaylist (PlayList.js)
+      → doLoadPlaylist (PlayLists.js)          — sends loadPlaylist cluster signal, polls until confirmed
+      → handlePlaylistChange (EnvironmentsContext)
+            sets window.currentPlaylist        — WebPlayer reads this on event receipt
+      → onMontageNavigation(playlistId, 0)
+          → handleMontageNavigation (App.js)
+              → NavigationManager.addCommand()
+                  [both ready] → processCommand() → dispatch webplayer-navigate
+                  [not ready]  → queue command, dispatch when ready
+```
 
-#### 1. Smart Queue Management
+## Call Chain — goMontage (montage title click)
 
-- **Deduplication**: Removes duplicate navigation commands for same montage
-- **Size Limits**: Prevents queue buildup with configurable max size (10 commands)
-- **Priority Processing**: Keeps most recent commands when trimming
-- **Async Processing**: Handles player readiness with automatic queue processing
+```
+User clicks a montage title in the playlist UI
+  → handleTitleClick (PlayListItem.js)
+      [same playlist]
+        → onMontageNavigation(playlistId, montageIndex, force=true)
+            → handleMontageNavigation (App.js)
+                → NavigationManager.addCommand()
 
-#### 2. Smart Logging System
+      [different playlist]
+        → doLoadPlaylist (PlayLists.js)        — sends loadPlaylist cluster signal, polls until confirmed
+        → handlePlaylistChange (EnvironmentsContext)
+              sets window.currentPlaylist
+        → onMontageNavigation(playlistId, montageIndex, force=true)
+            → handleMontageNavigation (App.js)
+                → NavigationManager.addCommand()
+```
 
-- **Debounced Logging**: Only logs meaningful changes (1-second debounce)
-- **Change Detection**: Only logs when state actually changes
-- **Cleanup**: Automatically removes old log entries
-- **Structured Output**: Clear, readable log format with emojis
+Default playlist (`id: undefined`) is handled correctly throughout: `loadPlaylist` with no
+playlist param switches the backend to default; `getPlaylistById(undefined)` matches via
+the `(!id && !playlistId)` guard in api.js.
 
-#### 3. Re-render Awareness
+`handlePlaylistChange` is pure data prep — no dispatch, no cluster signal.
+`onMontageNavigation` / NavigationManager is the sole navigation concern.
+These two responsibilities are separated: `autoSaveUpdates` calls `handlePlaylistChange`
+without ever calling `onMontageNavigation`, because saving should never move the player.
 
-- **Integration with EnvironmentsContext**: Works with existing re-render handling
-- **State Preservation**: Maintains navigation state across app re-renders
-- **Queue Continuity**: Preserves queued commands during re-renders
-- **No Duplication**: Avoids duplicating existing re-render logic
+---
 
-#### 4. Player Readiness Management
+## NavigationManager (`src/utils/NavigationManager.js`)
 
-- **Handshake Integration**: Works with existing WallmuseInit system
-- **Ready State Tracking**: Monitors player readiness status
-- **Automatic Processing**: Processes queue when player becomes ready
+Singleton, exported as default. Also accessible as `window.navigationManager`.
 
-### Architecture
+### State
 
-#### NavigationManager Class
+| Field | Type | Purpose |
+|---|---|---|
+| `isReady` | boolean | Main app ready (set by App.js) |
+| `isPlayerReady` | boolean | WebPlayer loaded and ready |
+| `commandQueue` | array | Pending commands; replaced (not accumulated) on each new add |
+| `lastProcessedCommand` | object | Used for dedup check |
+| `processingCommand` | boolean | Prevents concurrent dispatch |
+
+### Key Methods
+
+| Method | Called by | What it does |
+|---|---|---|
+| `setReady(bool)` | App.js | Toggles main-app ready; triggers queue flush on `true` |
+| `setPlayerReady(bool)` | WebPlayer.js | Toggles player ready; triggers queue flush on `true` (100ms delay) |
+| `addCommand(command)` | App.js `handleMontageNavigation` | Dedup check, then process or queue |
+| `processCommand(command)` | internal | **Only place that dispatches `webplayer-navigate`** |
+| `processQueuedCommands()` | internal | Flushes queue when both ready states become true, or when `processingCommand` lock releases |
+| `getStatus()` | debug | Returns current state snapshot |
+| `reset()` | debug/recovery | Clears stuck `processingCommand` flag and queue |
+
+### Dedup Guard
+
+Commands with the same `playlist-montage-track` signature within **2 seconds** are dropped.
+This prevents the track-mapping effect (which fires immediately after App.js renders) from
+re-dispatching a command that `handleDoPlayPlaylist` just sent.
+
+### `webplayer-navigate` Event Shape
 
 ```javascript
-class NavigationManager {
-  constructor() {
-    this.currentState = { playlistId, montageIndex, track, signature };
-    this.navigationQueue = [];
-    this.isPlayerReady = false;
-    this.isProcessingQueue = false;
-    this.logDebouncer = new Map();
-  }
-
-  navigateTo(playlistId, montageIndex, track, signature)
-  setPlayerReady(ready)
-  processQueue()
-  onAppRerender(reason)
-  // ... other methods
+{
+  playlist: string,           // playlist ID
+  position: { montage, track },
+  montage: number,            // position.montage || 0
+  track: string | number,     // position.track || 0
+  timestamp: number,
+  isPlaylistChange: boolean   // true if playlist differs from window.currentPlaylistForNav
 }
 ```
 
-#### Integration Points
+### Queue Behaviour
 
-1. **App.js**:
-   - Initializes NavigationManager with playlists/environments
-   - Uses single navigation handler
-   - Integrates with existing EnvironmentsContext re-render handling
+`commandQueue` holds at most one command at a time — each `addCommand` call replaces the
+previous pending command. When both ready states are true, the latest queued command is
+processed and the queue is cleared.
 
-2. **WebPlayer.js**:
-   - Signals player readiness to NavigationManager
-   - Listens for nav-command events
-   - Monitors queue state changes
+---
 
-3. **Child Player**:
-   - Receives nav-command events
-   - Executes navigation commands
-   - Signals readiness via onWebPlayerReady
+## Integration Points
 
-4. **EnvironmentsContext**:
-   - Handles playlist changes and re-renders
-   - Dispatches webplayer-navigate events
-   - Manages backend sync and state updates
+### App.js — `handleMontageNavigation`
 
-### Event Flow
+The only call site for `NavigationManager.addCommand()`. Called by:
+- `handleDoPlayPlaylist` (PlayList.js) via the `onMontageNavigation` prop — playlist switch
+- `handleTitleClick` (PlayListItem.js) via the `onMontageNavigation` prop — goMontage click
+- Track-mapping effect in App.js — sends the current track selection after mounting
 
-```
-App Navigation Request
-    ↓
-NavigationManager.navigateTo()
-    ↓
-[If Player Ready] → Execute immediately
-[If Not Ready] → Queue command
-    ↓
-Player becomes ready
-    ↓
-Process queued commands
-    ↓
-Send nav-command event
-    ↓
-WebPlayer executes navigation
-```
+App.js also calls `setReady(true)` once `DontStartBefore` has finished loading.
 
-### Benefits
+### WebPlayer.js
 
-1. **Reduced Log Noise**: Only meaningful changes are logged
-2. **Reliable Navigation**: Queue ensures no commands are lost
-3. **Better Debugging**: Clear visibility into navigation state
-4. **Performance**: Deduplication prevents redundant operations
-5. **Re-render Safety**: Navigation state preserved across renders
+Calls `setPlayerReady(true)` once the embedded player is ready to receive events.
 
-### Usage Examples
+### EnvironmentsContext.js — `handlePlaylistChange`
 
-#### Basic Navigation
+No dispatch, no cluster signal. Pure data prep. Responsibilities:
+1. Updates `currentPlaylist` state immediately
+2. Fetches fresh playlist data and stores it in `window.currentPlaylist`
 
-```javascript
-// Navigate to specific montage
-navigationManager.navigateTo(playlistId, montageIndex, track, signature);
-```
+Must complete before `handleMontageNavigation` is called so `window.currentPlaylist` is
+populated with fresh data when the WebPlayer receives the event.
 
-#### Player Readiness
+The `loadPlaylist` cluster signal is the **initiating action's exclusive responsibility**
+(`doLoadPlaylist` for both the Play button and goMontage flows). Calling it here would
+duplicate the broadcast on local-initiated switches and echo it back on WS-triggered paths.
 
-```javascript
-// Signal player is ready
-navigationManager.setPlayerReady(true);
-
-// Signal player is not ready (e.g., during re-render)
-navigationManager.onAppRerender('playlist-change');
-```
-
-#### Debug Information
-
-```javascript
-// Get current state
-const state = navigationManager.getCurrentState();
-
-// Get debug info
-const debug = navigationManager.getDebugInfo();
-
-// Manual debug (available in browser console)
-window.debugNavigation();
-```
-
-### Migration Notes
-
-- **Backward Compatibility**: Global variables (SELECTED_TRACK, SELECTED_MONTAGE) still set
-- **Event Changes**: Uses 'nav-command' instead of 'webplayer-navigate'
-- **Queue Management**: Handled automatically by NavigationManager
-- **Logging**: Much cleaner, debounced output
-
-### Testing
-
-The system can be tested by:
-
-1. Switching playlists (triggers re-render)
-2. Changing montage order (triggers signature change)
-3. Navigating between montages
-4. Checking browser console for clean, structured logs
-5. Using `window.debugNavigation()` for detailed state info
+---
 
 ## Console Log Keywords
 
-Search console logs with these keywords for debugging navigation issues:
+### NavigationManager
+- `[NAV-MANAGER] Initializing` — startup
+- `[NAV-MANAGER] 🚦 Ready state changed` — main app ready toggle
+- `[NAV-MANAGER] 🎮 Player ready state changed` — player ready toggle
+- `[NAV-MANAGER] 📝 Adding command` — new command accepted
+- `[NAV-MANAGER] 🔄 Skipping duplicate command` — dedup fired
+- `[NAV-MANAGER] ✅ Both ready states true - processing immediately` — instant dispatch
+- `[NAV-MANAGER] ⏳ Waiting for ...` — queued
+- `[NAV-MANAGER] ▶️ Processing command` — about to dispatch
+- `[NAV-MANAGER] ✅ Command processed successfully` — dispatch done
 
-### NavigationManager Logs
-**Initialization:**
-- `[NAV-MANAGER] Initializing fixed NavigationManager` - Manager startup
-- `[NAV-MANAGER] NavigationManager initialized` - Init complete
+### EnvironmentsContext
+- `[handlePlaylistChange] New playlist selected` — entry
+- `[handlePlaylistChange] Updating currentPlaylist immediately from X to Y` — state update
+- `[handlePlaylistChange] Stored full playlist data in window.currentPlaylist` — data ready
 
-**Ready State Changes:**
-- `[NAV-MANAGER] 🚦 Ready state changed` - Main app ready state toggle
-- `[NAV-MANAGER] 🎮 Player ready state changed` - Player ready state toggle
+### App.js
+- `[NAV] handleMontageNavigation` — navigation request received
+- `[NAV] Playlist change detected` — switch vs same-playlist navigation
 
-**Command Queue Management:**
-- `[NAV-MANAGER] 📝 Adding command` - New nav command queued
-- `[NAV-MANAGER] 🔄 Skipping duplicate command` - Deduplication in action
-- `[NAV-MANAGER] ✅ Both ready states true - processing immediately` - Instant execution
-- `[NAV-MANAGER] ⏳ Waiting for main app ready state` - Waiting for app
-- `[NAV-MANAGER] ⏳ Waiting for player ready state` - Waiting for player
-- `[NAV-MANAGER] ⏳ Waiting for current command to finish processing` - Processing busy
+---
 
-**Command Processing:**
-- `[NAV-MANAGER] 🔄 Processing * queued commands` - Queue processing start
-- `[NAV-MANAGER] ▶️ Processing command` - Individual command execution
-- `[NAV-MANAGER] ✅ Command processed successfully` - Command complete
-- `[NAV-MANAGER] ❌ Error processing command` - Command error
-- `[NAV-MANAGER] ✅ No commands to process` - Queue empty
-- `[NAV-MANAGER] ⏳ Command already processing, skipping` - Processing conflict
+## Debug Helpers (browser console)
 
-**State Management:**
-- `[NAV-MANAGER] 🔄 Reset completed` - Manager reset
-- `[NAV-MANAGER] Ready states check` - Ready state validation
+```javascript
+window.navStatus()           // print NavigationManager.getStatus()
+window.resetNav()            // clear stuck processingCommand flag and queue
+window.testNavigation(playlistId, position)  // inject a command directly
+```
 
-### EnvironmentsContext Navigation Logs
-- `[handlePlaylistChange] New playlist selected` - Playlist navigation triggered
-- `[handlePlaylistChange] Updating currentPlaylist immediately` - Playlist state update
-- `[handlePlaylistChange] Dispatching webplayer-navigate event` - Navigation event dispatch
-- `[handlePlaylistChange] State updated - backend verification` - Backend sync confirmation
+---
 
-### WebPlayer Navigation Logs
-- `[WebPlayer]` - Prefix for all WebPlayer-related navigation logs (use logInfo/logError helpers)
+## Notes
+
+### NavigationManager queue drain on lock release
+
+When `processCommand` runs, it sets `processingCommand = true` for 500 ms to prevent
+concurrent dispatch. If `addCommand` is called while the lock is held (e.g. the track-change
+effect in App.js fires a position-0 command just before `handleMontageNavigation` fires the
+user's actual target position), the second command is queued. The 500 ms timeout resets
+`processingCommand = false` **and then calls `processQueuedCommands()`**, so the queued
+command is dispatched automatically rather than being silently lost.

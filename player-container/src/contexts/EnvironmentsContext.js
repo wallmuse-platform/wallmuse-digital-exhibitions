@@ -1051,44 +1051,21 @@ export const EnvironmentsProvider = ({ children }) => {
         window.currentPlaylistForNav,
       );
 
-      // Dispatch navigation event to WebPlayer
-      const isPlaylistChange =
-        String(newPlaylistId) !== String(currentPlaylist);
-      const dispatchNavigationEvent = () => {
-        console.log(
-          "[handlePlaylistChange] Dispatching webplayer-navigate event:",
-          {
-            playlist: newPlaylistId,
-            position: position,
-            isPlaylistChange: isPlaylistChange,
-          },
-        );
-
-        window.dispatchEvent(
-          new CustomEvent("webplayer-navigate", {
-            detail: {
-              playlist: newPlaylistId,
-              position: position,
-              isPlaylistChange: isPlaylistChange,
-              timestamp: Date.now(),
-            },
-          }),
-        );
-      };
-
-      // FURTHER TRACK AND SIGNATURE CHANGE OF PLAYLIST TESTING (introduced in commit e4256ac):
-      // When a track order or montage signature changes inside a playlist, the WebPlayer needs
-      // the updated playlist object before it navigates — otherwise it plays the stale version
-      // and only a full page refresh fixes it. To avoid the refresh, this block fetches the
-      // latest playlist data from the backend and pushes it into window.currentPlaylist BEFORE
-      // dispatching webplayer-navigate, effectively acting as a soft remount of the playlist.
+      // DATA PREP — no navigation dispatch, no backend call here. This function is pure
+      // data prep for the child player: it ensures window.currentPlaylist is fresh before
+      // the caller dispatches webplayer-navigate. Navigation is the caller's responsibility
+      // via onMontageNavigation → NavigationManager.
       //
-      // Two sequential async steps gate the navigation event:
-      //   1. getPlaylistById(newPlaylistId) — re-fetches the full playlist object (tracks,
-      //      montages, signature) so window.currentPlaylist is always up-to-date.
-      //      Skipped when the caller passes playlistObject directly (fast path).
-      //   2. loadPlaylist(house, newPlaylistId) — persists the new current_playlist on the
-      //      backend so the next page load restores the correct playlist.
+      // The loadPlaylist API call (cluster signal) is the initiating action's responsibility
+      // (doLoadPlaylist, playModeUtils, MontageSelection). Calling it here would:
+      //   - duplicate the cluster signal on local-initiated switches (redundant broadcast)
+      //   - echo the signal back to the backend on WS-triggered paths (wrong direction)
+      //
+      // One async step prepares the data:
+      //   getPlaylistById(newPlaylistId) — re-fetches the full playlist object (tracks,
+      //   montages, signature) so window.currentPlaylist is always up-to-date before the
+      //   WebPlayer receives the navigation event. Skipped when the caller passes
+      //   playlistObject directly (fast path, avoids a round-trip).
       //
       // TODO: investigate whether a targeted soft remount (re-initialising only the affected
       // playlist data inside the WebPlayer rather than re-fetching the whole object) could
@@ -1117,23 +1094,12 @@ export const EnvironmentsProvider = ({ children }) => {
           playlistData = await getPlaylistById(newPlaylistId);
         }
 
-        // Must be set before dispatching webplayer-navigate so the WebPlayer reads
-        // the updated object synchronously on receipt of the event.
+        // Set before the caller dispatches webplayer-navigate — the WebPlayer reads this
+        // synchronously on receipt of the event, so it must be populated first.
         window.currentPlaylist = playlistData;
         console.log(
           "[handlePlaylistChange] Stored full playlist data in window.currentPlaylist:",
           playlistData.name || playlistData.id,
-        );
-
-        // Dispatch only after window.currentPlaylist is populated — prevents the
-        // WebPlayer from racing ahead with stale or missing playlist data.
-        dispatchNavigationEvent();
-
-        // Persist current_playlist on the backend so the next page load restores
-        // the correct playlist (not a stale or mono one).
-        await loadPlaylist(house, newPlaylistId);
-        console.log(
-          "[handlePlaylistChange] Playlist loaded successfully via API",
         );
       } catch (error) {
         console.error("[handlePlaylistChange] Error loading playlist:", error);

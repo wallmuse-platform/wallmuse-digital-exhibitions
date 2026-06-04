@@ -30,7 +30,7 @@ export function DeleteDialog({
     >
       <Alert severity="warning" onClose={cancelDelete}>
         <Typography variant="body1">
-          {`${t("component.playlist.exhibitions.delete.body1")} "${namePlaylist}"? 
+          {`${t("component.playlist.exhibitions.delete.body1")} "${namePlaylist}"?
                 ${t("component.playlist.exhibitions.delete.body2")}.`}
         </Typography>
       </Alert>

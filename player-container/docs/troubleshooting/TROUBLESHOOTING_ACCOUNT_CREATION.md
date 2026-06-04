@@ -73,6 +73,34 @@ Each dump is stored in localStorage as `accountProcess_<timestamp>`:
 }
 ```
 
+## WooCommerce Hook — Critical Note
+
+### Problem: `woocommerce_thankyou` Never Fires
+The WordPress Redirection plugin fires at `template_redirect`, sending a 301 redirect before WooCommerce's order-received template loads. This means `woocommerce_thankyou` — which fires inside that template — never executes, so new accounts are never registered in the Wallmuse backend.
+
+### Fix (applied in `functions.php`)
+Use `woocommerce_checkout_order_processed` instead — it fires during order processing before any redirect:
+```php
+add_action('woocommerce_checkout_order_processed', 'register_user_to_manager_debug', 10, 1);
+```
+
+### Duplicate Prevention
+The backend may return `<error>Contact already used: [name]</error>` when an account already exists (e.g., user registered on sharex.wallmuse.com first). Without proper handling, this caused infinite retry loops. Fix: treat "already used" responses as success and mark the order as processed:
+```php
+} elseif (strpos($response_body, 'already used') !== false) {
+    update_post_meta($order_id, '_wm_user_registered', true);
+}
+```
+
+## Playlist Copy Auto-Reload
+
+After copying playlists from a guest account to the new personal account, `fetchEnvironmentDetails` dispatches a `screen-needs-refresh` event and triggers an automatic page reload after 1.5 seconds:
+```js
+window.dispatchEvent(new CustomEvent("screen-needs-refresh"));
+setTimeout(() => window.location.reload(), 1500);
+```
+This is necessary because `useInitialData` fetches playlists on mount before the guest→personal copy completes. Without this reload, the playlists panel shows empty even though the data exists in the backend.
+
 ## Known Issues
 
 ### Double Environment Creation
@@ -87,9 +115,11 @@ Each dump is stored in localStorage as `accountProcess_<timestamp>`:
 4. **Removing needsSecondRefresh** exposed the underlying issue
 
 ### Architecture Notes
-- **Environment creation** handled at child WebPlayer (TypeScript) level
-- **React EnvironmentsContext** only orchestrates, doesn't directly create
+- **Environment creation** handled at two levels:
+  - **Parent (EnvironmentsContext)**: creates environment + screen via REST API, so `get_wp_user` returns it immediately and Configure shows it
+  - **Child WebPlayer (TypeScript)**: creates environment via WebSocket; this one is NOT returned by `get_wp_user` — it only appears after a second refresh
 - **Race conditions** between initial mount and house-created event possible
+- **Critical**: If the REST API creation block in `fetchEnvironmentDetails` is removed, new accounts will show 0 environments in Configure even though the player works (the WebSocket environment is invisible to the REST endpoint)
 
 ## Debugging Workflow
 
@@ -176,11 +206,11 @@ For webplayer environments (not desktop PC environments), duplicate environments
 ## Flag Coordination System
 The account creation process uses localStorage flags for coordination:
 - `accountJustCreated` - New account in setup
-- `activationComplete` - Account activation finished
-- `needsRefresh` - First refresh needed for screen setup
-- `needsSecondRefresh` - Second refresh for cleanup (currently disabled)
+- `activationComplete` - Set by `ActivateAccount.js` when user clicks Activate. **Must be removed in App.js "completed" branch** — if left in localStorage it causes the "Account created!" snackbar to re-trigger on every subsequent page load for existing users
+- `needsRefresh` - First refresh needed for screen setup (set by EnvironmentsContext after environment creation)
+- `needsSecondRefresh` - Second refresh for duplicate environment cleanup (active, used in EnvironmentsContext)
 - `newAccountHouseId` - House ID for new account
-- `activationInProgress` - Account creation in progress
+- `activationInProgress` - Account creation in progress, guards against double-activation
 
 ## Environment Types
 - **Master Environment** - Has IP `127.0.0.1`, proper screen dimensions

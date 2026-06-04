@@ -195,38 +195,51 @@ const updatePlaylistInContext = newPlaylist => {
 
 **Solution**:
 
+Navigation must go through `NavigationManager` — it is the **only** component that dispatches
+`webplayer-navigate`. Never dispatch it directly.
+
 ```javascript
-// Ensure proper event dispatch
-const sendNavCommand = command => {
-  const event = new CustomEvent('webplayer-navigate', {
-    detail: command,
-  });
-  window.dispatchEvent(event);
-};
+// Correct: use NavigationManager
+import navigationManager from './utils/NavigationManager';
+navigationManager.addCommand({ playlist: playlistId, position: { montage: 0, track: 0 } });
+
+// Debug helpers in browser console:
+window.navStatus()                        // print current NavigationManager state
+window.resetNav()                         // clear a stuck processingCommand flag
+window.testNavigation(playlistId, pos)    // inject a test command directly
 ```
 
-**Prevention**: Always use proper event dispatch patterns
+Check both ready flags — commands are queued until both are true:
+- `isReady`: set by App.js after `DontStartBefore` finishes loading
+- `isPlayerReady`: set by WebPlayer.js once the embedded player is ready
+
+**Prevention**: Route all navigation through `NavigationManager.addCommand()`; see
+`NAVIGATION_SYSTEM_REFACTOR.md` for the full call chain.
 
 ### 4.2 WebPlayer Not Ready
 
 **Problem**: Commands sent before WebPlayer is ready **Symptoms**:
 
-- Commands ignored
-- WebPlayer not initialized
+- Commands queued but never dispatched
+- `[NAV-MANAGER] ⏳ Waiting for player ready state` in console
 - Empty player display
 
 **Solution**:
 
+`NavigationManager` handles this automatically — commands are queued until both
+`isReady` and `isPlayerReady` are true. If commands remain stuck, check:
+
 ```javascript
-// Wait for WebPlayer readiness
-const waitForWebPlayerReady = async () => {
-  if (window.WallmuseInit) {
-    await window.WallmuseInit.playerReady();
-  }
-};
+window.navStatus()   // shows { isReady, isPlayerReady, queueLength, processingCommand }
+window.resetNav()    // clears a stuck processingCommand flag if needed
 ```
 
-**Prevention**: Always check WebPlayer readiness before sending commands
+`isPlayerReady` is set via `NavigationManager.setPlayerReady(true)` called from
+`WebPlayer.js` once the embedded player has loaded. If it never fires, check that
+the WebPlayer HTML embed loaded successfully.
+
+**Prevention**: NavigationManager queues commands automatically; no manual readiness
+check is needed at call sites.
 
 ## 5. Performance Issues
 
@@ -406,6 +419,11 @@ Search console logs with these keywords for debugging player container issues:
 
 **NavigationManager Logs:**
 - `[NAV-MANAGER]` - Prefix for navigation management logs (see NAVIGATION_SYSTEM_REFACTOR.md for full list)
+
+**goMontage Logs:**
+- `[MONTAGE_NAVIGATION] Current: X, Target: Y, MontagePos: Z` - Title click received
+- `[MONTAGE_NAVIGATION] Same playlist, navigating to montage` - Same-playlist path
+- `[MONTAGE_NAVIGATION] Loading different playlist` - Cross-playlist path
 
 **GuestActionPopup Logs:**
 - `[GuestActionPopup]` - Prefix for account creation popup logs (see GUEST_ACTION_POPUP_DOCS.md for full list)
