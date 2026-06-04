@@ -34,15 +34,8 @@ export async function syncPlaylistAndUI(
   return syncSuccess;
 }
 
-/**
- * Auto-saves playlist updates to the backend.
- *
- * IMPORTANT: Uses playlistId (not playlistIndex) to identify the playlist.
- * This avoids index mismatch issues when mono-playlists are filtered out of the UI.
- * See PlayLists.js header comment for details on playlistIndex vs playlistId.
- */
 export const autoSaveUpdates = async ({
-  playlistId, // The actual playlist ID (use playlist.id)
+  playlistIndex, // Array index of the playlist in the playlists state — passed directly to handlePlaylistUpdate which matches by idx
   playlist,
   updatePlaylist,
   setSaveInProgress,
@@ -55,8 +48,8 @@ export const autoSaveUpdates = async ({
   setReadyToPlayPlaylist, // optional
 }) => {
   console.log(
-    "[playlistHelpers] autoSaveUpdates called with: playlistId, playlist",
-    playlistId,
+    "[playlistHelpers] autoSaveUpdates called with: playlistIndex, playlist",
+    playlistIndex,
     playlist,
     skipStateUpdate,
   );
@@ -95,7 +88,7 @@ export const autoSaveUpdates = async ({
 
     if (response.status >= 200 && response.status < 300) {
       if (!skipStateUpdate) {
-        handlePlaylistUpdate(playlistId, playlist.name);
+        handlePlaylistUpdate(playlistIndex, playlist.name);
       } else {
         // When skipping state update, only update success flags, not the playlists
         updateSaveStatus(true, null, undefined); // Pass undefined to prevent state update

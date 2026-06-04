@@ -1,4 +1,7 @@
-// VolumeSlider.js - Corrected version
+// VolumeSlider — uncontrolled MUI Slider with key-remount strategy.
+// Uses defaultValue + key increment (not the controlled value prop) to avoid the slider
+// thumb snapping back on each drag tick. External state changes trigger a remount via
+// sliderKey, but only when the user is not actively dragging (isDraggingRef guards this).
 import React, { useCallback, useState, useEffect, useRef } from "react";
 import Slider from "@mui/material/Slider";
 import { grey } from "@mui/material/colors";
@@ -22,7 +25,8 @@ const VolumeSlider = ({ volumeRef, value, onVolumeChange }) => {
     isDraggingRef.current = true;
   }, []);
 
-  // Only call parent when slider is released
+  // Only propagate to parent on release (not on every drag tick) to avoid spamming
+  // volume commands to the WebSocket player.
   const handleChangeCommitted = useCallback(
     (event, newValue) => {
       console.log("[VolumeSlider] handleChangeCommitted newValue:", newValue);

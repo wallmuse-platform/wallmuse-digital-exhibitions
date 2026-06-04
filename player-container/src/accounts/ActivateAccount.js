@@ -1,3 +1,4 @@
+//ActivateAccount.js
 import React, { useState, useEffect } from "react";
 
 // Material UI Components and Icons
