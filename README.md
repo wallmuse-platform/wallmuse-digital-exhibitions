@@ -55,14 +55,15 @@ Traditional solutions fall short on either security or user experience. WallMuse
 - Enterprise DRM and copy protection
 - Offline playback capabilities
 
-### 3️⃣ Descriptions App (Companion Experience) - *Coming Soon*
+### 3️⃣ Descriptions App (Companion Experience)
 **Real-time artwork metadata display** for handheld devices
 - Synchronized with main displays for enhanced visitor engagement
 - Multi-language support (12+ languages)
 - Perfect for museum visitors wanting deeper content exploration
 - Timeline navigation and interactive features
+- Permanent QR codes per artwork — visitors scan to open artwork details on their device
 
-### 4️⃣ CreateMontage (Professional Curation Tool) - *Coming Soon*
+### 4️⃣ CreateMontage (Professional Curation Tool)
 **Drag-and-drop timeline editor** with multi-track synchronization
 - Comprehensive rights management (©, Creative Commons, international licensing)
 - Support for HD/UHD (4K) encrypted formats
@@ -112,32 +113,34 @@ The main React application that orchestrates multi-environment playback, manages
 
 ---
 
-### descriptions-app/ - Companion Display Application
-**Status:** 🚧 Coming Soon
+### [descriptions-app/](./descriptions-app/) - Companion Display Application
+**Status:** ✅ Available
 
 Real-time companion display application that syncs with the main player to show artwork descriptions, metadata, and timeline navigation.
 
-**Planned Features:**
-- Real-time artwork synchronization
+**Key Features:**
+- Real-time artwork synchronization anchored to server playlist position
 - Metadata and descriptions display
 - Timeline navigation controls
-- Multi-language support
+- Multi-language support (12+ languages)
 - Handheld mode for mobile devices
+- Permanent QR codes per artwork for instant visitor access
 
 ---
 
-### create-montage/ - Timeline Editor
-**Status:** 🚧 Coming Soon
+### [create-montage/](./create-montage/) - Timeline Editor
+**Status:** ✅ Available
 
 Professional timeline editor for creating and managing multi-track video compositions.
 
-**Planned Features:**
+**Key Features:**
 - Drag-and-drop timeline interface
-- Multi-track composition
+- Multi-track composition with round-robin artwork distribution
 - Effects and overlays
-- Rights management system
-- Copyright and licensing tools
+- Comprehensive rights management (©, Creative Commons, international licensing)
+- Copyright and licensing tools with author split fields
 - International metadata support
+- Compatible with Copyright Management Organisations (ADAGP, DACS, etc.)
 
 ---
 
