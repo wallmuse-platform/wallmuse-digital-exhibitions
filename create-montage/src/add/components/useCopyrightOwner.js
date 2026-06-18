@@ -9,7 +9,7 @@ import { getUserId } from '../../utils/Utils'; // Update this path if needed
  * 
  * @returns {Object} Hook state and methods
  */
-export function useCopyrightOwner(onOwnerSelectorChange = null) {
+export function useCopyrightOwner() {
     const [selectedOwnerId, setSelectedOwnerId] = useState("-1");
     const [authorName, setAuthorName] = useState("");
     const [showOwnerSelector, setShowOwnerSelector] = useState(false);
@@ -17,17 +17,8 @@ export function useCopyrightOwner(onOwnerSelectorChange = null) {
     const [searchPending, setSearchPending] = useState(false);
     const sessionId = getUserId();
 
-    // Add a useEffect to call the callback when the state changes
-    useEffect(() => {
-        console.log('[useCopyrightOwner] showOwnerSelector changed to:', showOwnerSelector);
-        if (onOwnerSelectorChange) {
-            onOwnerSelectorChange(showOwnerSelector);
-        }
-    }, [showOwnerSelector, onOwnerSelectorChange]);
-
-    // Modify the setter to add logging
     const setShowOwnerSelectorWithLog = useCallback((value) => {
-        console.log('[useCopyrightOwner] Setting showOwnerSelector to:', value);
+        console.log('[useCopyrightOwner] showOwnerSelector changed to:', value);
         setShowOwnerSelector(value);
     }, []);
 
@@ -53,16 +44,13 @@ export function useCopyrightOwner(onOwnerSelectorChange = null) {
                     );
 
                     if (exactMatch) {
-                        console.log('[useCopyrightOwner] Found EXACT match - auto-selecting:', exactMatch);
-                        setSelectedOwnerId(String(exactMatch.id));
-                        setAuthorName(exactMatch.displayName || exactMatch.name);
-                        setShowOwnerSelector(false); // Don't show dialog for exact matches
-                        setPotentialOwners([exactMatch]); // Store the selected owner
+                        // Put exact match first so it's pre-highlighted in the popup
+                        const ordered = [exactMatch, ...owners.filter(o => o.id !== exactMatch.id)];
+                        setPotentialOwners(ordered);
                     } else {
-                        console.log('[useCopyrightOwner] Multiple matches found - showing selector');
                         setPotentialOwners(owners);
-                        setShowOwnerSelector(true);
                     }
+                    setShowOwnerSelector(true);
                 } else {
                     console.log('[useCopyrightOwner] No matches found, using as new author');
                     setSelectedOwnerId("-1");

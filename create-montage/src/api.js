@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getUserId } from './utils/Utils';
 
-const baseURL = 'https://wallmuse.com:8443/wallmuse/ws';
+const baseURL = 'https://manager.wallmuse.com:8443/wallmuse/ws';
 
 /**
  * Custom parameter serializer that preserves spaces in session IDs
@@ -275,7 +275,7 @@ export const getAllMontagesFull = async (page, size) => {
 
 export const saveMontages = async (montage) => {
   const sessionId = getUserId();
-  const payload = `montage=${JSON.stringify(montage)}`;
+  const payload = `montage=${encodeURIComponent(JSON.stringify(montage))}`;
   const response = await axios.post(
     `${baseURL}/set_montage_full?version=1&session=${sessionId}`,
     payload,
@@ -297,7 +297,7 @@ export const deleteMontage = async (userId, montageId) => {
     {
       headers: {
         Accept: 'text/x-json',
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       },
     }
   );
@@ -577,7 +577,7 @@ export async function searchCopyrightOwner(session, name) {
       params,
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         },
       }
     );
@@ -605,7 +605,7 @@ export async function searchCopyrightOwner(session, name) {
           name:        el.getAttribute('name'),
           firstName:   el.getAttribute('first_name'),
           middleName:  el.getAttribute('middle_name'),
-          surName:     el.getAttribute('sur_name'),
+          surName:     el.getAttribute('name') || '',
         });
       }
 
@@ -642,7 +642,7 @@ export async function searchCopyrightOwner(session, name) {
           variantParams,
           {
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
             },
           }
         );
@@ -662,7 +662,7 @@ export async function searchCopyrightOwner(session, name) {
             name:        el.getAttribute('name'),
             firstName:   el.getAttribute('first_name'),
             middleName:  el.getAttribute('middle_name'),
-            surName:     el.getAttribute('sur_name'),
+            surName:     el.getAttribute('name') || '',
           };
 
           // Only add if not already in the list
@@ -746,7 +746,12 @@ function parseCopyrightOwnerXml(xmlDoc) {
   };
 }
 
-export async function addCopyrightOwner({ firstName, middleName, name, surName, kind = 'AUT' }) {
+// NOTE: sur_name is intentionally not used for AUT (author) copyright owners.
+// The original developer confused "sur_name" with French "surnom" (nickname) and used it
+// inconsistently — sometimes as a nickname, sometimes as a duplicate of name, sometimes
+// as a comment. For AUT entries, `name` is the surname/nickname, `first_name` the given
+// name. sur_name is ignored on both read and write to avoid surfacing legacy garbage data.
+export async function addCopyrightOwner({ firstName, middleName, name, kind = 'AUT' }) {
   const sessionId = getUserId();
   const params = new URLSearchParams();
   params.append('version', '1');
@@ -754,17 +759,16 @@ export async function addCopyrightOwner({ firstName, middleName, name, surName, 
   params.append('name', name);
   if (firstName)  params.append('first_name',  firstName);
   if (middleName) params.append('middle_name', middleName);
-  if (surName)    params.append('sur_name',    surName);
   if (kind)       params.append('kind',        kind);
 
   const response = await axios.post(`${baseURL}/add_copyright_owner`, params, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
   });
   const xmlDoc = new DOMParser().parseFromString(response.data, 'text/xml');
   return parseCopyrightOwnerXml(xmlDoc);
 }
 
-export async function updateCopyrightOwner(ownerId, { firstName, middleName, name, surName, kind }) {
+export async function updateCopyrightOwner(ownerId, { firstName, middleName, name, kind }) {
   const sessionId = getUserId();
   const params = new URLSearchParams();
   params.append('version', '1');
@@ -773,11 +777,10 @@ export async function updateCopyrightOwner(ownerId, { firstName, middleName, nam
   params.append('name', name);
   if (firstName)  params.append('first_name',  firstName);
   if (middleName) params.append('middle_name', middleName);
-  if (surName)    params.append('sur_name',    surName);
   if (kind)       params.append('kind',        kind);
 
   const response = await axios.post(`${baseURL}/update_copyright_owner`, params, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
   });
   const xmlDoc = new DOMParser().parseFromString(response.data, 'text/xml');
   return parseCopyrightOwnerXml(xmlDoc);
@@ -844,7 +847,7 @@ export function testCopyrightOwnerSearch(name) {
 
   axios
     .post(`${baseURL}/search_copyright_owner`, formData, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
     })
     .then(response => {
       console.log('Raw API response:', response.data);
@@ -877,7 +880,7 @@ export function testCopyrightOwnerSearch(name) {
 
         axios
           .post(`${baseURL}/search_copyright_owner`, allFormData, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
           })
           .then(allResponse => {
             console.log('All owners response:', allResponse.data);
@@ -988,7 +991,7 @@ export const saveBatchChoices = async (csvFile, files) => {
   });
   try {
     const response = await axios.post(`${baseURL}/upload_artworks_choices`, body, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
       responseType: 'text',
     });
     const xml = parseXML(response.data);
@@ -1049,7 +1052,7 @@ export const importBatchArtworks = async (csvFile) => {
   });
   try {
     const response = await axios.post(`${baseURL}/upload_artworks_import`, body, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
       responseType: 'text',
     });
     const xml = parseXML(response.data);
