@@ -354,7 +354,11 @@ const WebPlayer = React.memo(function WebPlayer({
 
   // Handle montage order changes (trigger playlist refetch)
   useEffect(() => {
-    if (!montageOrderSignature || !isPlayerLoaded || !currentPlaylist) return;
+    // Note: currentPlaylist can be undefined for the default playlist — do NOT guard on it here.
+    // The prevPlaylistRef/prevSignatureRef logic below handles initialization for all playlist ids
+    // including undefined. Guarding on !currentPlaylist would silently skip reloads for the
+    // default playlist every time the user reorders it.
+    if (!montageOrderSignature || !isPlayerLoaded) return;
 
     // Playlist changed — record new baseline, do not treat as a reorder
     if (prevPlaylistRef.current !== currentPlaylist) {
