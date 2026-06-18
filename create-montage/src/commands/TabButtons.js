@@ -15,7 +15,7 @@ import { useUserContext } from '../context/UserContext';
 function TabButtons({ t, setSection, wpLoggedIn }) {
   const { isPremium } = useUserContext() || {};
   const [currentSection, setCurrentSection] = useState(() => {
-    const savedSection = localStorage.getItem('currentSection');
+    const savedSection = localStorage?.getItem('currentSection');
     return savedSection || 'basicGrid';
   });
   const theme = selectTheme();
@@ -27,7 +27,7 @@ function TabButtons({ t, setSection, wpLoggedIn }) {
   }, [currentSection, setSection]);
 
   const handleClick = (section) => {
-    localStorage.setItem('currentSection', section);
+    localStorage?.setItem('currentSection', section);
     setCurrentSection(section);
   };
 
@@ -106,11 +106,16 @@ function TabButtons({ t, setSection, wpLoggedIn }) {
           </Tooltip>
         </Stack>
 
-        {/* Far right: Account Delegations (placeholder — ShareX admins) — hidden on mobile/tablet */}
+        {/* Far right: Account Delegations — hidden on mobile/tablet */}
         {!isNarrow && <Box sx={{ position: 'absolute', right: 8 }}>
-          <Tooltip title="For ShareX Administrators">
+          <Tooltip title={t('delegations.admin.tooltip')}>
             <span>
-              <IconButton disabled size="small" className="tabs_icon">
+              <IconButton
+                size="small"
+                className="tabs_icon"
+                onClick={() => handleClick('delegations')}
+                sx={currentSection === 'delegations' ? { color: 'primary.main' } : {}}
+              >
                 <ManageAccountsIcon />
               </IconButton>
             </span>

@@ -46,7 +46,7 @@ export default function ZoomAndPanDialog({image, setImage, updateImageZoomAndPan
         })
     }
     const updateZoomAndPanStartScale = event => {
-        const scale = event.target.value;
+        const scale = Number(event.target.value);
         if (scale < 80 || scale > 130) {
             setScaleWarning(true)
         } else {
@@ -80,7 +80,7 @@ export default function ZoomAndPanDialog({image, setImage, updateImageZoomAndPan
         })
     }
     const updateZoomAndPanEndScale = event => {
-        const scale = event.target.value;
+        const scale = Number(event.target.value);
         if (scale < 80 || scale > 130) {
             setScaleWarning(true)
         } else {

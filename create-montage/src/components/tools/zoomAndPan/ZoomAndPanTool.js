@@ -40,7 +40,7 @@ export default function ZoomAndPanTool({ handleFinishToolDragging }) {
             <ToolContent
                 icon={<CenterFocusStrongIcon />}
                 title={t("tools.zoom-and-pan")}
-                subtitle="experimental"
+                // subtitle="experimental"
                 infoText={t("tools.zoom-and-pan.desc")}
                 iconColor="#2adb68"
             />
