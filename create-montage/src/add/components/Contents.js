@@ -46,6 +46,7 @@ export function Contents({ setSelectedContent, setView }) {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [loading, setLoading] = useState(true);
+  const [modifyingId, setModifyingId] = useState(null);
   const [isHovered, setIsHovered] = useState({});
   const [selectedChip, setSelectedChip] = useState("1"); // Default to "1" (Title)
   const [elementsCount, setCountElement] = useState(0);  // Add this state to track the count of elements
@@ -110,18 +111,20 @@ export function Contents({ setSelectedContent, setView }) {
   };
     
   const handleModifyContent = async (artworkId) => {
+    setModifyingId(artworkId);
     try {
-      const selectedArtwork = await getArtworkById(artworkId);  // Fetch artwork from API by ID
-      
+      const selectedArtwork = await getArtworkById(artworkId);
       if (selectedArtwork) {
-        setSelectedContent(selectedArtwork);  // Set the selected content for AddContent
-        setView('addContent');  // Switch to the AddContent section
+        setSelectedContent(selectedArtwork);
+        setView('addContent');
       } else {
         alert('Artwork not found.');
       }
     } catch (error) {
       console.error('Error fetching artwork:', error);
       alert('Error fetching artwork.');
+    } finally {
+      setModifyingId(null);
     }
   };
 
@@ -313,17 +316,18 @@ export function Contents({ setSelectedContent, setView }) {
                           startIcon={<DeleteOutlineIcon />}
                           onClick={() => handleDeleteArtwork(artwork.id)}
                         >
-                          Delete
+                          {t('Delete')}
                         </Button>
                       </Tooltip>
                       <Tooltip title={t('Modify')}>
                         <Button
                           size="small"
                           variant="outlined"
-                          startIcon={<Edit />}
+                          startIcon={modifyingId === artwork.id ? <CircularProgress size={14} /> : <Edit />}
+                          disabled={modifyingId === artwork.id}
                           onClick={() => handleModifyContent(artwork.id)}
                         >
-                          Modify
+                          {t('Modify')}
                         </Button>
                       </Tooltip>
                     </CardActions>

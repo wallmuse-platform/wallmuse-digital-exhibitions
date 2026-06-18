@@ -77,8 +77,6 @@ export function AddContent({ selectedContent }) {
 
   // const authorFieldFocused = useRef(false); //prevents unwanted nearby author popup
 
-  const [localDialogVisible, setLocalDialogVisible] = useState(false);
-
   const {
     selectedOwnerId,
     setSelectedOwnerId,
@@ -89,10 +87,7 @@ export function AddContent({ selectedContent }) {
     handleOwnerSelected,
     searchOwner,
     resetOwner
-  } = useCopyrightOwner((newValue) => {
-    console.log("[AddContent] Callback: showOwnerSelector changed to:", newValue);
-    setLocalDialogVisible(newValue);
-  });
+  } = useCopyrightOwner();
 
   useEffect(() => {
     console.log("[AddContent] Component mounted");
@@ -296,12 +291,12 @@ export function AddContent({ selectedContent }) {
           try {
             const owners = await searchCopyrightOwner(sessionId, authorName);
             const match = owners.find(o => String(o.id) === String(authorId)) || owners[0];
-            if (match && (match.firstName || match.surName)) {
+            const { first, middle, sur } = splitDisplayName(authorName);
+            if (match) {
               setAuthorFirstName(match.firstName  || '');
               setAuthorMiddleName(match.middleName || '');
-              setAuthorSurName(match.surName       || '');
+              setAuthorSurName(match.surName       || sur);
             } else {
-              const { first, middle, sur } = splitDisplayName(authorName);
               setAuthorFirstName(first);
               setAuthorMiddleName(middle);
               setAuthorSurName(sur);
@@ -674,6 +669,26 @@ export function AddContent({ selectedContent }) {
         }
       }
 
+      // Still no existing owner — create a new one now so set_artwork_full gets a real id
+      if (resolvedOwnerId === '-1' && artworkAuthorRef.current.trim() !== '') {
+        try {
+          console.log('[AddContent] Creating new copyright owner for:', artworkAuthorRef.current);
+          const newOwner = await addCopyrightOwner({
+            name:       authorSurName || artworkAuthorRef.current,
+            firstName:  authorFirstName  || '',
+            middleName: authorMiddleName || '',
+            kind: 'AUT',
+          });
+          if (newOwner?.id) {
+            console.log('[AddContent] New copyright owner created, id:', newOwner.id);
+            resolvedOwnerId = String(newOwner.id);
+            setSelectedOwnerId(String(newOwner.id));
+          }
+        } catch (e) {
+          console.error('[AddContent] Failed to create new copyright owner:', e);
+        }
+      }
+
       // Resolve owner IDs for credits that don't have one yet (LOC, PHO, OWN, REP)
       const resolvedCredits = await Promise.all(credits.map(async (credit) => {
         if (credit.owner_id && credit.owner_id !== '-1') return credit;
@@ -723,6 +738,9 @@ export function AddContent({ selectedContent }) {
           id: resolvedOwnerId,
           name: artworkAuthorRef.current,
           displayName: artworkAuthorRef.current,
+          firstName: authorFirstName,
+          middleName: authorMiddleName,
+          surName: authorSurName,
         }
       };
       console.log("[handleSubmitForm] Final data being sent:", {
@@ -876,6 +894,9 @@ export function AddContent({ selectedContent }) {
 
   // Clear descriptions
     setDescriptions([]);
+    setCurrentDescription('');
+    setCurrentDescriptionLang('');
+    setCurrentDescriptionName('');
 
     // Clear any other state variables that control form fields
     // Add any other setState calls for form inputs you have

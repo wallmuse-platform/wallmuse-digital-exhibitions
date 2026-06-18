@@ -4,8 +4,7 @@ import axios from 'axios';
 import qs from 'qs';  // Import qs for proper URL encoding
 import { getUserId } from '../../utils/Utils';
 import { ArtworkTypes } from '../../components/constants/ArtworkTypes';
-
-const baseURL = "https://wallmuse.com:8443/wallmuse/ws";
+const baseURL = "https://manager.wallmuse.com:8443/wallmuse/ws";
 
 // 1.2. Utility function to convert datation text to start and end dates in the format YYYY0101
 export function convertDatationText(datationText) {
@@ -357,11 +356,14 @@ export async function saveInitialArtwork(contentData) {
     if (contentData.ownerInfo) {
         // Use the ID from ownerInfo, not defaulting to -1
         const authorId = contentData.ownerInfo.id || "-1";
-        const authorName = escapeXML(contentData.artworkAuthor || contentData.ownerInfo.name || 'Unknown Author');
-        const displayName = escapeXML(contentData.ownerInfo.displayName || authorName);
+        const authorName = contentData.artworkAuthor || contentData.ownerInfo.name || 'Unknown Author';
+        const displayName = contentData.ownerInfo.displayName || authorName;
+        const firstName = contentData.ownerInfo.firstName || '';
+        const middleName = contentData.ownerInfo.middleName || '';
+        const surName = contentData.ownerInfo.surName || '';
 
         console.log("[saveInitialArtwork] Adding author with ID:", authorId);
-        artworkXML += `<author id="${authorId}" name="${authorName}" display_name="${displayName}" kind="AUT"/>`;
+        artworkXML += `<author id="${authorId}" name="${authorName}" display_name="${displayName}" first_name="${firstName}" middle_name="${middleName}" sur_name="${surName}" kind="AUT"/>`;
         console.log("[saveInitialArtwork] Author info being used:", {
             authorId: contentData.ownerInfo?.id,
             authorName: contentData.artworkAuthor,
@@ -459,11 +461,28 @@ export async function saveInitialArtwork(contentData) {
     console.log("[saveInitialArtwork] sessionId, Complete XML string:", sessionId, artworkXML);
 
     // Prepare the POST data
+    // Use Latin-1 single-byte encoding for chars U+00A0..U+00FF so the server
+    // (which interprets percent-decoded bytes as ISO-8859-1) reconstructs accented
+    // characters correctly without needing charset=UTF-8 on the Content-Type.
+    const latin1Encoder = (str, defaultEncoder) => {
+        if (typeof str !== 'string') return defaultEncoder(str);
+        let result = '';
+        for (let i = 0; i < str.length; i++) {
+            const code = str.charCodeAt(i);
+            if (code > 127 && code <= 255) {
+                result += '%' + code.toString(16).toUpperCase().padStart(2, '0');
+            } else {
+                result += encodeURIComponent(str[i]);
+            }
+        }
+        return result;
+    };
+
     const formData = qs.stringify({
         version: '1',
         session: sessionId,
         artwork: artworkXML
-    });
+    }, { encoder: latin1Encoder });
 
     // Send the request
     try {
@@ -482,6 +501,12 @@ export async function saveInitialArtwork(contentData) {
         // Parse the response using browser DOMParser
         const parser = new DOMParser();
         const xmlDocResponse = parser.parseFromString(response.data, 'text/xml');
+
+        const errorEl = xmlDocResponse.getElementsByTagName('error')[0];
+        if (errorEl) {
+            throw new Error(errorEl.getAttribute('message') || `Server error ${errorEl.getAttribute('code')}`);
+        }
+
         const artworkId = xmlDocResponse.getElementsByTagName('artwork')[0]?.getAttribute('id');
 
         if (!artworkId) {
