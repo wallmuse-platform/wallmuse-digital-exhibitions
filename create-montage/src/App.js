@@ -10,6 +10,7 @@ import AddContents from './add/AddContents';
 import BasicGrid from './components/grid/Grid'; // This is the "Create Montage/Curate" component
 import BatchUpload from './batch/BatchUpload';
 import MontageWizard from './wizard/MontageWizard';
+import Delegations from './delegations/Delegations';
 
 import TrialAccountOrNotWideSnackbar from './utils/TrialAccountSnackBar';
 import { ThemeProvider } from '@mui/material/styles';
@@ -68,6 +69,9 @@ function App() {
       break;
     case 'wizard':
       ComponentToRender = MontageWizard;
+      break;
+    case 'delegations':
+      ComponentToRender = Delegations;
       break;
     default: // Default is 'basicGrid', which is the "Create Montage/Curate" section
       ComponentToRender = BasicGrid;
