@@ -585,6 +585,14 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
   const [isPlaylistChanging, setIsPlaylistChanging] = useState(false);
   const playlistChangeTimeoutRef = useRef(null);
   const navigationDebounceRef = useRef(null);
+  // Tracks the target montage index when handleMontageNavigation initiates a playlist change.
+  // The track-change effect fires as soon as handlePlaylistChange updates currentPlaylist in
+  // EnvironmentsContext, but at that moment selectedPlaylistPositionForWebPlayer still holds
+  // the OLD value. Without this guard the effect would dispatch a NavigationManager command
+  // for the stale position, which takes the 500 ms processingCommand lock before the correct
+  // command from handleMontageNavigation can be dispatched. Set synchronously (ref, not state)
+  // before any setState calls so it is visible when React flushes the batch.
+  const playlistChangePendingTargetRef = useRef(null);
 
   // 2. Cleanup effect
   useEffect(() => {
@@ -742,6 +750,17 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
           selectedPlaylistId,
         );
 
+        // Mark the intended destination montage BEFORE any setState calls.
+        // handlePlaylistChange (called by the initiating action — handleTitleClick or
+        // handleDoPlayPlaylist) updates currentPlaylist in EnvironmentsContext, which
+        // triggers a React re-render. If that re-render fires the track-change effect
+        // while selectedPlaylistPositionForWebPlayer still holds the previous playlist's
+        // value, a stale NavigationManager command would be dispatched and take the
+        // 500 ms lock before the correct command from here arrives. Setting this ref
+        // synchronously ensures the track-change effect can detect and suppress that
+        // stale command (see the guard below the track-change effect).
+        playlistChangePendingTargetRef.current = normalizedPosition;
+
         // 🚀 IMMEDIATE playlist state update
         setCurrentPlaylist(selectedPlaylistId);
 
@@ -795,6 +814,10 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
         playlist: selectedPlaylistId, // Always use the target playlist
         position: { montage: normalizedPosition, track: calculatedTrack },
       });
+
+      // Command dispatched — clear the pending-target guard so the track-change effect
+      // resumes normal behaviour (e.g. a subsequent track-only change can fire freely).
+      playlistChangePendingTargetRef.current = null;
     },
     [
       playlists,
@@ -1017,6 +1040,29 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
       currentPlaylist &&
       selectedPlaylistPositionForWebPlayer !== null
     ) {
+      // Guard: suppress stale commands during a cross-playlist navigation.
+      // handlePlaylistChange updates currentPlaylist before handleMontageNavigation has a
+      // chance to set selectedPlaylistPositionForWebPlayer to the intended destination. If
+      // the effect fires in that window, selectedPlaylistPositionForWebPlayer still holds
+      // the previous playlist's position, and dispatching it would:
+      //   1. navigate the player to the wrong montage briefly, and
+      //   2. take NavigationManager's 500 ms processingCommand lock, delaying the correct
+      //      command that handleMontageNavigation is about to send.
+      // playlistChangePendingTargetRef is set synchronously in handleMontageNavigation
+      // before any setState calls, so it is always visible here when the batch flushes.
+      if (
+        playlistChangePendingTargetRef.current !== null &&
+        selectedPlaylistPositionForWebPlayer !== playlistChangePendingTargetRef.current
+      ) {
+        console.log(
+          "[App] Track-change effect: suppressing stale command — pending target montage:",
+          playlistChangePendingTargetRef.current,
+          "current position:",
+          selectedPlaylistPositionForWebPlayer,
+        );
+        return;
+      }
+
       console.log("[App] Track changed, sending navigation command:", {
         playlist: currentPlaylist,
         montage: selectedPlaylistPositionForWebPlayer,

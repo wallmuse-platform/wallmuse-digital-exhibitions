@@ -133,10 +133,19 @@ const AssociateDisplays = ({
       return;
     }
 
-    // Find the specific montage by ID
-    let montageIndex = playlists.findIndex((p) =>
-      p.montages?.some((m) => m.id === montageId),
-    );
+    // Find the specific montage by ID.
+    // Mirror the selectedPlaylist display lookup: prefer playlistIndex prop first so that
+    // setPlaylists updates the SAME playlist object the UI is reading from. If we used a
+    // plain findIndex (first match) and the montage exists in multiple playlists (e.g. the
+    // default mono-playlist AND a named playlist), we'd update a different index than the
+    // one selectedPlaylist reads, leaving the UI stale until a full refresh.
+    const allPlaylistsForUpdate = Array.isArray(playlists) ? playlists : [];
+    const indexedHasMontage =
+      playlistIndex !== undefined &&
+      allPlaylistsForUpdate[playlistIndex]?.montages?.some((m) => m.id === montageId);
+    let montageIndex = indexedHasMontage
+      ? playlistIndex
+      : allPlaylistsForUpdate.findIndex((p) => p.montages?.some((m) => m.id === montageId));
     if (montageIndex === -1) {
       console.error(
         "[AssociateDisplays HandleTrackChange] Montage not found!",
@@ -559,7 +568,7 @@ const AssociateDisplays = ({
           sx={{ color: theme.palette.primary.inactive, marginLeft: 1 }}
         >
           {selectedPlaylist.name ||
-            t("component.selectedPlaylist.exhibitions.default-name")}
+            t("component.playlist.exhibitions.default-name")}
         </Typography>
         <Typography
           variant="h5"

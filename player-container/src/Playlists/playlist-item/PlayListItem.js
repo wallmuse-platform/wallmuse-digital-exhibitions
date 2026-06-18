@@ -19,7 +19,7 @@ import Typography from "@mui/material/Typography";
 import { selectTheme } from "../../theme/ThemeUtils";
 import { DragHandle, Delete } from "@mui/icons-material";
 import PlaylistAddIcon from "@mui/icons-material/PlaylistAdd";
-import SettingsIcon from '@mui/icons-material/Settings';
+import DesktopWindowsOutlinedIcon from '@mui/icons-material/DesktopWindowsOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CloseIcon from '@mui/icons-material/Close';
 import { useSortable } from '@dnd-kit/sortable';
@@ -340,7 +340,7 @@ function PlayListItem({
                     )}
                     <div>
                         <Tooltip title={t("component.playlist.exhibitions.associate-displays")}>
-                            <SettingsIcon
+                            <DesktopWindowsOutlinedIcon
                                 color="primary"
                                 style={{
                                     display: 'block',
