@@ -768,8 +768,9 @@ export default class WallmusePlayer extends React.Component {
     }
 
     if (!this.state.videoPreloading) {
+      // Preload in background slot, switch only on canplay (prevents stall/ERR_CONNECTION_CLOSED)
       this.preloadVideo(media);
-      setTimeout(() => this.showVideo(media), 20);
+      this.pendingShowVideo = media;
       return;
     }
 
