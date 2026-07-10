@@ -164,12 +164,29 @@ function PlayListItem({
             const syncSuccess = await handlePlaylistChange(selectedPlaylistId, null);
             if (syncSuccess && onMontageNavigation) {
                 onMontageNavigation(selectedPlaylistId, selectedPlaylistPosition, true);
+                // CLUSTER SYNC: broadcast absolute montage index to peer screens via WebSocket.
+                // doLoadPlaylist already sent the playlist to all screens; this follows up with
+                // the specific montage position so slaves land on the same montage, not position 0.
+                // Parent prevails — local navigation (above) fires first; the WebSocket echo
+                // arriving ~100ms later is absorbed gracefully by the player (video already showing).
+                if (handleSendCommand) {
+                    console.log(`[MONTAGE_NAVIGATION] Broadcasting goMontage to peers: montage ${selectedPlaylistPosition}`);
+                    handleSendCommand(`<vlc><cmd action="montage" param="${selectedPlaylistPosition}"/></vlc>`, house);
+                }
             }
         } else {
             // Same playlist, different montage (or same montage - user wants to jump there)
             console.log(`[MONTAGE_NAVIGATION] Same playlist, navigating to montage: ${selectedPlaylistPosition}`);
             // Pass force=true to override duplicate detection (user explicitly clicked goMontage)
             onMontageNavigation(selectedPlaylistId, selectedPlaylistPosition, true);
+            // CLUSTER SYNC: broadcast absolute montage index to peer screens via WebSocket.
+            // No playlist switch needed — slaves are already on the same playlist.
+            // Parent prevails — local navigation (above) fires first; the WebSocket echo
+            // arriving ~100ms later is absorbed gracefully by the player (video already showing).
+            if (handleSendCommand) {
+                console.log(`[MONTAGE_NAVIGATION] Broadcasting goMontage to peers: montage ${selectedPlaylistPosition}`);
+                handleSendCommand(`<vlc><cmd action="montage" param="${selectedPlaylistPosition}"/></vlc>`, house);
+            }
         }
 
         } catch (error) {
