@@ -389,6 +389,38 @@ window.monitorContainerDestruction();
 - **Material-UI**: UI components (if used)
 - **WebSocket**: Real-time communication
 
+## 12. Z-Index Architecture
+
+The webplayer is embedded inside a container app (`play C 3`) via an HTML fetch-and-inject pattern. The container wraps the webplayer in a `div.web-player-content` element with `z-index: 1`, which establishes a **stacking context boundary**. All webplayer-internal z-indexes are fully scoped within that boundary and cannot conflict with container-level z-indexes.
+
+### 12.1 Webplayer Internal Ranges (Context: `web-player-content`)
+
+```
+0          hidden video slot (.video.hidden)
+1000       video base / slot 2 visible   (.video, .video[data-index='2']:not(.hidden))
+1100       video slot 1 visible           (.video[data-index='1']:not(.hidden))
+2000       container initial loader       (GradientCircularProgress, injected by WebPlayer.js)
+3000–8000  reserved                       (captions, title cards, interactive hotspots)
+9000       webplayer spinner              (.placeholder — always highest within webplayer)
+```
+
+### 12.2 Container Ranges (Context: Player Content Box, `z-index: 2`)
+
+These are owned by `play C 3`, not by this codebase. Documented here for cross-reference:
+
+```
+1     web-player-content  (webplayer root — creates the stacking boundary)
+10    passive overlays    (cluster icon, track name, play mode indicator)
+50    interactive tools   (reserved: controls, seek bar overlaid on video)
+100   critical UI         (reserved: error states, permission dialogs)
+```
+
+### 12.3 Rule
+
+- Anything rendered **by the webplayer** uses the 0–9000 range (scoped inside `web-player-content`).
+- Anything rendered **by the container** that must appear above the webplayer uses 10–100 in the Player Content Box context.
+- Never exceed 9000 for webplayer elements — future page-level tooling is reserved above that boundary.
+
 ---
 
 ## Appendix A: Troubleshooting Guide
