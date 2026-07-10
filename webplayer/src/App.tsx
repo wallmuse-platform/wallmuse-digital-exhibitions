@@ -1720,11 +1720,16 @@ export default class WallmusePlayer extends React.Component {
   componentDidMount() {
     this._isMounted = true;
     console.log('🔍 [App] COMPONENT MOUNTING', { timestamp: Date.now(), state: this.state });
-    // Proper state management for loading - no more direct state mutation
+    // Safety timeout: if onVideoLoaded never fires (e.g. network error), clear the
+    // spinner after 8 seconds rather than leaving it stuck indefinitely.
+    // Do NOT use a short timeout here — that races with the actual canplay event
+    // and dismisses the spinner before the browser paints it.
     setTimeout(() => {
-      console.log('🔄 [SPINNER-DEBUG] Turning spinner OFF (componentDidMount timeout)');
-      this.setState({ loading: false });
-    }, 500);
+      if (this.state.loading) {
+        console.log('🔄 [SPINNER-DEBUG] Safety timeout: clearing stuck spinner after 8s');
+        this.setState({ loading: false });
+      }
+    }, 8000);
 
     // CRITICAL DEBUG: Track DOM mutations to catch what's clearing the container
     this.setupDOMMutationObserver();
@@ -2791,8 +2796,13 @@ export default class WallmusePlayer extends React.Component {
             console.log('🔄 [SPINNER-DEBUG] Video #1 onVideoLoaded fired, loading:', this.state.loading);
             this.video1Ready = true;
             if (this.state.loading) {
-              console.log('🔄 [SPINNER-DEBUG] Turning spinner OFF (video #1 loaded)');
-              this.setState({ loading: false });
+              // Double-RAF: guarantees the loading:true DOM update is painted before
+              // we dismiss it. Without this, React 18 batching collapses loading:true
+              // and loading:false into a single commit and the spinner never appears.
+              requestAnimationFrame(() => requestAnimationFrame(() => {
+                console.log('🔄 [SPINNER-DEBUG] Turning spinner OFF (video #1 loaded)');
+                this.setState({ loading: false });
+              }));
             }
             // CRITICAL FIX: Process pending showVideo now that video is ready
             if (this.pendingShowVideo && this.state.video1?.filename === this.pendingShowVideo.filename) {
@@ -2814,8 +2824,13 @@ export default class WallmusePlayer extends React.Component {
             console.log('🔄 [SPINNER-DEBUG] Video #2 onVideoLoaded fired, loading:', this.state.loading);
             this.video2Ready = true;
             if (this.state.loading) {
-              console.log('🔄 [SPINNER-DEBUG] Turning spinner OFF (video #2 loaded)');
-              this.setState({ loading: false });
+              // Double-RAF: guarantees the loading:true DOM update is painted before
+              // we dismiss it. Without this, React 18 batching collapses loading:true
+              // and loading:false into a single commit and the spinner never appears.
+              requestAnimationFrame(() => requestAnimationFrame(() => {
+                console.log('🔄 [SPINNER-DEBUG] Turning spinner OFF (video #2 loaded)');
+                this.setState({ loading: false });
+              }));
             }
             // CRITICAL FIX: Process pending showVideo now that video is ready
             if (this.pendingShowVideo && this.state.video2?.filename === this.pendingShowVideo.filename) {

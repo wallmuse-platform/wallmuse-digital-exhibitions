@@ -31,7 +31,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) translateZ(0);
-  z-index: 10001;
+  z-index: 9000; /* webplayer z-index range: always highest within web-player-content */
   white-space: nowrap;
   will-change: transform;
 }
@@ -84,17 +84,16 @@
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 1;
+  z-index: 1000; /* webplayer z-index range: video base layer */
 }
 
-/* CRITICAL FIX: Give the currently playing video higher z-index */
-/* UPDATED: Match specificity of base rule by including #root-wm-player */
+/* Slot 1 visible sits above slot 2 during any overlap */
 #root-wm-player .video[data-index='1']:not(.hidden) {
-  z-index: 2 !important;
+  z-index: 1100 !important;
 }
 
 #root-wm-player .video[data-index='2']:not(.hidden) {
-  z-index: 1 !important;
+  z-index: 1000 !important;
 }
 
 /* CRITICAL FIX: When video is hidden, reduce its z-index */
