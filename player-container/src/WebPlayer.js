@@ -442,9 +442,15 @@ const WebPlayer = React.memo(function WebPlayer({
         width: '100%',
         height: '100%',
         overflow: 'hidden',
-        backgroundColor: 'black'
+        backgroundColor: 'black',
+        // Z-INDEX LAYER 1 (within Player Content Box, z-index 2):
+        // Anchors webplayer as the base layer so container overlays at z-index 10
+        // (cluster icon, track info) can paint above it. Also creates a stacking
+        // context that contains all webplayer internals (videos, placeholder, etc.).
+        zIndex: 1,
       }}
     >
+      {/* GradientCircularProgress: z-index 2000 within web-player-content context */}
       {showLoading && <GradientCircularProgress />}
       <div
         ref={containerRef}

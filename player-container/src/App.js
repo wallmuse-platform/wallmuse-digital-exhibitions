@@ -20,6 +20,17 @@ import { CustomSnackbar, CustomAlert } from "./CustomComponents";
 
 // Material UI components and icons
 import { Grid, Stack, Tooltip, Box, Typography } from "@mui/material";
+import Filter1Icon from "@mui/icons-material/Filter1";
+import Filter2Icon from "@mui/icons-material/Filter2";
+import Filter3Icon from "@mui/icons-material/Filter3";
+import Filter4Icon from "@mui/icons-material/Filter4";
+import Filter5Icon from "@mui/icons-material/Filter5";
+import Filter6Icon from "@mui/icons-material/Filter6";
+import Filter7Icon from "@mui/icons-material/Filter7";
+import Filter8Icon from "@mui/icons-material/Filter8";
+import Filter9Icon from "@mui/icons-material/Filter9";
+import Filter9PlusIcon from "@mui/icons-material/Filter9Plus";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 
 // Internationalization
 import { useTranslation } from "react-i18next";
@@ -49,6 +60,7 @@ import { getUserId, isDemoAccount } from "./utils/Utils";
 import { sendCommand } from "./wsTools";
 import { useResponsive } from "./utils/useResponsive";
 import navigationManager from "./utils/NavigationManager";
+import { checkMultipleActiveEnvironments } from "./utils/environmentUtils";
 const ShowMontages = lazy(() => import("./SelectMontages/MontageSelection.js"));
 import Playlists from "./Playlists/playlists/PlayLists";
 import DemoSnackbarsContainer from "./utils/DemoSnackbarsContainer.js";
@@ -104,6 +116,24 @@ import {
 // Use timeouts to ensure the system recovers if initialization hangs
 
 // First, update the App function to accept and use the onAppReady prop
+
+// Lookup for the CLUSTER_SYNC indicator overlay: shows the actual count of alive
+// environments a broadcast command reached, capped at Filter9Plus for 10+ screens
+// (MUI only ships numbered icons up to 9).
+const CLUSTER_COUNT_ICONS = [
+  null, // index 0 unused (indicator only ever shows for count > 1)
+  Filter1Icon,
+  Filter2Icon,
+  Filter3Icon,
+  Filter4Icon,
+  Filter5Icon,
+  Filter6Icon,
+  Filter7Icon,
+  Filter8Icon,
+  Filter9Icon,
+];
+const getClusterCountIcon = (count) =>
+  CLUSTER_COUNT_ICONS[count] || Filter9PlusIcon;
 
 function App({ onAppReady }) {
   console.log("[App InitMechanism] started");
@@ -297,6 +327,15 @@ export const handleSendCommand = (command, house) => {
   }
 
   console.log("[App] Sending command:", command, "to house:", house);
+
+  // CLUSTER_SYNC: notify PlayerIntegration locally so it can show a brief "synced to N
+  // screens" indicator. This is a same-tab window event only — it never travels over the
+  // network — so it fires exclusively in the browser that initiated the command, never on
+  // peer/slave screens that merely receive it via WebSocket. Fired unconditionally here;
+  // PlayerIntegration decides whether to actually show anything (only when the live
+  // environments list has more than one alive entry, i.e. an active cluster).
+  window.dispatchEvent(new CustomEvent("cluster-command-sent"));
+
   sendCommand(house, command, (success, response) => {
     if (success) {
       console.log("[App] Command sent successfully:", response);
@@ -374,6 +413,20 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
   const playlistChangeInProgressRef = useRef(false); // Track playlist changes in progress
   const [accountCreatedSuccess, setAccountCreatedSuccess] = useState(false);
   const [accountSetupPhase, setAccountSetupPhase] = useState("initial");
+
+  // CLUSTER_SYNC indicator: brief overlay confirming a command was broadcast to an active
+  // cluster (2+ alive environments). showClusterIndicator/clusterEnvCount drive the overlay;
+  // clusterIndicatorTimeoutRef lets a fast second command restart the 1s timer instead of
+  // stacking timeouts. environmentsRef mirrors `environments` so the listener effect below
+  // can read the latest alive count without resubscribing on every environments update
+  // (the array gets a new reference on essentially every poll cycle).
+  const [showClusterIndicator, setShowClusterIndicator] = useState(false);
+  const [clusterEnvCount, setClusterEnvCount] = useState(0);
+  const clusterIndicatorTimeoutRef = useRef(null);
+  const environmentsRef = useRef(environments);
+  useEffect(() => {
+    environmentsRef.current = environments;
+  }, [environments]);
 
   // Generate safe montage order signature
   const currentPlaylistObj = useMemo(
@@ -470,7 +523,12 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
         window.lastOverlayCalc = newState;
       }
 
-      if (!playlists || !playlistId) {
+      // Note: playlistId is undefined for the default playlist by design (matches the
+      // convention used throughout this file — see the MONTAGE_NAVIGATION comments in
+      // PlayListItem.js). Bailing on !playlistId here would blank the overlay info every
+      // time the default playlist is active, even though playlists/montages exist and are
+      // playing — only bail when there's genuinely no playlists data to look through.
+      if (!playlists) {
         return { playlistName: "", montageName: "", track: "" };
       }
 
@@ -889,6 +947,50 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
     };
   }, [currentPlaylist]);
 
+  // CLUSTER_SYNC indicator: listen for the "cluster-command-sent" window event dispatched
+  // by handleSendCommand (App.js, module scope) every time this tab sends a command. Mounted
+  // once (empty deps) — the listener itself never changes, only the data it reads does, via
+  // environmentsRef — so we avoid tearing down/re-adding the window listener on every
+  // environments poll (see [[hasMultipleActiveEnv comment below).
+  useEffect(() => {
+    const handleClusterCommandSent = () => {
+      // hasMultipleActiveEnv: true when 2+ environments are currently alive, i.e. this
+      // house is an active cluster right now (not just configured with multiple screens —
+      // checkMultipleActiveEnvironments filters to alive === "1" entries only).
+      const { hasMultiple: hasMultipleActiveEnv, count } =
+        checkMultipleActiveEnvironments(environmentsRef.current);
+
+      if (!hasMultipleActiveEnv) {
+        return; // Single-screen house: nothing to indicate
+      }
+
+      setClusterEnvCount(count);
+      setShowClusterIndicator(true);
+
+      // Restart the 1.5s timer on every command instead of stacking timeouts, so rapid
+      // consecutive commands (e.g. double-tapping Fwd) keep the indicator visible rather
+      // than having an earlier timeout hide it mid-sequence.
+      if (clusterIndicatorTimeoutRef.current) {
+        clearTimeout(clusterIndicatorTimeoutRef.current);
+      }
+      clusterIndicatorTimeoutRef.current = setTimeout(() => {
+        setShowClusterIndicator(false);
+      }, 1500);
+    };
+
+    window.addEventListener("cluster-command-sent", handleClusterCommandSent);
+
+    return () => {
+      window.removeEventListener(
+        "cluster-command-sent",
+        handleClusterCommandSent,
+      );
+      if (clusterIndicatorTimeoutRef.current) {
+        clearTimeout(clusterIndicatorTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Initialize NavigationManager (ONCE only)
   useEffect(() => {
     if (playlists && environments) {
@@ -944,8 +1046,10 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
       window.lastAutoTrackState = currentMontageIndexState;
     }
 
-    // Skip if no data
-    if (!playlists || !currentPlaylist) {
+    // Skip if no data. Note: currentPlaylist is undefined for the default playlist by
+    // design (same convention as calculateOverlayInfo above) — don't bail on that, only
+    // when there's genuinely no playlists data yet.
+    if (!playlists) {
       return;
     }
 
@@ -1096,14 +1200,39 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
     () => handleSendCommand('<vlc><cmd action="stop"/></vlc>', house),
     [house],
   );
-  const onRew = useCallback(
-    () => handleSendCommand('<vlc><cmd action="prev"/></vlc>', house),
-    [house],
-  );
-  const onFwd = useCallback(
-    () => handleSendCommand('<vlc><cmd action="next"/></vlc>', house),
-    [house],
-  );
+  // CLUSTER SYNC: send absolute montage index instead of relative prev/next.
+  // Relative commands diverge when screens are on different items; absolute index
+  // guarantees all screens land on the same montage regardless of their current position.
+  // currentMontageIndexRef is NOT updated live by the player (no feedback channel exists
+  // from the embedded webplayer back to App.js — the "webplayer-montage-changed" listener
+  // above is dead code, nothing dispatches it). It only advances when handleMontageNavigation
+  // runs (explicit title-click nav). Without the updateCurrentMontageIndex() calls below,
+  // onRew/onFwd would keep reading the same stale ref on every press and re-send the same
+  // target index instead of advancing — e.g. two quick "Next" clicks would both send
+  // param="1" instead of param="1" then param="2". Updating the ref/state here optimistically
+  // tracks the sent command locally so consecutive presses keep advancing/rewinding correctly.
+  // Loop at the boundaries using the current playlist's montage count, since the child
+  // webplayer rejects out-of-range absolute indices with a BOUNDS ERROR (it no longer
+  // handles wraparound itself now that we send absolute indices instead of relative
+  // next/prev commands).
+  const onRew = useCallback(() => {
+    const lastIndex = Math.max(0, montages.length - 1);
+    const prevIndex =
+      currentMontageIndexRef.current <= 0
+        ? lastIndex
+        : currentMontageIndexRef.current - 1;
+    handleSendCommand(`<vlc><cmd action="montage" param="${prevIndex}"/></vlc>`, house);
+    updateCurrentMontageIndex(prevIndex);
+  }, [house, montages, updateCurrentMontageIndex]);
+  const onFwd = useCallback(() => {
+    const lastIndex = Math.max(0, montages.length - 1);
+    const nextIndex =
+      currentMontageIndexRef.current >= lastIndex
+        ? 0
+        : currentMontageIndexRef.current + 1;
+    handleSendCommand(`<vlc><cmd action="montage" param="${nextIndex}"/></vlc>`, house);
+    updateCurrentMontageIndex(nextIndex);
+  }, [house, montages, updateCurrentMontageIndex]);
 
   // Single volume change handler that does both jobs
   const onVolumeChange = useCallback(
@@ -1364,6 +1493,10 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
     }
   };
 
+  // Numbered icon for the CLUSTER_SYNC indicator, computed once per render from live state
+  // rather than inline in JSX (clusterEnvCount is already component state, no closure needed).
+  const ClusterIcon = getClusterCountIcon(clusterEnvCount);
+
   // Return without useMemo to allow playlists context updates to propagate
   return (
     <div style={{ minWidth: `${MIN_PLAYER_WIDTH}px` }}>
@@ -1424,7 +1557,16 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
                     zIndex: 1,
                   }}
                 >
-                  {/* Player Content */}
+                  {/* Player Content
+                      Z-INDEX ARCHITECTURE (all values relative to web-player-container, z-index: 1):
+                        z-index 2  — Player Content Box (this element) — stacking context for all overlays
+                          z-index 1  — web-player-content (WebPlayer root) — base video layer
+                            z-index 2000 — GradientCircularProgress (container loader, inside web-player-content)
+                            [webplayer internals scoped within web-player-content stacking context]
+                              z-index 9000 — webplayer .placeholder (internal loader, webplayer2B App.css)
+                          z-index 10 — container overlays (cluster icon, track info, play mode) — above video
+                          z-index 100-999 — future custom tools / admin overlays (reserved)
+                  */}
                   <Box
                     sx={{
                       position: "absolute",
@@ -1437,7 +1579,7 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      zIndex: 2, // Higher than container
+                      zIndex: 2,
                     }}
                   >
                     {/* Play Mode Overlay - Using opacity transition instead of conditional rendering */}
@@ -1447,7 +1589,7 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
                           position: "absolute",
                           top: 10,
                           left: 10,
-                          zIndex: 3,
+                          zIndex: 10, // container overlay layer — above web-player-content (z-index: 1)
                           backgroundColor: "rgba(0,0,0,0.5)",
                           padding: "4px 8px",
                           borderRadius: "4px",
@@ -1462,48 +1604,28 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
                       </Box>
                     )}
 
-                    {/* Play Mode Overlay - Using opacity transition instead of conditional rendering */}
-                    {playModeRef.current && (
+                    {/* CLUSTER_SYNC Indicator - centered, 1s opacity fade, shown only when a
+                        command was just broadcast to an active cluster (2+ alive screens).
+                        Numbered Filter icon reflects the live alive-environment count so the
+                        user sees exactly how many screens the command reached. */}
+                    {showClusterIndicator && (
                       <Box
                         sx={{
                           position: "absolute",
-                          top: 10,
-                          left: 10,
-                          zIndex: 3,
+                          top: "50%",
+                          left: "50%",
+                          transform: "translate(-50%, -50%)",
+                          zIndex: 10, // container overlay layer — above web-player-content (z-index: 1)
                           backgroundColor: "rgba(0,0,0,0.5)",
-                          padding: "4px 8px",
-                          borderRadius: "4px",
-                          opacity: playModeOneSec ? 1 : 0,
+                          padding: "8px",
+                          borderRadius: "50%",
+                          display: "flex",
+                          opacity: showClusterIndicator ? 1 : 0,
                           transition: "opacity 0.5s ease-in-out",
+                          pointerEvents: "none",
                         }}
                       >
-                        <Typography variant="h6" sx={{ color: "white" }}>
-                          Play Mode
-                        </Typography>
-                        {/* TODO Add Montage Name and Track */}
-                      </Box>
-                    )}
-
-                    {/* Info Overlay - Bottom Left */}
-                    {currentPlaylist && (
-                      <Box
-                        className="overlay-fade" //  CSS handles the 3-second fade
-                        sx={{
-                          position: "absolute",
-                          bottom: 12,
-                          left: 12,
-                          zIndex: 3,
-                          fontSize: "11px",
-                          color: "white",
-                          fontFamily:
-                            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                          fontWeight: 200,
-                          lineHeight: "12px",
-                          textAlign: "left", //  Proper left alignment
-                        }}
-                      >
-                        <div>Track: {webPlayerOverlayInfo.track}</div>
-                        <div>{webPlayerOverlayInfo.montageName}</div>
+                        <ClusterIcon sx={{ color: "white", fontSize: 40 }} />
                       </Box>
                     )}
 
@@ -1526,6 +1648,54 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
                     </ErrorBoundary>
                   </Box>
                 </Box>
+
+                {/* Title / Track — persistent line below the player window. Unlike the old
+                    on-video overlay it removed, this is plain document flow (not position:
+                    absolute over the video), so it needs no z-index and no fade-in/out timing —
+                    it's simply always rendered while a playlist is active. This also sidesteps
+                    the fullscreen gap the old overlay had: native fullscreen (FullScreen.js)
+                    targets ".wm-player-contents" deep inside the injected webplayer markup, so
+                    nothing in our React tree — old overlay or this line — is part of that
+                    fullscreen element anyway; placement here loses no fullscreen visibility
+                    the old overlay actually had. */}
+                {webPlayerOverlayInfo.montageName && (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "4px",
+                      padding: 0,
+                      marginTop: "1px", // small breathing room from the video above
+                      marginBottom: "-9px", // compensates for MuiIconButton's built-in 8px padding in PlayerCommands below, without touching that shared component
+                      lineHeight: 1, // MUI Typography defaults to 1.5, adding unwanted height here
+                      color: theme.palette.text.secondary,
+                      fontSize: "12px",
+                      [theme.breakpoints.up("tv")]: {
+                        fontSize: "20px",
+                      },
+                    }}
+                  >
+                    <Typography
+                      component="span"
+                      sx={{ fontSize: "inherit", lineHeight: "inherit", color: "inherit" }}
+                    >
+                      {webPlayerOverlayInfo.montageName}
+                    </Typography>
+                    <KeyboardArrowRightIcon
+                      sx={{
+                        fontSize: "inherit",
+                        color: theme.palette.primary.main,
+                      }}
+                    />
+                    <Typography
+                      component="span"
+                      sx={{ fontSize: "inherit", lineHeight: "inherit", color: "inherit" }}
+                    >
+                      {webPlayerOverlayInfo.track}
+                    </Typography>
+                  </Box>
+                )}
 
                 {/* Player commands */}
                 <ErrorBoundary>

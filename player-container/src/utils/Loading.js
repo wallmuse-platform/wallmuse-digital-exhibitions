@@ -34,7 +34,7 @@ export function GradientCircularProgress() {
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: 'rgba(0,0,0,0.5)',
-            zIndex: 10
+            zIndex: 2000 /* webplayer z-index range: above video slots (1000-1100), below placeholder (9000) */
         }}>
             <React.Fragment>
                 <svg width={0} height={0}>

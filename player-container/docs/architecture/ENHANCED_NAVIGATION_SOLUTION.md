@@ -132,6 +132,27 @@ const doc = parser.parseFromString(html, 'text/html');
 // Container (#root-wm-player) persists with all content
 ```
 
+> **Z-Index Note**: The fetch+inject pattern loads webplayer CSS into the **parent document's `<head>`**,
+> creating a shared CSS namespace. To avoid conflicts, z-index ranges are partitioned by stacking context:
+>
+> **Container — Player Content Box (this app, z-index: 2 stacking context):**
+> ```
+> 1     web-player-content  — webplayer root, creates the stacking context boundary
+> 10    passive overlays    — cluster icon, track name, play mode indicator
+> 50    interactive tools   — reserved: controls/seek bar overlaid on video
+> 100   critical UI         — reserved: error states, permission dialogs
+> ```
+>
+> **Webplayer internal (scoped inside web-player-content — see `WALLMUSE_WEBPLAYER_RULES.md §12`):**
+> ```
+> 0–1100   video slots
+> 2000     container initial loader (GradientCircularProgress)
+> 9000     webplayer spinner (.placeholder)
+> ```
+>
+> Container overlays at z-index 10–100 always appear above the entire webplayer (z-index 1).
+> Webplayer internal values (up to 9000) are invisible to the container's stacking context.
+
 **NAV Command Handling:**
 ```javascript
 // In index.tsx - NAV command listener

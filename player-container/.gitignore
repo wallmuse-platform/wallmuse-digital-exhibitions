@@ -10010,3 +10010,9 @@ src/utils/triggerClone.js
 # Sentry Config File
 .sentryclirc
 .claude
+
+# Scratch / debug files
+todo.md
+test-navigation.js
+test-enhanced-navigation.js
+*.pdf
