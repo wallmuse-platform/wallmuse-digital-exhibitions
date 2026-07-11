@@ -823,9 +823,12 @@ const ShowMontages = (
                             size="small"
                             variant="outlined"
                             endIcon={<PlayArrowIcon size="small" />}
-                            onClick={async () => {
-                              handlePlayMontage(montage.id); // Proceed with PlayMontage
-                            }}
+                            onClick={() =>
+                              handleAction(
+                                () => handlePlayMontage(montage.id),
+                                montage.selectable === "N", // Pass whether this is premium content, same gate as Add
+                              )
+                            }
                           >
                             Play
                           </Button>

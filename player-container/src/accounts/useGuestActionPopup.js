@@ -13,7 +13,16 @@ import { currentTheme } from "../theme/ThemeUtils.js"; // Import the currentThem
  */
 const useGuestActionPopup = () => {
   const [showPopup, setShowPopup] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null);
+  // pendingAction was intended to store the original action (e.g. Play/Add on a montage)
+  // so it could be resumed once the guest finished creating an account, but it's dead:
+  // nothing ever reads it. continueWithTemp() (below) ends in a full page reload/navigation
+  // to complete account creation, which destroys this closure along with the rest of the JS
+  // context — so calling it post-reload was never actually possible as written. Resuming the
+  // original action for real would need a serializable descriptor (e.g. {type, montageId})
+  // persisted in localStorage and replayed once accountSetupPhase reaches "completed" in
+  // App.js, not a React state closure. Left commented out (not deleted) pending a review of
+  // the account-creation flow to decide whether/how to implement that properly.
+  // const [pendingAction, setPendingAction] = useState(null);
   const [isPremiumContent, setIsPremiumContent] = useState(false);
   const [localUserId, setLocalUserId] = useState(getUserId());
 
@@ -97,7 +106,7 @@ const useGuestActionPopup = () => {
     }
 
     // Store the action and content type for later
-    setPendingAction(() => action);
+    // setPendingAction(() => action); // dead — see comment at pendingAction's declaration above
     setIsPremiumContent(isPremium);
 
     // Show the popup
@@ -111,7 +120,7 @@ const useGuestActionPopup = () => {
   const closePopup = () => {
     console.log("[useGuestActionPopup] Closing popup");
     setShowPopup(false);
-    setPendingAction(null);
+    // setPendingAction(null); // dead — see comment at pendingAction's declaration above
   };
 
   /**
