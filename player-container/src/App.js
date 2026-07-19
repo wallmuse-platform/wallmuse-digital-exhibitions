@@ -329,11 +329,8 @@ export const handleSendCommand = (command, house) => {
   console.log("[App] Sending command:", command, "to house:", house);
 
   // CLUSTER_SYNC: notify PlayerIntegration locally so it can show a brief "synced to N
-  // screens" indicator. This is a same-tab window event only — it never travels over the
-  // network — so it fires exclusively in the browser that initiated the command, never on
-  // peer/slave screens that merely receive it via WebSocket. Fired unconditionally here;
-  // PlayerIntegration decides whether to actually show anything (only when the live
-  // environments list has more than one alive entry, i.e. an active cluster).
+  // screens" indicator. Fired unconditionally here; PlayerIntegration decides whether to
+  // actually show anything (only when alive environments > 1, and not free-tier).
   window.dispatchEvent(new CustomEvent("cluster-command-sent"));
 
   sendCommand(house, command, (success, response) => {
@@ -954,15 +951,14 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
   // environments poll (see [[hasMultipleActiveEnv comment below).
   useEffect(() => {
     const handleClusterCommandSent = () => {
-      // hasMultipleActiveEnv: true when 2+ environments are currently alive, i.e. this
-      // house is an active cluster right now (not just configured with multiple screens —
-      // checkMultipleActiveEnvironments filters to alive === "1" entries only).
+      // Free-tier plugin accounts: server blocks broadcast, icon must not show.
+      const pluginTier = document.getElementById('root')?.dataset?.pluginTier;
+      if (pluginTier === 'free') return;
+
+      // Show only when 2+ environments are alive (same check as before).
       const { hasMultiple: hasMultipleActiveEnv, count } =
         checkMultipleActiveEnvironments(environmentsRef.current);
-
-      if (!hasMultipleActiveEnv) {
-        return; // Single-screen house: nothing to indicate
-      }
+      if (!hasMultipleActiveEnv) return;
 
       setClusterEnvCount(count);
       setShowClusterIndicator(true);

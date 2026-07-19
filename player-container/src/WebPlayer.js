@@ -118,8 +118,10 @@ const WebPlayer = React.memo(function WebPlayer({
         logInfo(`Set globals - track: ${trackNumber}, montage: ${currentMontage}`);
 
         // Build the player URL wm-playerB is for test version / wm-player prod
-        const baseUrl = `/wp-content/themes/neve-child-master/wm-player/index.html`;
-        // const baseUrl = `/wp-content/themes/neve-child-master/wm-playerB/index.html`;
+        const playerBase = document.getElementById('root')?.dataset?.playerBase || '';
+        const baseUrl = `${playerBase}/wp-content/themes/neve-child-master/wm-player/index.html`;
+        // const baseUrl = `${playerBase}/wp-content/themes/neve-child-master/wm-playerB/index.html`;
+        
         const params = new URLSearchParams({
           session: wallmuseParams.session,
           anticache: anticache.toString(),
@@ -132,11 +134,11 @@ const WebPlayer = React.memo(function WebPlayer({
         const playerUrl = `${baseUrl}?${params.toString()}`;
         logInfo(`Loading player from: ${playerUrl}`);
 
-        const response = await fetch(playerUrl, {
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
+        // Always bypass cache for wallmuse.com (no playerBase): the inner player must
+        // reload fresh to stay alive in Java's environment registry.
+        // Plugin case (playerBase set): allow browser cache to reduce bandwidth.
+        const response = await fetch(playerUrl, playerBase ? {} : {
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         });
 
         if (!response.ok) {
@@ -150,16 +152,26 @@ const WebPlayer = React.memo(function WebPlayer({
         // Parse and inject HTML (only once)
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        
+
+        // When playerBase is set (WP plugin on external site), DOMParser resolves asset
+        // URLs against the current page origin instead of wallmuse.com. Rewrite them back.
+        const playerOrigin = playerBase ? new URL(playerBase).origin : null;
+        const currentOrigin = window.location.origin;
+        const rewriteUrl = (url) =>
+          playerOrigin && url.startsWith(currentOrigin)
+            ? playerOrigin + url.slice(currentOrigin.length)
+            : url;
+
         // Load CSS (only if not already loaded)
         const cssLinks = doc.querySelectorAll('link[rel="stylesheet"]');
         for (const cssLink of cssLinks) {
-          if (!document.querySelector(`link[href="${cssLink.href}"]`)) {
+          const href = rewriteUrl(cssLink.href);
+          if (!document.querySelector(`link[href="${href}"]`)) {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
-            link.href = cssLink.href;
+            link.href = href;
             document.head.appendChild(link);
-            logInfo(`Loaded CSS: ${cssLink.href}`);
+            logInfo(`Loaded CSS: ${href}`);
           }
         }
 
@@ -220,13 +232,14 @@ const WebPlayer = React.memo(function WebPlayer({
         // Load scripts (only if not already loaded)
         const scripts = doc.querySelectorAll('script[src]');
         for (const script of scripts) {
-          if (!document.querySelector(`script[src="${script.src}"]`)) {
+          const src = rewriteUrl(script.src);
+          if (!document.querySelector(`script[src="${src}"]`)) {
             const newScript = document.createElement('script');
-            newScript.src = script.src;
+            newScript.src = src;
             if (script.defer) newScript.defer = true;
             if (script.async) newScript.async = true;
             document.body.appendChild(newScript);
-            logInfo(`Loaded script: ${script.src}`);
+            logInfo(`Loaded script: ${src}`);
           }
         }
 
