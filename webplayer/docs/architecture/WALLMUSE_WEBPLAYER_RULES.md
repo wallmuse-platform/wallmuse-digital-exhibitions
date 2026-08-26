@@ -397,11 +397,16 @@ The webplayer is embedded inside a container app (`play C 3`) via an HTML fetch-
 
 ```
 0          hidden video slot (.video.hidden)
+1          image layer       (.image)
 1000       video base / slot 2 visible   (.video, .video[data-index='2']:not(.hidden))
 1100       video slot 1 visible           (.video[data-index='1']:not(.hidden))
 2000       container initial loader       (GradientCircularProgress, injected by WebPlayer.js)
+           ⚠️  This sits above playing video — WebPlayer.js should hide it before the player
+           signals ready (window.onWebPlayerReady). Owner: parent container, not this codebase.
 3000–8000  reserved                       (captions, title cards, interactive hotspots)
 9000       webplayer spinner              (.placeholder — always highest within webplayer)
+           Note: loading state is cleared atomically with videoShown/imageShown to prevent
+           the spinner from appearing over playing media (see App.tsx showVideo alreadyShowing path).
 ```
 
 ### 12.2 Container Ranges (Context: Player Content Box, `z-index: 2`)

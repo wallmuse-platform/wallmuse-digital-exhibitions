@@ -1,9 +1,12 @@
-#!/bin/bash (changed permissions of folder not tested as erases past)
+#!/bin/bash
+# Note: changed permissions of folder not tested as erases past
 
 echo "Starting wm-player deployment..."
 
 # Build the React app
-cd /Users/akhan/www/wallmusev4/wallmuseB/wm-player
+DIR=$(dirname "$0")
+DIR=$(cd "$DIR"; pwd)
+cd "$DIR/.."
 npm run build
 
 # Extract JS and CSS filenames from the build
@@ -58,6 +61,11 @@ rsync -Pav build/static/css/$CSS* akhan@wallmuse.com:/data/www/wallmuse-wp/wp-co
 rsync -Pav build/favicon.ico akhan@wallmuse.com:/data/www/wallmuse-wp/wp-content/themes/neve-child-master/wm-player/
 rsync -Pav build/manifest.json akhan@wallmuse.com:/data/www/wallmuse-wp/wp-content/themes/neve-child-master/wm-player/
 rsync -Pav build/logo192.png akhan@wallmuse.com:/data/www/wallmuse-wp/wp-content/themes/neve-child-master/wm-player/
+
+# Also push to CDN so plugin always has up-to-date webplayer assets
+echo "Pushing to CDN..."
+rsync -Pav build/static/js/$JS* akhan@wallmuse.com:/data/www/cdn/wm_player/static/js/
+rsync -Pav build/static/css/$CSS* akhan@wallmuse.com:/data/www/cdn/wm_player/static/css/
 
 echo "Deployment complete!"
 echo "All wm-player files uploaded with correct paths and wm-player class"

@@ -835,6 +835,7 @@ export default class WallmusePlayer extends React.Component {
               this.video1Ref.current.play();
             }
           }
+          this.setState({ loading: false });
         }, 100);
       } else {
         // 🔍 DIAGNOSTIC BREAKPOINT 2: Before setState for slot 1
@@ -920,6 +921,7 @@ export default class WallmusePlayer extends React.Component {
               this.video2Ref.current.play();
             }
           }
+          this.setState({ loading: false });
         }, 100);
       } else {
         // 🔍 DIAGNOSTIC BREAKPOINT 5: Before setState for slot 2
