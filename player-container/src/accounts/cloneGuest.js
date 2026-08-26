@@ -1,5 +1,5 @@
 // cloneGuest.js
-import { addUser } from "../utils/api";
+import { addUser, createGuestWordPressUser, authenticateWithKey, registerDomain } from "../utils/api";
 import { rootElement, getUserId, isDemoAccount } from "../utils/Utils";
 
 /**
@@ -42,28 +42,24 @@ export const cloneGuest = async (updateSession = null) => {
       );
     }
 
+    // Plugin sites have no server-side session exchange in the WP endpoint,
+    // so the client must obtain the domain-scoped session and pass it directly.
+    // On wallmuse.com the endpoint handles session creation itself.
+    const isPlugin = rootElement?.dataset?.plugin === "true";
+    let guestSession = null;
+    if (isPlugin && newUser.api_key) {
+      await registerDomain(newUser.api_key, window.location.hostname);
+      guestSession = await authenticateWithKey(newUser.api_key);
+      console.log("[cloneGuest] Got guest session:", guestSession ? guestSession.substring(0, 40) + "..." : "null");
+    }
+
     // Now create a WordPress user for this guest using our new API
     try {
-      const wpResponse = await fetch(
-        `${window.location.origin}/wp-json/wallmuse/v1/create-guest-user`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            guest_id: newUser.id,
-            guest_login: guestIdentifier,
-          }),
-        },
+      const wpUser = await createGuestWordPressUser(
+        newUser.id,
+        guestIdentifier,
+        guestSession,
       );
-
-      if (!wpResponse.ok) {
-        throw new Error(`WordPress user creation failed: ${wpResponse.status}`);
-      }
-
-      const wpUser = await wpResponse.json();
-      console.log("[cloneGuest] WordPress user created:", wpUser);
 
       // Use the WordPress user ID as the session ID
       const userId = wpUser.session_id;

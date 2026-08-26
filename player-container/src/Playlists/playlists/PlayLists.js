@@ -825,17 +825,9 @@ function Playlists({
             );
 
             if (currentBackendPlaylist === selectedPlaylistId) {
-              // Success! Update state
+              // Backend confirmed — update state. Navigation is triggered by the caller
+              // (handleDoPlayPlaylist) after handlePlaylistChange populates window.currentPlaylist.
               setCurrentPlaylist(selectedPlaylistId);
-
-              // Trigger navigation
-              if (onMontageNavigation) {
-                onMontageNavigation(
-                  selectedPlaylistId,
-                  selectedPlaylistPosition,
-                );
-              }
-
               return true;
             }
 
@@ -858,16 +850,12 @@ function Playlists({
       const success = await pollForPlaylistChange();
 
       if (!success) {
-        // Fallback: Update frontend optimistically
+        // Polling timed out — update frontend optimistically so UI stays consistent.
+        // Navigation is still triggered by the caller after handlePlaylistChange completes.
         console.log(
           `[doLoadPlaylist] Fallback: Updating frontend optimistically`,
         );
         setCurrentPlaylist(selectedPlaylistId);
-
-        // Trigger navigation even on fallback
-        if (onMontageNavigation) {
-          onMontageNavigation(selectedPlaylistId, selectedPlaylistPosition);
-        }
       }
 
       setLoadSuccess(true);

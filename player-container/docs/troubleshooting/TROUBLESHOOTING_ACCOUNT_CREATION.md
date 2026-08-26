@@ -121,6 +121,20 @@ This is necessary because `useInitialData` fetches playlists on mount before the
 - **Race conditions** between initial mount and house-created event possible
 - **Critical**: If the REST API creation block in `fetchEnvironmentDetails` is removed, new accounts will show 0 environments in Configure even though the player works (the WebSocket environment is invisible to the REST endpoint)
 
+### Server-Side Investigation (Aug 2026)
+Checked with the backend whether `add_environment` has a server-side bug causing the duplicate. Verdict: **no server-side bug** — the double creation is an architectural consequence of two independent creation paths, not faulty dedup logic.
+
+**Authentication is not the issue.** `this.get()` (line 1437) automatically appends `&session=` + `this.token` to every call, so `checkAccessByHouse` always receives a valid `sessionId`. The URL in the code looks session-less but isn't.
+
+**Why dedup can't catch the duplicate:** `getEnvironmentWithNameAndKey` matches on name AND any of the provided keys.
+1. Parent (`EnvironmentsContext` REST) creates env A with its own keys.
+2. Child WebPlayer then calls `add_environment?keys={newUUID},{fingerprint}` — neither key exists on env A, so no match is found, and env B gets created.
+3. The server is behaving correctly here — it has no way to know env A and the child's request belong to the same session. The fingerprint only dedupes within the *child's own* reconnect cycles (returning user, fingerprint already stored → match found → no new env); it can't dedupe across the two different code paths (REST vs WebSocket).
+
+**Real issue found — key accumulation.** Every time `add_environment` returns an existing environment via fingerprint match (a normal reconnect), lines 327–333 save the new random UUID as an *additional* key on that environment. This isn't a correctness bug, but over many sessions it silently grows `wmm_environment_key` rows indefinitely. Worth a periodic cleanup or capping keys per environment server-side.
+
+**Open question — post-cleanup dangling reference.** After `needsSecondRefresh` deletes env B (the child's environment), the child still has env B's ID in localStorage. On the next load, `environ.house` is already set so `add_environment` is skipped (line 1177) — but the child then tries to operate on a deleted environment. Whether this actually breaks anything depends on what the child does when it gets a 510/unknown-environment error back from the server. **Next step: check whether that error path triggers a localStorage clear + re-creation, or whether it silently fails.**
+
 ## Debugging Workflow
 
 ### Step 1: Enable Dumps
@@ -144,6 +158,7 @@ Check localStorage for `accountProcess_*` entries:
 Look for:
 - When environment count jumps from 1 to 2
 - Which environment has proper screen dimensions
+- Flag progression through the flow
 - Flag progression through the flow
 
 ### Step 5: Disable Dumps
@@ -212,10 +227,58 @@ The account creation process uses localStorage flags for coordination:
 - `newAccountHouseId` - House ID for new account
 - `activationInProgress` - Account creation in progress, guards against double-activation
 
+### Why `accountJustCreated` is always null in ActivateAccount
+`SessionContext.js:206` sets `accountJustCreated: 'true'` when the house is first created. However, `EnvironmentsContext.js:329` removes it immediately after successful playlist copy — which completes before `ActivateAccount` renders on the same page. As a result, `ActivateAccount` always logs `Is newly created account: false` and `accountJustCreated: null`. This is expected behaviour, not a bug.
+
+The "Your personal account has been created!" validation snackbar fires through the `needsRefresh` path in App.js (~line 1482), not through `accountJustCreated`. Do not use `accountJustCreated` presence in `ActivateAccount` logs as a signal that account creation failed.
+
+## Possible Improvements
+
+### No-op `useGuestActionPopup` refresh on post-reload mount
+On the page load after `needsRefresh` triggers a reload, `useGuestActionPopup` fires a user-status refresh where old and new token are identical:
+```
+[useGuestActionPopup] Refreshing user status, old: wp-guest_...-1-... new: wp-guest_...-1-...
+```
+The reload already delivered the correct session; the check finds nothing changed. Not harmful, but the refresh could be skipped when the token is known to be stable (e.g. guard with `if (old !== new)` before triggering downstream effects).
+
+### 1-2 ActivateAccount render is a no-op
+After the `needsRefresh` reload, `ActivateAccount` mounts once before `App.js` has set `phase: COMPLETED`. At that point all flags are null so it exits immediately without doing anything. Gating `ActivateAccount` rendering on the phase having a non-initial value would eliminate this render, but the complexity cost is likely not worth it for now.
+
+---
+
 ## Environment Types
 - **Master Environment** - Has IP `127.0.0.1`, proper screen dimensions
 - **Duplicate Environment** - No IP, faulty screen dimensions `0x0`
 - **Desktop Environments** - Created by desktop PC player app (different flow)
+
+## Plugin Site Guest Creation (`data-plugin="true"`)
+
+### Problem
+On a museum running the WallMuse WordPress plugin, `POST /wp-json/wallmuse/v1/create-guest-user` returns 404 because the plugin has no such endpoint by default. The guest creation falls back to the numeric wallmuse.com user ID (e.g. `29827`), which is not a valid session token and breaks the reload flow.
+
+### How It Works (Fixed)
+The plugin endpoint lives in `includes/guest.php`. It receives the session token obtained client-side and sets a short-lived cookie so PHP can serve it on the next page load.
+
+**Client flow (`cloneGuest.js`, gated on `data-plugin === "true"`):**
+1. `addUser(...)` → `newUser.api_key`
+2. `registerDomain(api_key, hostname)` — scopes the account to this museum's domain
+3. `authenticateWithKey(api_key)` → `session` (domain-scoped token, e.g. `wp-guest_...-12-...`)
+4. `createGuestWordPressUser(id, login, session)` — POSTs `{ guest_id, guest_login, session }` to the plugin endpoint
+
+**Plugin endpoint (`wallmuse/v1/create-guest-user`):**
+- Reads `session` from the POST body
+- Sets `wallmuse_guest_session` cookie (1 hour, httponly, SameSite=Lax)
+- Returns `{ session_id: session }`
+
+**On page reload (`shortcode.php`):**
+- `wallmuse_player_shortcode` checks `$_COOKIE['wallmuse_guest_session']` before falling back to the demo token
+- Serves the guest session in `data-user` so `getUserId()` reads the correct token from the DOM
+
+### wallmuse.com behaviour (no `data-plugin`)
+The `registerDomain`/`authenticateWithKey`/`session` calls are skipped entirely. wallmuse.com's own `create-guest-user` endpoint handles session creation server-side and returns `{ session_id: <wp_user_id> }` (a numeric WP user ID, not a session token). The actual session comes from the WP auth cookie; PHP serves the proper `wp-guest_...` token on reload via `wallmuse_get_user_token()`.
+
+### Cross-origin WS calls not visible in Network inspector
+`addUser`, `registerDomain`, and `authenticateWithKey` all call `wallmuse.com:8443` via axios. When viewed from a plugin site (`museum.local`), these cross-origin requests do not appear in the browser Network panel — only in the console logs. Confirm success by checking for `[api] User created successfully` and `[api] authenticateWithKey token:` in the console.
 
 ## Console Log Keywords
 

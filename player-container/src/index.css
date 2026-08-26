@@ -7,8 +7,20 @@
 /* mui changes due to wp overrides */
 .react-root button:not([class*="Mui"]),
 .react-root input[type=button]:not([class*="Mui"]),
-.react-root input[type=submit]:not([class*="Mui"]) 
+.react-root input[type=submit]:not([class*="Mui"])
 
 {
   all: unset ;
+}
+
+/* WordPress core's wp-emoji-release.min.js rewrites any raw emoji text on the page
+   (including the ones we render, e.g. Configure's session indicators) into
+   <img class="emoji">. WP normally pairs that script with a core stylesheet rule
+   that keeps these images sized to 1em; on plugin sites that rule can be missing or
+   stripped (caching/optimization plugins), leaving the image at its unconstrained
+   natural size. Not scoped to .react-root: MUI Modal/Dialog portal their content to
+   document.body, outside .react-root, so a scoped selector would miss those. This
+   just restores WP's own intended default, so applying it page-wide is safe. */
+img.emoji {
+  height: 1em !important;
 }

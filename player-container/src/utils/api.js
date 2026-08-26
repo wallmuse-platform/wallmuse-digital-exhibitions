@@ -1040,6 +1040,82 @@ export const addUser = async (name, login, password) => {
 };
 
 /**
+ * Creates a WordPress user for a temporary guest account via the Wallmuse WP plugin's REST API.
+ * Called right after addUser() during guest cloning, using the freshly created guest's id/login
+ * to obtain a WordPress session so the guest can be treated as logged-in on the WP site.
+ * @param {string} guestId - The wallmuse guest user ID (from addUser)
+ * @param {string} guestLogin - The wallmuse guest login/identifier
+ * @returns {Promise<Object>} The WordPress user data, including session_id
+ */
+export const createGuestWordPressUser = async (guestId, guestLogin, session) => {
+  console.log("[api] Creating WordPress user for guest:", guestId);
+
+  const response = await fetch(
+    `${window.location.origin}/wp-json/wallmuse/v1/create-guest-user`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(
+        session
+          ? { guest_id: guestId, guest_login: guestLogin, session }
+          : { guest_id: guestId, guest_login: guestLogin },
+      ),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`WordPress user creation failed: ${response.status}`);
+  }
+
+  const wpUser = await response.json();
+  console.log("[api] WordPress user created:", wpUser);
+  return wpUser;
+};
+
+/**
+ * Authenticates an existing WallMuse account via its API key and returns the session token.
+ * Mirrors what wallmuse_get_user_token() does on the PHP side.
+ * @param {string} apiKey - The WallMuse API key
+ * @returns {Promise<string|null>} The session token (wp-login-domainId-hash format) or null
+ */
+export const authenticateWithKey = async (apiKey) => {
+  try {
+    const response = await axios.get(`${baseURL}/authenticate_with_key`, {
+      headers: { Accept: "text/x-json" },
+      params: { version: 1, api_key: apiKey },
+    });
+    const token = response.data?.token ?? null;
+    console.log("[api] authenticateWithKey token:", token ? token.substring(0, 40) + "..." : "null");
+    return token;
+  } catch (error) {
+    console.error("[api] authenticateWithKey error:", error);
+    return null;
+  }
+};
+
+/**
+ * Registers an API key to a domain so subsequent authenticate_with_key calls
+ * return a domain-scoped session token. Must be called before authenticateWithKey
+ * when the account was just created (mirrors register_domain in wallmuse_activate_shortcode).
+ * @param {string} apiKey - The WallMuse API key
+ * @param {string} domain - The museum hostname (e.g. "museum.local")
+ * @returns {Promise<void>}
+ */
+export const registerDomain = async (apiKey, domain) => {
+  try {
+    await axios.get(`${baseURL}/register_domain`, {
+      headers: { Accept: "text/x-json" },
+      params: { version: 1, api_key: apiKey, domain },
+    });
+    console.log("[api] registerDomain:", domain);
+  } catch (error) {
+    console.error("[api] registerDomain error:", error);
+  }
+};
+
+/**
  * Authenticate a user and get a valid session ID
  * @param {string} login - The user's login
  * @param {string} password - The user's password
@@ -1773,10 +1849,13 @@ export const copyGuestPlaylistsToUser = async (
   domain,
   targetSessionId,
   houseId,
+  demoUser = null,
 ) => {
   try {
-    // Get the guest account ID for this domain
-    const guestSessionId = getDomainGuestAccountId(domain);
+    // WP plugin passes demoUser (data-demo-user) so we copy from the museum's own
+    // demo account regardless of domain ID. wallmuse.com / sharex / ooo2 leave demoUser
+    // null and continue to use getDomainGuestAccountId's hardcoded domain map.
+    const guestSessionId = demoUser || getDomainGuestAccountId(domain);
     console.log(
       `[api] Copying playlists from guest account ${guestSessionId} to user ${targetSessionId}`,
     );
@@ -1803,6 +1882,11 @@ export const copyGuestPlaylistsToUser = async (
 
       let targetPlaylistId;
       let playlistName = templatePlaylist.name || "";
+
+      // Skip mono-playlists: they are per-account internal playlists created when a visitor
+      // presses Play on a montage in the catalogue. They are tied to the guest account and
+      // have no meaning for the new user's account.
+      if (playlistName.startsWith("mono-")) continue;
 
       // For the default playlist, we don't need to create a new one
       // For named playlists, we need to create them first

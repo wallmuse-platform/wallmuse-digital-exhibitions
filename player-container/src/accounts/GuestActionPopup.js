@@ -30,11 +30,13 @@ const GuestActionPopup = ({
 
   const [isCreating, setIsCreating] = useState(false);
 
+  // WP plugin: if data-guest="false" on <div id="root">, suppress popup entirely (return null below)
   // Determine if we're on ooo2 theme (only has free content)
   const isOoo2Theme =
     currentTheme === "ooo2" || window.location.hostname.includes("ooo2");
 
   // Generate appropriate sign up link based on theme
+  // WP plugin: check data-signup-url on <div id="root"> first; falls through to theme logic if absent
   const getSignUpLink = () => {
     const language = i18n.language;
     const langParam = language !== "en" ? `?lang=${language}` : "";
@@ -68,6 +70,7 @@ const GuestActionPopup = ({
   };
 
   // Handle temporary account creation
+  // WP plugin: if data-guest-url is set on <div id="root">, redirect to it instead of creating an account
   const handleGuestAccount = async () => {
     try {
       setIsCreating(true); //  KEEP: Shows loading state on button

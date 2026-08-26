@@ -96,12 +96,84 @@ Account
         └── Screens (PC multiple possible, Web not supported)
 ```
 
-### 4.2 Account Types
+### 4.2 Session token format
 
-- **Demo Accounts**: Limited functionality, no permission requests
-- **Guest Accounts**: Can be upgraded to full accounts
-- **Premium Accounts**: Full access to all features
-- **Free Accounts**: Full access (wallmuse site freemium approach)
+Every account is identified by a session token injected into `data-user` on the `#root` div:
+
+```
+wp-{login}-{domainId}-{md5(login + domainId + secret)}
+```
+
+Examples:
+- `wp-freeaccount-1-9360c44…`   → guest on wallmuse.com / sharex (domain 1)
+- `wp-Unregistered-8-0220ca…`   → guest on ooo2 (domain 8)
+- `wp-Education1071-1-…`         → logged-in WP user on wallmuse.com
+- `wp-mymuseum-42-abc123…`       → WP plugin customer (token from `authenticate_with_key`)
+
+`getUserId()` in `Utils.js` reads this token from the DOM. It is the single source of truth
+for who is using the player — there is no separate login call at startup.
+
+### 4.3 How the session reaches the DOM
+
+There are two completely separate tracks:
+
+**Platform sites (wallmuse.com, ooo2, sharex)**
+- `common0.php` (neve-child-master theme) handles the session:
+  - Logged-in WP user → token computed locally: `wp-{login}-{domain}-{md5(…)}`
+  - Not logged in → `$defSessionId` (a hardcoded guest token per site, set by URL check)
+- `wm_v4_player.php` injects the result into `data-user`
+- The React build (`build-ok.sh`) deploys JS/CSS to `play-v4-assets/` on the same server
+
+**WP Plugin customers (museum.org, etc.)**
+- Plugin admin enters an API key in WP Settings → WallMuse
+- `auth.php` → `wallmuse_get_token()` calls `authenticate_with_key` on the Java manager
+- `shortcode.php` injects the returned token into `data-user`
+- JS/CSS is loaded from `https://wallmuse.com/cdn/wm_player/` (`release-cdn.sh`)
+- `common0.php` and `wm_v4_player.php` are **not involved**
+
+### 4.4 Account types and demo detection
+
+| Login contains | Detected as | Effect |
+|---|---|---|
+| `demo` | demo | `isDemoHouse()` → no broadcast sync sent (Java) |
+| `freeaccount` | demo | same |
+| `unregistered` | demo | same |
+| anything else + `plugin_tier = wm-plugin-free` | demo | same |
+| normal login, `plugin_tier` = pro/studio/null | live | full sync |
+
+**JavaScript** (`isDemoAccount()` in `api.js`): checks `"Unregistered"` and `"freeaccount"` in the
+session token — skips house creation and backend calls for guest sessions.
+
+**Java** (`isDemoHouse()` in `WebServiceCommands.java`): checks `demo`, `freeaccount`,
+`unregistered` (case-insensitive) on the account login, plus `wm-plugin-free` tier — blocks
+broadcast sync for all matched accounts.
+
+### 4.5 Guest session map (platform sites only)
+
+`getDomainGuestAccountId()` in `api.js` maps domain numbers to their hardcoded guest tokens:
+
+```js
+1 → wp-freeaccount-1-…   // wallmuse.com and sharex
+8 → wp-Unregistered-8-…  // ooo2
+```
+
+This is **only used by the platform sites**. WP plugin sites never call this — their guest
+session is already in `data-user` when the page loads.
+
+When a new platform site is added, add its `$defSessionId` in `common0.php` and mirror the
+domain → token entry here.
+
+### 4.6 Demo accounts for WP plugin customers (optional)
+
+A plugin customer who wants anonymous visitors to see a sample montage:
+
+1. Creates a wallmuse.com account whose login contains `demo` or `freeaccount`
+   (e.g. `demo_mymuseum`)
+2. Gets the API key from `wallmuse.com/my-wallmuse-account/`
+3. Enters that key in WP Settings → WallMuse (same field as their main account)
+
+The login name causes both Java and the React player to treat the session as passive —
+no sync commands are sent, no permission popups appear.
 
 ### 4.3 Environment Management
 

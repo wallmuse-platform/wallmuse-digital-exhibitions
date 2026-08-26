@@ -33,9 +33,13 @@ const ActivateAccount = ({ currentTheme, theme, t }) => {
     if (isNewlyCreated) {
       setIsCloneAccount(true);
       console.log("[ActivateAccount] Set isNewAccount to true");
-      localStorage.removeItem("accountJustCreated");
-      console.log("[ActivateAccount] Removed accountJustCreated flag");
     }
+    // accountJustCreated is intentionally left in localStorage here — clearing it at
+    // mount time raced with remounts (needsRefresh toggling in EnvironmentsContext)
+    // that happen before the user clicks Activate. A remount after an early clear would
+    // find the flag gone, misclassify the account as pre-existing, and trigger a full
+    // reload instead of closing the popup. It's cleared in handleActivate instead, once
+    // activation actually proceeds.
   }, []);
 
   // Single-step function for activation
@@ -63,6 +67,9 @@ const ActivateAccount = ({ currentTheme, theme, t }) => {
 
     // Set a flag to indicate refresh has occurred and this popup should close
     localStorage.setItem("activationComplete", "true");
+    // Now that activation is actually proceeding, clear the new-account flag
+    // (see mount effect above for why this isn't cleared at mount time)
+    localStorage.removeItem("accountJustCreated");
 
     // Initialize empty data structures for new accounts if needed
     if (isCloneAccount) {
