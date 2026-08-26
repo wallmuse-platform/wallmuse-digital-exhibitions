@@ -1429,8 +1429,10 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
     // Handle activation complete event for new accounts
     const handleActivationComplete = () => {
       console.log("[App] Activation complete event received");
-      // Force re-render by updating needsRefresh state
-      setNeedsRefresh({ shouldRefresh: false });
+      // needsRefresh is a plain boolean (EnvironmentsContext.js) — passing an object here
+      // is always truthy, so the ActivateAccount popup's render condition never goes
+      // false and the popup never closes.
+      setNeedsRefresh(false);
     };
 
     // Add activation complete event listener

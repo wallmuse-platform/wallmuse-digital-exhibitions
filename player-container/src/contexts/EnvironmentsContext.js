@@ -275,11 +275,33 @@ export const EnvironmentsProvider = ({ children }) => {
             const copiedHouses = JSON.parse(
               localStorage.getItem("copiedHouses") || "[]",
             );
-            if (!copiedHouses.includes(houseId)) {
+
+            // WP plugin: only copy the demo playlists when data-copy-demo="true" is set on
+            // <div id="root">; absent or any other value → skip copy (no impact on
+            // wallmuse.com/sharex/ooo2, which don't set data-plugin at all)
+            const rootEl = document.getElementById("root");
+            const isPlugin = rootEl?.getAttribute("data-plugin") === "true";
+            const copyDemo = rootEl?.getAttribute("data-copy-demo");
+            const skipCopy = isPlugin && copyDemo !== "true";
+
+            // WP plugin: data-demo-user carries the museum's own demo session token,
+            // passed by the PHP shortcode. Use it directly so we copy from this museum's
+            // domain rather than falling back to getDomainGuestAccountId's hardcoded map
+            // (which only covers domains 1 and 8 — wallmuse.com and ooo2).
+            // wallmuse.com / sharex / ooo2 don't set data-demo-user → demoUser is null
+            // → copyGuestPlaylistsToUser falls back to the map as before.
+            const demoUser = rootEl?.getAttribute("data-demo-user") || null;
+
+            if (skipCopy) {
+              console.log(
+                "[fetchEnvironmentDetails] Skipping playlist copy: plugin context without data-copy-demo=true",
+              );
+            } else if (!copiedHouses.includes(houseId)) {
               const copyResult = await copyGuestPlaylistsToUser(
                 domain,
                 sessionId,
                 houseId,
+                demoUser,
               );
               console.log(
                 "[fetchEnvironmentDetails] Playlist copy result:",

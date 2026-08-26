@@ -14,17 +14,17 @@ console.log('[Utils] wmm_url:', wmm_url); // Should log the current domain (e.g.
  */
 export const getUserId = () => {
   // Get the raw userID from the DOM attribute or URL
-  const rawUserId = rootElement.dataset.user || 
+  const rawUserId = rootElement.dataset.user ||
                     new URLSearchParams(window.location.search).get("user");
-  
+
   // If no userId found, return null
   if (!rawUserId) return null;
-  
+
   // For debugging: Log the HTML attribute to see exactly what's in the DOM
   // if (rootElement.dataset.user) {
   //   console.log("[Utils] DOM dataset full:", JSON.stringify(rootElement.dataset));
   // }
-  
+
   // Store the original ID for later use (important!)
   localStorage.setItem('wp_original_session_id', rawUserId);
   
@@ -189,7 +189,7 @@ export function shouldShowDemoMode(userId) {
 export function isDemoAccount(userId) {
   if (!userId) return false;
   const id = userId.toLowerCase();
-  const isBasicDemo = id.includes('free') || id.includes('unregistered');
+  const isBasicDemo = id.includes('demo') || id.includes('free') || id.includes('unregistered');
   const wpLoggedIn = getWpLoggedIn();
 
   console.log('[utils] isDemoAccount - basic demo:', isBasicDemo, 'wpLoggedIn:', wpLoggedIn);

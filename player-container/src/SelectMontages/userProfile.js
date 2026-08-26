@@ -31,8 +31,10 @@ export const getUserProfile = async (sessionId) => {
       };
     }
     
-    // Extract premium status and other details
-    const isPremium = data?.type === "PAY";
+    // isPremium: server sends explicit isPremium="1" for new account types (PLU, CUS, etc.)
+    // Fallback to type==="PAY" for existing accounts until all sessions carry the attribute.
+    const isPremium = data?.isPremium === "1" || data?.type === "PAY";
+
     const isMontageEncryptionOnly = false; // Set according to your business logic
     
     const userProfile = {
