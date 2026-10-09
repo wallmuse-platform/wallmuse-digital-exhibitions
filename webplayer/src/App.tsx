@@ -313,6 +313,7 @@ export default class WallmusePlayer extends React.Component {
           imagePreloading: 1,
           imageShown: 1,
           videoShown: 0,
+          loading: false,
         }),
         () => {
           console.log('[App.showImage] ✅ STATE UPDATED - image1 set to show:', {
@@ -332,7 +333,7 @@ export default class WallmusePlayer extends React.Component {
     else if (this.state.imagePreloading === 1) {
       console.log('[App.showImage] Image1 was preloading - now switching to show it');
       this.setState(
-        state => ({ ...state, image1: media, imageShown: 1, imagePreloading: 0, videoShown: 0 }),
+        state => ({ ...state, image1: media, imageShown: 1, imagePreloading: 0, videoShown: 0, loading: false }),
         () => {
           console.log(
             '[App.showImage] ✅ STATE UPDATED - switched to image1:',
@@ -345,7 +346,7 @@ export default class WallmusePlayer extends React.Component {
     else if (this.state.imagePreloading === 2) {
       console.log('[App.showImage] Image2 was preloading - now switching to show it');
       this.setState(
-        state => ({ ...state, image2: media, imageShown: 2, imagePreloading: 0, videoShown: 0 }),
+        state => ({ ...state, image2: media, imageShown: 2, imagePreloading: 0, videoShown: 0, loading: false }),
         () => {
           console.log(
             '[App.showImage] ✅ STATE UPDATED - switched to image2:',
@@ -358,7 +359,7 @@ export default class WallmusePlayer extends React.Component {
     else {
       console.log('[App.showImage] Fallback - forcing image1 display');
       this.setState(
-        state => ({ ...state, image1: media, imageShown: 1, videoShown: 0 }),
+        state => ({ ...state, image1: media, imageShown: 1, videoShown: 0, loading: false }),
         () => {
           console.log(
             '[App.showImage] ✅ STATE UPDATED - fallback image1 showing:',
