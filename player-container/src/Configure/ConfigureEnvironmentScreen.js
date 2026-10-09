@@ -56,8 +56,14 @@ export function ConfigureEnvironmentScreen({
   const { t } = useTranslation();
   const { isMobile, isTablet, isHD, iconSize } = useResponsive();
 
-  // Updated state name for clarity
-  const [showOnlyActive, setShowOnlyActive] = useState(true);
+  // Restore toggle OFF state when reopened after an env removal (removal requires toggle OFF)
+  const [showOnlyActive, setShowOnlyActive] = useState(() => {
+    if (window._configureShowOnlyActive === false) {
+      window._configureShowOnlyActive = undefined;
+      return false;
+    }
+    return true;
+  });
 
   let IconSizeMinusTwo = `${parseInt(iconSize) - 2}px`;
   let currentRow = 15;

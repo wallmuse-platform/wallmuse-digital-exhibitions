@@ -1,17 +1,34 @@
 //ThemeUtils.js
 
 import { rootElement } from "../utils/Utils";
+import { theme } from "./theme";
 import { WallmuseTheme } from "./WallMuseTheme";
 import { SharexTheme } from "./SharexTheme";
 import { OOO2Theme } from "./OOO2Theme";
 
+const getBodyFont = () => {
+    try { return window.getComputedStyle(document.body).fontFamily || null; }
+    catch(e) { return null; }
+};
+
+const buildPluginTheme = (hex, fontFamily) => theme({
+    mode: 'light',
+    primary: { main: hex || '#27BECA', contrastText: '#ffffff' },
+    secondary: { main: '#ED1550', contrastText: '#ffffff' },
+    text: { primary: '#393939' },
+    fontFamily: fontFamily || getBodyFont() || undefined,
+});
 
 export const selectTheme = () => {
-    if (!rootElement.dataset.theme) {
-        return WallmuseTheme;
+    if (rootElement?.dataset?.plugin === 'true') {
+        return buildPluginTheme(
+            rootElement.dataset.primaryColor || null,
+            rootElement.dataset.fontFamily   || null,
+        );
     }
-    const theme = rootElement.dataset.theme.toLowerCase();
-    switch (theme) {
+
+    const themeName = (rootElement?.dataset?.theme || '').toLowerCase();
+    switch (themeName) {
         case "wallmuse":
             return WallmuseTheme;
         case "sharex":

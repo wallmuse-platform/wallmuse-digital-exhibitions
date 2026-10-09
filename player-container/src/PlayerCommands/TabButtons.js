@@ -36,7 +36,18 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
     responsiveProps;
 
   // Guest action popup hook - Must be here so it persists when modal closes
-  const { handleAction, popup } = useGuestActionPopup();
+  const { handleAction: guestHandleAction, isDemo, popup } = useGuestActionPopup();
+
+  // Close Configure before showing GuestActionPopup — two overlapping modals is confusing.
+  // The guest flow ends in a page reload so Configure doesn't need to reopen after.
+  // Only close Configure for demo users — logged-in users execute the action directly.
+  const handleAction = (action, isPremium = false) => {
+    if (isDemo) {
+      window._configureWasOpen = false;
+      setOpenConfigureDisplays(false);
+    }
+    guestHandleAction(action, isPremium);
+  };
 
   // For TV navigation, we now only need 2 main buttons
   const mainButtonCount = 2; // The two main buttons always visible
@@ -77,6 +88,14 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const [openConfigureDisplays, setOpenConfigureDisplays] = useState(false);
 
+  // Reopen Configure if handleRemoveEnvironment signalled it before setEnvironments re-rendered
+  useEffect(() => {
+    if (window._configureWasOpen) {
+      window._configureWasOpen = false;
+      setOpenConfigureDisplays(true);
+    }
+  });
+
   const handleTooltipClose = () => {
     setTooltipOpen(false);
   };
@@ -89,6 +108,7 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
   };
 
   const handleCloseConfigureDisplays = () => {
+    window._configureWasOpen = false;
     setOpenConfigureDisplays(false);
   };
 

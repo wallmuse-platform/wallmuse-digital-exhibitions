@@ -5,6 +5,22 @@ import { lighten, darken } from '@mui/material/styles';
 
 export const theme = palette => {
 
+    if (!palette.primary.light) {
+        palette.primary.light = lighten(palette.primary.main, 0.3);
+    }
+    if (!palette.primary.dark) {
+        palette.primary.dark = darken(palette.primary.main, 0.3);
+    }
+    if (!palette.secondary.light) {
+        palette.secondary.light = lighten(palette.secondary.main, 0.3);
+    }
+    if (!palette.secondary.dark) {
+        palette.secondary.dark = darken(palette.secondary.main, 0.3);
+    }
+    if (!palette.secondary.contrastText) {
+        palette.secondary.contrastText = '#ffffff';
+    }
+
     const mainColor = palette.primary.main;
     const secondaryMainColor = palette.secondary.main;
 
@@ -235,6 +251,7 @@ export const theme = palette => {
             },
         },
         typography: {
+            fontFamily: palette.fontFamily || '"Roboto", "Helvetica", "Arial", sans-serif',
             subtitle1: {
                 color: mainColor,
                 overflow: 'hidden',

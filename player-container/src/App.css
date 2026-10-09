@@ -297,3 +297,18 @@
   animation: fadeOut 30s ease-out forwards;
 }
 
+/* Montage card description scrollbox — always-visible thin scrollbar outside the text */
+.montage-desc::-webkit-scrollbar {
+  width: 6px;
+}
+.montage-desc::-webkit-scrollbar-track {
+  background: transparent;
+}
+.montage-desc::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.4);
+  border-radius: 3px;
+}
+.montage-desc::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.7);
+}
+
