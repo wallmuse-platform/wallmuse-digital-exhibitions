@@ -149,6 +149,10 @@ export function ConfigureDisplays({ t, onClose, handleAction }) {
       "[Configure] After filtering, newEnvironments:",
       newEnvironments,
     );
+    // Signal TabButtons to reopen Configure and restore toggle state after the re-render.
+    // showOnlyActive must have been OFF (only inactive envs are removable), so restore it.
+    window._configureWasOpen = true;
+    window._configureShowOnlyActive = false;
     setEnvironments(newEnvironments);
     try {
       removeEnvironment(id);

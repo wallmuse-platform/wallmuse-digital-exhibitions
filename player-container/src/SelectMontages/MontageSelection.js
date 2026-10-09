@@ -548,7 +548,7 @@ const ShowMontages = (
     );
   } else
     return (
-      <div className="showmontages">
+      <div className="showmontages" style={{ paddingBottom: "8rem" }}>
         <div>
           {/* Header Section with Centered Title and Right-aligned Button */}
           <div
@@ -675,6 +675,8 @@ const ShowMontages = (
                   flexBasis: "20rem",
                   margin: "1em",
                   position: "relative",
+                  // Raise the hovered wrapper above siblings so the scaled card overlaps them
+                  zIndex: hoveredIndex === index ? 1 : 0,
                 }}
               >
                 <Card
@@ -685,11 +687,11 @@ const ShowMontages = (
                     borderColor: theme.palette.primary.main,
                     borderRadius: "1em",
                     margin: "2em",
-                    position: hoveredIndex === index ? "absolute" : "static",
+                    // Keep card in-flow (no position:absolute) so the wrapper never collapses.
+                    // transform alone creates a stacking context; zIndex on the wrapper handles ordering.
                     transform:
                       hoveredIndex === index ? "scale(1.5)" : "scale(1)",
                     transformOrigin: "center",
-                    zIndex: hoveredIndex === index ? 1 : 0,
                     transition: "transform 0.5s ease-out",
                     willChange: "transform",
                   }}
@@ -852,10 +854,13 @@ const ShowMontages = (
                     </div>
                     {hoveredIndex === index && (
                       <span
+                        className="montage-desc"
                         style={{
                           display: "flex",
                           flexDirection: "column",
-                          height: "100%",
+                          maxHeight: "200px",
+                          overflowY: "auto",
+                          scrollbarGutter: "stable",
                         }}
                       >
                         <Typography
