@@ -25,6 +25,11 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const TEMPLATE_PATH = '/wallmuse/components/com_wmbatchartworkupload/views/wmbatchartworkupload/tmpl/batch-template/batch_upload_template.xls';
+const templateUrl = window.location.hostname.includes('wallmuse.com')
+  ? TEMPLATE_PATH
+  : `https://wallmuse.com${TEMPLATE_PATH}`;
+
 const getFilename = (path) => {
   if (!path) return '';
   const i = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
@@ -71,7 +76,7 @@ function AIPreamble() {
               size="small"
               startIcon={<InsertDriveFileOutlinedIcon />}
               component="a"
-              href="/wallmuse/components/com_wmbatchartworkupload/views/wmbatchartworkupload/tmpl/batch-template/batch_upload_template.xls"
+              href={templateUrl}
               download="batch_upload_template.xls"
               sx={{ whiteSpace: 'nowrap' }}
             >
@@ -89,7 +94,10 @@ Artist first name | Artist nick name | Artist surname | Artwork title | Year
 | Description Eng | Description Fr | Description Other | Other Language
 | Category1 | Category2 | Category3 | Categories | Country
 | Rights Representation Acronym | Rights Holder | Place | Credits
-| Path artwork (HD) | Path trailer (TR) | Path Image | Keywords | Streaming
+| Path artwork (HD) | Path trailer (TR) | Path Image | Keywords | Streaming (1/0) | License Type
+
+For Streaming (1/0): use 1 for web player (default), 0 for standalone player only.
+For License Type, use one of: COPYRIGHT, FREE, COPYLEFT, CC_BY, CC_BY_SA, CC_BY_ND, CC_BY_NC, CC_BY_NC_SA, CC_BY_NC_ND, CC0, OTHER, NO_ACCESS
 
 The artworks (file names) are:
 - [filename_1.mp4]
@@ -110,6 +118,25 @@ The artworks (file names) are:
             <strong>If the artist is NOT a member of any CMO</strong>, enter the artist's own full name
             as the Rights Holder (e.g. <em>Christian Zimmermann</em>).
           </Alert>
+
+          <Divider />
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Streaming (1/0) — what to enter</Typography>
+          <Box component="ul" sx={{ pl: 3, mt: 0, '& li': { fontSize: '0.85rem', mb: 0.5 } }}>
+            <li><strong>1</strong> (or leave blank) — artwork streams via the web player (default for all plugin uploads)</li>
+            <li><strong>0</strong> — URL is hidden from the web player; artwork plays only in the protected standalone player</li>
+          </Box>
+
+          <Divider />
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>License Type — what to enter</Typography>
+          <Box component="ul" sx={{ pl: 3, mt: 0, '& li': { fontSize: '0.85rem', mb: 0.5 } }}>
+            <li><strong>COPYRIGHT</strong> — all rights reserved (default when left blank)</li>
+            <li><strong>CC_BY</strong> — Creative Commons Attribution</li>
+            <li><strong>CC_BY_SA</strong> — CC Attribution-ShareAlike &nbsp;|&nbsp; <strong>CC_BY_ND</strong> — CC Attribution-NoDerivs</li>
+            <li><strong>CC_BY_NC</strong> — CC Attribution-NonCommercial &nbsp;|&nbsp; <strong>CC_BY_NC_SA</strong> / <strong>CC_BY_NC_ND</strong></li>
+            <li><strong>CC0</strong> — public domain &nbsp;|&nbsp; <strong>FREE</strong> — free use &nbsp;|&nbsp; <strong>COPYLEFT</strong> &nbsp;|&nbsp; <strong>OTHER</strong> &nbsp;|&nbsp; <strong>NO_ACCESS</strong></li>
+          </Box>
 
           <Divider />
 
@@ -328,7 +355,9 @@ function BatchUpload({ wpLoggedIn }) {
         if (thumbFile) thumbMap.current[thumbFile.normalize('NFC')] = i;
         newStatus[i] = 'default';
         const artist = [row[0], row[2]].filter(Boolean).join(' ');
-        return { title: row[3] || '', artist: artist + (row[1] ? ` (${row[1]})` : ''), hdPath: row[18] || '' };
+        const streaming    = (row[22] || '').trim();
+        const licenseType  = (row[23] || '').trim();
+        return { title: row[3] || '', artist: artist + (row[1] ? ` (${row[1]})` : ''), hdPath: row[18] || '', streaming, licenseType };
       });
       setCsvFile(file);
       setTableRows(parsed);
@@ -532,6 +561,8 @@ function BatchUpload({ wpLoggedIn }) {
                     <TableCell sx={{ fontWeight: 700 }}>Title</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Artist</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>HD file</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Streaming</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>License</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
                   </TableRow>
                 </TableHead>
@@ -547,6 +578,12 @@ function BatchUpload({ wpLoggedIn }) {
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.artist}</TableCell>
                         <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {getFilename(row.hdPath) || '—'}
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                          {row.streaming === '0' || row.streaming === 'N' ? '🔒 No' : '▶ Yes'}
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                          {row.licenseType || 'COPYRIGHT'}
                         </TableCell>
                         <TableCell>
                           {status === 'default' && <Chip label="Waiting"  size="small" />}
