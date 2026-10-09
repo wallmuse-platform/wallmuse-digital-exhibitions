@@ -52,8 +52,25 @@ export default function Rights({
     };
 
     const handleRightChange = event => {
-        setCurrentRight(event.target.value);
-        if (onRightChange) onRightChange(event.target.value);
+        const newType = event.target.value;
+        setCurrentRight(newType);
+        if (onRightChange) onRightChange(newType);
+        // Auto-apply when a right already exists for the current country
+        if (rights && rights.length > 0) {
+            const hasRight = rights.some(r =>
+                currentRightCountry === ALL ? typeof r.country === 'undefined' : r.country === currentRightCountry
+            );
+            if (hasRight) {
+                const newRight = { type: newType, direction: 'A' };
+                if (currentRightCountry !== ALL) newRight.country = currentRightCountry;
+                let updated = rights.filter(d => d.country !== currentRightCountry);
+                if (currentRightCountry === ALL) {
+                    updated = updated.filter(r => typeof r.country !== 'undefined');
+                }
+                setRights([...updated, newRight]);
+                setEditing(true);
+            }
+        }
     };
 
     const handleCountryChange = event => {

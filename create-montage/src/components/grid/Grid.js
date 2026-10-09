@@ -417,6 +417,8 @@ export default function BasicGrid() {
         setLanguage(droppedMontage.language)
         setDescriptions(droppedMontage.descriptions);
         setRights(droppedMontage.rights)
+        const loadedRight = droppedMontage.rights?.[0];
+        if (loadedRight) setCurrentRight(loadedRight.type);
         setTrackArtworks([...droppedMontage.artworks, []])
     }
 
