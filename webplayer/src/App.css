@@ -49,7 +49,8 @@
   border: 6px solid rgba(255, 255, 255, 0.3);
   border-top-color: #ffffff;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  opacity: 0;
+  animation: spin 1s linear infinite, spinnerReveal 0ms 400ms forwards;
   margin: 0 auto;
   background-color: rgba(0, 0, 0, 0.7);
   padding: 1.5rem;
@@ -58,6 +59,10 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes spinnerReveal {
+  to { opacity: 1; }
 }
 
 #root-wm-player .hidden {
