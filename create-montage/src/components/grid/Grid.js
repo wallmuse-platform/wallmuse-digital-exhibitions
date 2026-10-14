@@ -1,6 +1,5 @@
 import React, {useEffect, useState} from 'react';
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Unstable_Grid2';
 import SearchArea from "../searchArea/SearchArea";
 import {
     countArtworks,
@@ -52,15 +51,6 @@ export default function BasicGrid() {
 
     const { t } = useTranslation();
 
-    const topGridStyles = {
-        minHeight: "31vh",
-    }
-
-    const bottomGridStyles = {
-        height: "67vh",
-        maxHeight: "67vh",
-        overflow: "auto",
-    }
 
     const [currentUser, setCurrentUser] = useState({});
     const [artworks, setArtworks] = useState([]);
@@ -435,17 +425,16 @@ export default function BasicGrid() {
     const themeName = currentTheme();
 
     return (
-
-        <Grid
+        <DndProvider backend={HTML5Backend}>
+        <Box
             className="create-montage-grid"
-            container
-            columnSpacing={0}
             sx={{
-                maxHeight: '97vh',
-                minHeight: '97vh',
+                height: '97vh',
+                display: 'flex',
+                flexDirection: 'column',
                 minWidth: '1080px',
-                overflowX: 'auto'
-              }}
+                overflowX: 'auto',
+            }}
         >
             { zoomAndPanImage ? <ZoomAndPanDialog image={ zoomAndPanImage } setImage={ setZoomAndPanImage } updateImageZoomAndPan={ updateImageZoomAndPan } /> : null }
             { spacedImage ? <SpaceImageDialog image={ spacedImage } setImage={ setSpacedImage } updateSpaceImageProperties={ updateSpaceImageProperties } tracks={ trackArtworks } /> : null }
@@ -487,93 +476,93 @@ export default function BasicGrid() {
                 ) : null
             }
 
-            <Grid xs={3} sm={3} md={3} lg={2.5} sx={ topGridStyles } justifyContent="center">
-                <SearchArea
-                    operation={operation}
-                    handleOperationChange={ handleOperationChange }
-                    element={element}
-                    handleElementChange={handleElementChange}
-                    elementsCount={countElement}
-                    page={page}
-                    setPage={setPage}
-                    rowsPerPage={rowsPerPage}
-                    setRowsPerPage={setRowsPerPage}
-                    term={searchTerm}
-                    handleSearchTermChange={ handleSearchTermChange }
-                    searchCategories={searchCategories}
-                    handleSearchCategoriesChange={ handleSearchCategoriesChange }
-                    selectedChip={selectedChip}
-                    setSelectedChip={setSelectedChip}
-                    currentlyEditingMontage={ currentlyEditingMontage }
-                />
-            </Grid>
-            <Grid xs={9} sm={9} md={9} lg={9.5} sx={ topGridStyles } >
-                <Details
-                    thumbnail={thumbnail}
-                    name={name}
-                    setName={setName}
-                    setThumbnail={setThumbnail}
-                    setCategories={setCategories}
-                    checkedCategories={ categories }
-                    language={language}
-                    setLanguage={setLanguage}
-                    suitableForChildren={suitableForChildren}
-                    setSuitableForChildren={setSuitableForChildren}
-                    descriptions={descriptions}
-                    setDescriptions={setDescriptions}
-                    rights={rights}
-                    setRights={setRights}
-                    currentRight={currentRight}
-                    setCurrentRight={setCurrentRight}
-                    currentRightCountry={currentRightCountry}
-                    setCurrentRightCountry={setCurrentRightCountry}
-                    currentDescription={currentDescription}
-                    setCurrentDescription={setCurrentDescription}
-                    currentDescriptionLang={currentDescriptionLang}
-                    setCurrentDescriptionLang={setCurrentDescriptionLang}
-                    currentDescriptionName={ currentDescriptionName }
-                    setCurrentDescriptionName={ setCurrentDescriptionName }
-                    numberOfTracks={ calculateNumberOfTracks() }
-                    clearAll={ clearAll }
-                    deleteMont={ deleteMont }
-                    save={ save }
-                    operation = { operation }
-                    editMontageReady={ editMontageReady() }
-                />
-            </Grid>
-            <DndProvider backend={HTML5Backend}>
-                <Grid xs={3} sm={3} md={3} lg={2.5}
-                      sx={{
-                          ...bottomGridStyles,
-                          borderTop: 0, borderLeft: 1, borderRight: 1, borderBottom: 1,
-                          borderColor: theme.palette.primary.main,
-                          borderRadius: "0 0 0 5px",
-                          maxWidth: "400px"
-                      }}
-                      justifyContent="center">
-                    <Box>
-                        {
-                            loading
-                                ? <CircularProgress className="wm-progress"/>
-                                :
-                                (element === BinTypes.TOOL
-                                    ? <Tools handleFinishToolDragging={ handleFinishFunctionToolDragging } />
-                                    : <ArtworkList
-                                    artworks={element === BinTypes.ARTWORK ? artworks : montages}
-                                    setThumbnail={setThumbnail}
-                                    type={element}
-                                />)
-                        }
-                    </Box>
-                </Grid>
-                <Grid xs={9} sm={9} md={9} lg={9.5}
-                      sx={{
-                          ...bottomGridStyles,
-                          borderTop: 0, borderRight: 1, borderBottom: 1,
-                          borderColor: theme.palette.primary.main,
-                          borderRadius: "0 0 5px 0",
-                      }}
-                >
+            {/* Top row: natural content height, no vh */}
+            <Box sx={{ display: 'flex', flexShrink: 0 }}>
+                <Box sx={{ width: '20.833%' }}>
+                    <SearchArea
+                        operation={operation}
+                        handleOperationChange={ handleOperationChange }
+                        element={element}
+                        handleElementChange={handleElementChange}
+                        elementsCount={countElement}
+                        page={page}
+                        setPage={setPage}
+                        rowsPerPage={rowsPerPage}
+                        setRowsPerPage={setRowsPerPage}
+                        term={searchTerm}
+                        handleSearchTermChange={ handleSearchTermChange }
+                        searchCategories={searchCategories}
+                        handleSearchCategoriesChange={ handleSearchCategoriesChange }
+                        selectedChip={selectedChip}
+                        setSelectedChip={setSelectedChip}
+                        currentlyEditingMontage={ currentlyEditingMontage }
+                    />
+                </Box>
+                <Box sx={{ width: '79.167%' }}>
+                    <Details
+                        thumbnail={thumbnail}
+                        name={name}
+                        setName={setName}
+                        setThumbnail={setThumbnail}
+                        setCategories={setCategories}
+                        checkedCategories={ categories }
+                        language={language}
+                        setLanguage={setLanguage}
+                        suitableForChildren={suitableForChildren}
+                        setSuitableForChildren={setSuitableForChildren}
+                        descriptions={descriptions}
+                        setDescriptions={setDescriptions}
+                        rights={rights}
+                        setRights={setRights}
+                        currentRight={currentRight}
+                        setCurrentRight={setCurrentRight}
+                        currentRightCountry={currentRightCountry}
+                        setCurrentRightCountry={setCurrentRightCountry}
+                        currentDescription={currentDescription}
+                        setCurrentDescription={setCurrentDescription}
+                        currentDescriptionLang={currentDescriptionLang}
+                        setCurrentDescriptionLang={setCurrentDescriptionLang}
+                        currentDescriptionName={ currentDescriptionName }
+                        setCurrentDescriptionName={ setCurrentDescriptionName }
+                        numberOfTracks={ calculateNumberOfTracks() }
+                        clearAll={ clearAll }
+                        deleteMont={ deleteMont }
+                        save={ save }
+                        operation = { operation }
+                        editMontageReady={ editMontageReady() }
+                    />
+                </Box>
+            </Box>
+
+            {/* Bottom row: fills all remaining height */}
+            <Box sx={{ display: 'flex', flex: '1 1 0', minHeight: 0 }}>
+                <Box sx={{
+                    width: '20.833%',
+                    overflow: 'auto',
+                    border: 1, borderTop: 0,
+                    borderColor: theme.palette.primary.main,
+                    borderRadius: "0 0 0 5px"
+                }}>
+                    {
+                        loading
+                            ? <CircularProgress className="wm-progress"/>
+                            :
+                            (element === BinTypes.TOOL
+                                ? <Tools handleFinishToolDragging={ handleFinishFunctionToolDragging } />
+                                : <ArtworkList
+                                artworks={element === BinTypes.ARTWORK ? artworks : montages}
+                                setThumbnail={setThumbnail}
+                                type={element}
+                            />)
+                    }
+                </Box>
+                <Box sx={{
+                    width: '79.167%',
+                    overflow: 'auto',
+                    border: 1, borderTop: 0, borderLeft: 0,
+                    borderColor: theme.palette.primary.main,
+                    borderRadius: "0 0 5px 0",
+                }}>
                     <Tracks
                         artworks={ trackArtworks }
                         setTrackArtworks={ setTrackArtworks }
@@ -583,8 +572,9 @@ export default function BasicGrid() {
                         currentlyEditingMontage={ currentlyEditingMontage }
                         handleEditMontageDrop={ handleEditMontageDrop }
                     />
-                </Grid>
-            </DndProvider>
-        </Grid>
+                </Box>
+            </Box>
+        </Box>
+        </DndProvider>
     );
 }

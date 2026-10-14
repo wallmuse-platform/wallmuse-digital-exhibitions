@@ -29,6 +29,21 @@ const serializeParams = params => {
   }
 };
 
+export const addCategory = async (name) => {
+  const sessionId = getUserId();
+  const params = new URLSearchParams();
+  params.append('version', '1');
+  params.append('session', sessionId);
+  params.append('title', name);
+  const response = await axios.post(`${baseURL}/add_category`, params, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+  });
+  const xmlDoc = new DOMParser().parseFromString(response.data, 'text/xml');
+  const el = xmlDoc.getElementsByTagName('category')[0];
+  if (!el) throw new Error('add_category returned no category element');
+  return { id: el.getAttribute('id'), name: el.getAttribute('name') };
+};
+
 export const getCategories = async () => {
   const sessionId = getUserId();
   console.log('[api] getCategories: Starting categories retrieval');

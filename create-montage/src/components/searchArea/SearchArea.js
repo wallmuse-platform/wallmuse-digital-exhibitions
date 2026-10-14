@@ -63,7 +63,7 @@ export default function SearchArea({
     return (
         <Box
             sx={{ border: 1, borderColor: theme.palette.primary.main, borderRadius: "5px 0 0 0",
-                minHeight: "100%", maxHeight: '100%', overflow: "auto", maxWidth: "400px"}}
+                minHeight: "100%", overflow: "auto"}}
         >
                 <Box
                     className="search-box"

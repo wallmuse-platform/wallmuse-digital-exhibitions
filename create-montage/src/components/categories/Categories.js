@@ -1,45 +1,59 @@
 import React, { useState, useEffect } from 'react';
-import { getCategories } from '../../api';
+import { getCategories, addCategory } from '../../api';
 import { Autocomplete, Checkbox, CircularProgress, TextField } from "@mui/material";
+import { createFilterOptions } from '@mui/material/Autocomplete';
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import { useTranslation } from 'react-i18next';
+import { isPlugin } from '../../utils/Utils';
+
+const filter = createFilterOptions({ stringify: option => option.name || '' });
 
 export default function Categories({ setCategories, variant, checkedCategories, height }) {
     const { t } = useTranslation();
+    const pluginMode = isPlugin();
 
     const [open, setOpen] = useState(false);
     const [options, setOptions] = useState([]);
-    const loading = open && options.length === 0;
+    const [creating, setCreating] = useState(false);
+    const loading = open && options.length === 0 && !pluginMode;
     const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
     const checkedIcon = <CheckBoxIcon fontSize="small" />;
 
     useEffect(() => {
         let active = true;
-
-        if (!loading) {
-            return undefined;
-        }
-
         (async () => {
             const result = await getCategories();
-
-            if (active) {
-                setOptions(result);
-            }
+            if (active) setOptions(result);
         })();
-
-        return () => {
-            active = false;
-        };
-    }, [loading]);
+        return () => { active = false; };
+    }, []);
 
     const updateCategories = newValue => {
-        setCategories(newValue.map((c, index) => ({
+        setCategories(newValue.filter(c => !c.inputValue).map((c, index) => ({
             id: c.id,
             title: c.name,
             ordering: index
         })));
+    };
+
+    const handleChange = async (event, newValue) => {
+        const createOption = newValue.find(c => c.inputValue);
+        if (createOption && pluginMode) {
+            setCreating(true);
+            try {
+                const created = await addCategory(createOption.inputValue);
+                const updated = [...newValue.filter(c => !c.inputValue), created];
+                setOptions(prev => [...prev, created]);
+                updateCategories(updated);
+            } catch (e) {
+                console.error('[Categories] Failed to create category:', e);
+            } finally {
+                setCreating(false);
+            }
+        } else {
+            updateCategories(newValue);
+        }
     };
 
     return (
@@ -51,16 +65,23 @@ export default function Categories({ setCategories, variant, checkedCategories, 
             open={open}
             onOpen={() => setOpen(true)}
             onClose={() => setOpen(false)}
-            loading={loading}
+            loading={loading || creating}
             options={options}
-            getOptionLabel={option => option.name}
+            getOptionLabel={option => option.inputValue ? `+ ${t('category.create')} "${option.inputValue}"` : (option.name || '')}
             isOptionEqualToValue={(option, value) => option.id === value.id}
+            filterOptions={(options, params) => {
+                const filtered = filter(options, params);
+                if (pluginMode && params.inputValue.trim() !== '') {
+                    filtered.push({ inputValue: params.inputValue.trim(), name: `+ ${t('category.create')} "${params.inputValue.trim()}"` });
+                }
+                return filtered;
+            }}
             classes={{ option: "wm-ac-option" }}
             limitTags={1}
             value={checkedCategories || []}
             renderTags={() => false}
             disableCloseOnSelect={true}
-            onChange={(event, newValue) => { updateCategories(newValue); }}
+            onChange={handleChange}
             renderOption={(props, option, { selected }) => (
                 <li {...props}>
                     <Checkbox
@@ -69,7 +90,7 @@ export default function Categories({ setCategories, variant, checkedCategories, 
                         style={{ marginRight: 8 }}
                         checked={checkedCategories ? checkedCategories.map(c => c.id).indexOf(option.id) >= 0 : false}
                     />
-                    {option.name.toLowerCase()}
+                    {option.inputValue ? option.name : option.name.toLowerCase()}
                 </li>
             )}
             renderInput={(params) => (
@@ -100,7 +121,7 @@ export default function Categories({ setCategories, variant, checkedCategories, 
                         },
                         endAdornment: (
                             <React.Fragment>
-                                {loading ? <CircularProgress color="inherit" size={20} /> : null}
+                                {(loading || creating) ? <CircularProgress color="inherit" size={20} /> : null}
                                 {params.InputProps.endAdornment}
                             </React.Fragment>
                         ),

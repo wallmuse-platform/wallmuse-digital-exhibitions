@@ -45,11 +45,11 @@ export async function handleUpload(contentData, contentId, selectedFiles, onProg
             
             contentData.artworkId = artworkId;
             const updatedArtworkId = await saveInitialArtwork(contentData);
-            
+
             if (!updatedArtworkId) {
                 throw new Error("Failed to update existing content.");
             }
-            
+
             return true; // Success without file processing
         }
 
@@ -74,7 +74,6 @@ export async function handleUpload(contentData, contentId, selectedFiles, onProg
                 contentData.hdPath = hdUrl;
                 contentData.artworkId = tempArtworkId;
 
-                // Update artwork with the HD URL
                 await saveInitialArtwork(contentData);
 
                 artworkId = tempArtworkId;
@@ -520,8 +519,9 @@ export async function saveInitialArtwork(contentData) {
     }
 }
 
-// Upload additional files (SD, Thumbnail) using the artworkId from the HD upload
+// Upload additional files (SD, Thumbnail) using the artworkId from the HD upload.
 export async function uploadAdditionalFiles(file, kind, artworkId, onProgress = null, t) {
+
     const sessionId = getUserId();
 
     const formData = new FormData();
@@ -607,3 +607,4 @@ export async function uploadAdditionalFiles(file, kind, artworkId, onProgress = 
         throw error;
     }
 }
+

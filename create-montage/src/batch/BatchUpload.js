@@ -51,7 +51,7 @@ const ROW_COLORS = {
   error:   '#ffebee',
 };
 
-const STEPS = ['Metadata file', 'Artwork files', 'Check', 'Upload', 'Import', 'Done'];
+const STEPS = ['Metadata file', 'Content files', 'Check', 'Upload', 'Import', 'Done'];
 
 // ─── AI Preamble ──────────────────────────────────────────────────────────────
 
@@ -60,7 +60,7 @@ function AIPreamble() {
     <Accordion disableGutters sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-          AI-Assisted Template Guide — How to fill the metadata spreadsheet
+          AI-Assisted Template Guide - How to fill the metadata spreadsheet
         </Typography>
       </AccordionSummary>
       <AccordionDetails>
@@ -86,56 +86,58 @@ function AIPreamble() {
 
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Prompt template</Typography>
           <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50', fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap' }}>
-{`I need to fill a batch upload spreadsheet for [N] artworks by [Artist First Name] [Artist Last Name], created in [YEAR].
-All works belong to the category [CATEGORY]. The Rights Representative is [CMO acronym or artist's name].
+{`I need to fill a batch upload spreadsheet for [N] contents by [Author First Name] [Author Last Name], created in [YEAR].
+All works belong to the category [CATEGORY]. The Rights Representative is [CMO acronym or author's name].
 
 Please create one tab-separated row per artwork using these column headers in order:
-Artist first name | Artist nick name | Artist surname | Artwork title | Year
+Author first name | Author nick name | Author surname | Artwork title | Year
 | Description Eng | Description Fr | Description Other | Other Language
 | Category1 | Category2 | Category3 | Categories | Country
 | Rights Representation Acronym | Rights Holder | Place | Credits
 | Path artwork (HD) | Path trailer (TR) | Path Image | Keywords | Streaming (1/0) | License Type
 
+Title, Surname, Category, Year (YYYY or YYYY-YYYY) are mandatory.
+For Rights, use one of: COPYRIGHT, FREE, COPYLEFT, CC_BY, CC_BY_SA, CC_BY_ND, CC_BY_NC, CC_BY_NC_SA, CC_BY_NC_ND, CC0, OTHER, NO_ACCESS
 For Streaming (1/0): use 1 for web player (default), 0 for standalone player only.
-For License Type, use one of: COPYRIGHT, FREE, COPYLEFT, CC_BY, CC_BY_SA, CC_BY_ND, CC_BY_NC, CC_BY_NC_SA, CC_BY_NC_ND, CC0, OTHER, NO_ACCESS
 
-The artworks (file names) are:
+The contents (file names) are:
 - [filename_1.mp4]
-- [filename_2.mp4]`}
+- [filename_2.mp4]
+
+The result should be in UTF-16 Unicode Text (.txt) format.
+`}
           </Paper>
 
           <Divider />
 
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            Rights Representation — what to enter
+            Rights Representation - what to enter
           </Typography>
-          <Box component="ul" sx={{ pl: 3, mt: 0, '& li': { fontSize: '0.85rem', mb: 0.5 } }}>
-            <li><strong>ADAGP</strong> — France &nbsp;|&nbsp; <strong>DACS</strong> — UK &nbsp;|&nbsp; <strong>VG Bild-Kunst</strong> — Germany</li>
-            <li><strong>SIAE</strong> — Italy &nbsp;|&nbsp; <strong>VEGAP</strong> — Spain &nbsp;|&nbsp; <strong>SABAM</strong> — Belgium</li>
-            <li><strong>BONO</strong> — Norway &nbsp;|&nbsp; <strong>Bildupphovsrätt</strong> — Sweden</li>
-          </Box>
+          <Typography sx={{ fontSize: '0.85rem' }}>
+            Examples: <strong>ADAGP</strong> - France &nbsp;|&nbsp; <strong>DACS</strong> - UK &nbsp;|&nbsp; <strong>VG Bild-Kunst</strong> - Germany &nbsp;|&nbsp; <strong>SIAE</strong> - Italy &nbsp;|&nbsp; <strong>VEGAP</strong> - Spain &nbsp;|&nbsp; <strong>SABAM</strong> - Belgium &nbsp;|&nbsp; <strong>BONO</strong> - Norway &nbsp;|&nbsp; <strong>Bildupphovsrätt</strong> - Sweden
+          </Typography>
           <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>
-            <strong>If the artist is NOT a member of any CMO</strong>, enter the artist's own full name
+            <strong>If the Author is NOT a member of any CMO</strong>, enter the author's own full name
             as the Rights Holder (e.g. <em>Christian Zimmermann</em>).
           </Alert>
 
           <Divider />
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Streaming (1/0) — what to enter</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Streaming (1/0) - what to enter</Typography>
           <Box component="ul" sx={{ pl: 3, mt: 0, '& li': { fontSize: '0.85rem', mb: 0.5 } }}>
-            <li><strong>1</strong> (or leave blank) — artwork streams via the web player (default for all plugin uploads)</li>
-            <li><strong>0</strong> — URL is hidden from the web player; artwork plays only in the protected standalone player</li>
+            <li><strong>1</strong> (or leave blank) - artwork streams via the web player (default for all plugin uploads)</li>
+            <li><strong>0</strong> - URL is hidden from the web player; artwork plays only in the protected standalone player</li>
           </Box>
 
           <Divider />
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>License Type — what to enter</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>License Type - what to enter</Typography>
           <Box component="ul" sx={{ pl: 3, mt: 0, '& li': { fontSize: '0.85rem', mb: 0.5 } }}>
-            <li><strong>COPYRIGHT</strong> — all rights reserved (default when left blank)</li>
-            <li><strong>CC_BY</strong> — Creative Commons Attribution</li>
-            <li><strong>CC_BY_SA</strong> — CC Attribution-ShareAlike &nbsp;|&nbsp; <strong>CC_BY_ND</strong> — CC Attribution-NoDerivs</li>
-            <li><strong>CC_BY_NC</strong> — CC Attribution-NonCommercial &nbsp;|&nbsp; <strong>CC_BY_NC_SA</strong> / <strong>CC_BY_NC_ND</strong></li>
-            <li><strong>CC0</strong> — public domain &nbsp;|&nbsp; <strong>FREE</strong> — free use &nbsp;|&nbsp; <strong>COPYLEFT</strong> &nbsp;|&nbsp; <strong>OTHER</strong> &nbsp;|&nbsp; <strong>NO_ACCESS</strong></li>
+            <li><strong>COPYRIGHT</strong> - all rights reserved</li>
+            <li><strong>CC_BY</strong> - Creative Commons Attribution</li>
+            <li><strong>CC_BY_SA</strong> - CC Attribution-ShareAlike &nbsp;|&nbsp; <strong>CC_BY_ND</strong> - CC Attribution-NoDerivs</li>
+            <li><strong>CC_BY_NC</strong> - CC Attribution-NonCommercial &nbsp;|&nbsp; <strong>CC_BY_NC_SA</strong> / <strong>CC_BY_NC_ND</strong></li>
+            <li><strong>CC0</strong> - public domain &nbsp;|&nbsp; <strong>FREE</strong> - free use &nbsp;|&nbsp; <strong>COPYLEFT</strong> &nbsp;|&nbsp; <strong>OTHER</strong> &nbsp;|&nbsp; <strong>NO_ACCESS</strong></li>
           </Box>
 
           <Divider />
@@ -260,11 +262,11 @@ function BatchUpload({ wpLoggedIn }) {
 
   useEffect(() => {
     if (checkDone && !checkHasErrors) {
-      notify('All files validated — click Upload Artworks to continue');
+      notify('All files validated - click Upload Contents to continue');
       actionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     if (checkDone && checkHasErrors) {
-      notify('Some rows have errors — review the table below', 'warning');
+      notify('Some rows have errors - review the table below', 'warning');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkDone, checkHasErrors]);
@@ -277,7 +279,7 @@ function BatchUpload({ wpLoggedIn }) {
 
   useEffect(() => {
     if (uploadDone) {
-      notify('Upload complete — click Import Artworks to finish');
+      notify('Upload complete - click Import Contents to finish');
       actionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -285,7 +287,7 @@ function BatchUpload({ wpLoggedIn }) {
 
   useEffect(() => {
     if (importResult?.success) {
-      notify('All artworks imported successfully!');
+      notify('All contents imported successfully!');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importResult]);
@@ -401,7 +403,7 @@ function BatchUpload({ wpLoggedIn }) {
       const existing = new Set(prev.map(f => f.name));
       return [...prev, ...toAdd.filter(f => !existing.has(f.name))];
     });
-    setMessage({ severity: 'info', text: `${toAdd.length} file(s) matched and ready — click Check Files.` });
+    setMessage({ severity: 'info', text: `${toAdd.length} file(s) matched and ready - click Check Files.` });
   }, [csvFile]);
 
   // ── Check files ───────────────────────────────────────────────────────────
@@ -444,7 +446,7 @@ function BatchUpload({ wpLoggedIn }) {
     artworkFiles.forEach(f => { initial[f.name] = { percent: 0, status: 'pending' }; });
     setUploadProgress(initial);
 
-    // Upload one at a time — safer for large video files
+    // Upload one at a time - safer for large video files
     for (const file of artworkFiles) {
       setUploadProgress(prev => ({ ...prev, [file.name]: { percent: 0, status: 'uploading' } }));
       const result = await uploadBatchArtwork(csvFile, file, (pct) => {
@@ -491,7 +493,7 @@ function BatchUpload({ wpLoggedIn }) {
       <ThemeProvider theme={theme}>
         <Box sx={{ p: 4, textAlign: 'center' }}>
           <Alert severity="warning" sx={{ maxWidth: 480, mx: 'auto' }}>
-            <strong>Account Restricted</strong> — Batch Upload is available for logged-in editors
+            <strong>Account Restricted</strong> - Batch Upload is available for logged-in editors
             and administrators only.
           </Alert>
         </Box>
@@ -528,7 +530,7 @@ function BatchUpload({ wpLoggedIn }) {
 
         {/* ── Step 1: TXT file ── */}
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-          Step 1 — Select the UTF-16 metadata file (.txt)
+          Step 1 - Select the UTF-16 metadata file (.txt)
         </Typography>
         <Dropzone
           label="Drop your UTF-16 Unicode Text file here, or click to browse"
@@ -559,7 +561,7 @@ function BatchUpload({ wpLoggedIn }) {
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700 }}>#</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Title</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Artist</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Author</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>HD file</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Streaming</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>License</TableCell>
@@ -608,10 +610,10 @@ function BatchUpload({ wpLoggedIn }) {
         {csvFile && !uploadDone && (
           <Box sx={{ mt: 3 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-              Step 2 — Select artwork files
+              Step 2 - Select content files
             </Typography>
             <Dropzone
-              label="Drop artwork files here, or click to browse"
+              label="Drop content files here, or click to browse"
               hint="Select all files at once (MP4, JPG, PNG…). Only files matching the spreadsheet are accepted."
               accept="video/*,image/*"
               multiple
@@ -635,7 +637,7 @@ function BatchUpload({ wpLoggedIn }) {
           <Box ref={actionRef} sx={{ mt: 4 }}>
             <Divider sx={{ mb: 2 }} />
 
-            {/* Check — visible until check passes */}
+            {/* Check - visible until check passes */}
             {!checkDone && (
               <Button
                 fullWidth
@@ -652,7 +654,7 @@ function BatchUpload({ wpLoggedIn }) {
             )}
             {checking && <LinearProgress sx={{ mb: 2, borderRadius: 2 }} />}
 
-            {/* Upload — visible after check passes */}
+            {/* Upload - visible after check passes */}
             {checkDone && !checkHasErrors && !uploadDone && (
               <Button
                 fullWidth
@@ -666,11 +668,11 @@ function BatchUpload({ wpLoggedIn }) {
               >
                 {uploading
                   ? `Uploading… ${overallPercent}%`
-                  : `Upload ${artworkFiles.length} Artwork${artworkFiles.length !== 1 ? 's' : ''}`}
+                  : `Upload ${artworkFiles.length} Content${artworkFiles.length !== 1 ? 's' : ''}`}
               </Button>
             )}
 
-            {/* Import — visible after upload done */}
+            {/* Import - visible after upload done */}
             {uploadDone && !importResult && (
               <Button
                 fullWidth
@@ -682,7 +684,7 @@ function BatchUpload({ wpLoggedIn }) {
                 startIcon={importing ? <HourglassEmptyIcon /> : null}
                 sx={{ mb: 1 }}
               >
-                {importing ? 'Importing artworks…' : 'Import Artworks'}
+                {importing ? 'Importing contents…' : 'Import Contents'}
               </Button>
             )}
             {importing && <LinearProgress color="success" sx={{ mb: 2, borderRadius: 2 }} />}
@@ -749,12 +751,12 @@ function BatchUpload({ wpLoggedIn }) {
           <Box sx={{ mt: 3 }}>
             {importResult.success ? (
               <Alert severity="success" icon={<CheckCircleIcon />} sx={{ fontSize: '1rem' }}>
-                <strong>Import complete.</strong> All artworks are now visible in <em>Add Content → List Artworks</em> and <em>Curate → Artworks</em>.
+                <strong>Import complete.</strong> All contents are now visible in <em>Add Content → List Contents</em> and <em>Curate → Contents</em>.
               </Alert>
             ) : (
               <Box>
                 <Alert severity="error" sx={{ mb: 1 }}>
-                  <strong>Some artworks could not be imported.</strong> Others were saved successfully.
+                  <strong>Some contents could not be imported.</strong> Others were saved successfully.
                 </Alert>
                 <TableContainer component={Paper} variant="outlined">
                   <Table size="small">
@@ -762,7 +764,7 @@ function BatchUpload({ wpLoggedIn }) {
                       <TableRow>
                         <TableCell sx={{ fontWeight: 700 }}>Line</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Artwork</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Artist</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Author</TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>Error</TableCell>
                       </TableRow>
                     </TableHead>

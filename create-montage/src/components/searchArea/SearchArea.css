@@ -55,7 +55,21 @@
     width: 100%;
 }
 .MuiTablePagination-root.wm-pagination > .MuiToolbar-root {
-    padding-left: 4px;
+    padding-left: 0;
+    padding-right: 0;
+    justify-content: center;
+    flex-wrap: nowrap;
+    min-height: 0;
+    gap: 4px;
+}
+.MuiTablePagination-root.wm-pagination .MuiTablePagination-selectLabel,
+.MuiTablePagination-root.wm-pagination .MuiTablePagination-displayedRows {
+    align-self: center;
+    margin: 0;
+    line-height: 1;
+}
+.MuiTablePagination-root.wm-pagination .MuiTablePagination-spacer {
+    flex: 0;
 }
 .MuiTablePagination-root.wm-pagination > .MuiToolbar-root > .MuiInputBase-root {
     margin: 0 3px;

@@ -11,6 +11,7 @@ import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 import { selectTheme } from '../theme/ThemeUtils';
 import { ThemeProvider } from '@mui/material/styles';
 import { useUserContext } from '../context/UserContext';
+import { isPlugin } from '../utils/Utils';
 
 function TabButtons({ t, setSection, wpLoggedIn }) {
   const { isPremium } = useUserContext() || {};
@@ -106,8 +107,8 @@ function TabButtons({ t, setSection, wpLoggedIn }) {
           </Tooltip>
         </Stack>
 
-        {/* Far right: Account Delegations — hidden on mobile/tablet */}
-        {!isNarrow && <Box sx={{ position: 'absolute', right: 8 }}>
+        {/* Far right: Account Delegations — hidden on mobile/tablet and in plugin mode */}
+        {!isNarrow && !isPlugin() && <Box sx={{ position: 'absolute', right: 8 }}>
           <Tooltip title={t('delegations.admin.tooltip')}>
             <span>
               <IconButton

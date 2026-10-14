@@ -111,13 +111,13 @@ export default function Details({ thumbnail, name, setName, setCategories, check
 
     return (
         <Box
-            sx={{ border: 1, borderLeft: 0, borderColor: theme.palette.primary.main, borderRadius: "0 5px 0 0", minHeight: "100%", maxHeight: '100%', overflow: "auto"}}
+            sx={{ border: 1, borderLeft: 0, borderColor: theme.palette.primary.main, borderRadius: "0 5px 0 0", minHeight: "100%", overflow: "auto"}}
         >
             <Grid
                 container
                 className="details-grid"
                 justify="space-between"
-                sx={{padding: "1% 0"}}
+                sx={{padding: "8px 0"}}
             >
                 <Grid item xs={2} sx={ detailsGridStyles } >
                     {thumbnail == null

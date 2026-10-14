@@ -5,12 +5,12 @@ import {
   TextField, Divider, Typography, Box, Button, useMediaQuery, Grid,
   Accordion, AccordionSummary, AccordionDetails, styled, Dialog, DialogTitle,
   DialogContent, FormControl, RadioGroup, FormControlLabel, Radio, DialogActions,
-  LinearProgress 
+  LinearProgress, Tooltip
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@mui/material/styles';
 import { searchCopyrightOwner, addCopyrightOwner } from '../../api'
-import { getUserId } from '../../utils/Utils';
+import { getUserId, isPlugin } from '../../utils/Utils';
 import { useUserContext } from '../../context/UserContext';
 import CopyrightOwnerSelector from './CopyrightOwnerSelector';
 import { useCopyrightOwner } from './useCopyrightOwner';
@@ -42,7 +42,7 @@ export function AddContent({ selectedContent }) {
 
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [loading, setLoading] = useState(false);
-  const { isPremium } = useUserContext(); // Get isPremium from context (set in App.js)
+  const { isPremium, pluginTier } = useUserContext(); // Get values from context (set in App.js)
 
   const [contentId, setContentId] = useState(''); // Track if we're editing an existing content
 
@@ -1475,12 +1475,17 @@ export function AddContent({ selectedContent }) {
         <Grid container spacing={2}>
           {/* First checkbox */}
           <Grid item xs={6} sm={6} md={3} display="flex" alignItems="center">
-            <CustomCheckbox
-              checked={contentDataRef.current.streaming}
-              onChange={(name, checked) => handleCheckboxChange(name, checked)}
-              name="streaming"
-              label={t("Streaming_")}
-            />
+            <Tooltip title={isPlugin() ? t("StreamingAlways_") : ''}>
+              <span>
+                <CustomCheckbox
+                  checked={contentDataRef.current.streaming}
+                  onChange={(name, checked) => handleCheckboxChange(name, checked)}
+                  name="streaming"
+                  label={t("Streaming_")}
+                  disabled={isPlugin()}
+                />
+              </span>
+            </Tooltip>
           </Grid>
 
           {/* Second checkbox */}

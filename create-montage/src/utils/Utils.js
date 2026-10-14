@@ -9,6 +9,10 @@ export const getUserId = () => {
     );
 }
 
+export function isPlugin() {
+  return document.getElementById(rootElementId)?.dataset?.plugin === 'true';
+}
+
 // Helper function to get WordPress login status
 export function getWpLoggedIn() {
   return rootElement?.dataset?.wpLoggedIn === 'true';
@@ -94,8 +98,9 @@ export const getUserProfile = async (sessionId) => {
       };
     }
 
-    // Extract premium status - PAY type indicates premium account
-    const isPremium = data?.type === "PAY";
+    // isPremium: server sends explicit isPremium="1" for new account types (PLU, CUS, etc.)
+    // Fallback to type==="PAY" for existing accounts until all sessions carry the attribute.
+    const isPremium = data?.isPremium === "1" || data?.type === "PAY";
 
     const userProfile = {
       isLoggedIn: getWpLoggedIn(),

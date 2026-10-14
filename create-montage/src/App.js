@@ -23,7 +23,9 @@ function App() {
 
   const sessionId = getUserId();
   console.log('[CreateMontage App] sessionId', sessionId);
-  const wpLoggedIn = document.getElementById('root-create-montage').dataset.wpLoggedIn === 'true'; // Retrieve the WP login status
+  const root = document.getElementById('root-create-montage');
+  const wpLoggedIn   = root.dataset.wpLoggedIn   === 'true';
+  const pluginTier   = root.dataset.pluginTier   || '';   // 'free' | 'pro' | 'studio' | '' (domain accounts)
   // const isPremium = document.getElementById('root-create-montage').dataset.isPremium === 'true'; // Retrieve the WP login status
     // userDetails: {
     //         id: userId,
@@ -83,7 +85,7 @@ function App() {
       {/* Wrap the app with SessionContext to provide sessionId */}
       <SessionContext.Provider value={sessionId}>
         {/* Wrap the app with UserContext.Provider and provide isUserLoggedIn */}
-        <UserContext.Provider value={{ isDemo, isPremium }}>
+        <UserContext.Provider value={{ isDemo, isPremium, pluginTier }}>
             {/* TODO: place window.innerWidth < 1080 only for CreateMontage */}
           {(isDemo) && <TrialAccountOrNotWideSnackbar isDemo={isDemo} theme={currentTheme()} />}
           {/* Render the TabButtons component */}
