@@ -34,7 +34,7 @@ export function sortMontages(montages, orderBy, displayBy, qualityBy, orientatio
         // console.log('First few filtered montages:', filteredMontages.slice(0, 5));
         sortedMontages = filteredMontages;
     }
-    else if (displayBy === "Destructured") {
+    else if (displayBy === "Deconstructed") {
         const filteredMontages = montages.filter(montage => 
         (montage.splittable === 'Y' && montage.deconstructable === 'Y')
         );

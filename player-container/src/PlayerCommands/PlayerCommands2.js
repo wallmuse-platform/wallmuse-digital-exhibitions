@@ -19,6 +19,8 @@ import TwitterIcon from "@mui/icons-material/Twitter";
 import PinterestIcon from "@mui/icons-material/Pinterest";
 import LinkedInIcon from "@mui/icons-material/LinkedIn";
 import PlayCircleFilledIcon from "@mui/icons-material/PlayCircleFilled";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import ImageIcon from "@mui/icons-material/Image";
 import SvgIcon from "@mui/material/SvgIcon";
 import { getHouseId } from "../utils/Utils";
 import { setHouseAutostart } from "../utils/api";
@@ -97,6 +99,8 @@ function AutostartToggle({ iconClass }) {
 export function SocialShare({ responsiveProps, iconClass }) {
   const { t } = useTranslation();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [copiedThumb, setCopiedThumb] = useState(false);
   const { isMobile, isLandscape } = responsiveProps || {};
 
   const useCompactLayout = isMobile && isLandscape;
@@ -107,6 +111,36 @@ export function SocialShare({ responsiveProps, iconClass }) {
 
   const handleClose = () => {
     setAnchorEl(null);
+    setCopied(false);
+    setCopiedThumb(false);
+  };
+
+  const getShareUrl = () => {
+    const ctx = window._wmShareContext || {};
+    const keyword = ctx.searchTerm || ctx.montageTitle || "";
+    const base = window.location.origin + window.location.pathname;
+    const url = keyword ? `${base}?searchword=${encodeURIComponent(keyword)}` : base;
+    return url;
+  };
+
+  const handleCopy = () => {
+    const ctx = window._wmShareContext || {};
+    const title = ctx.searchTerm || ctx.montageTitle || "";
+    const text = title ? `${title}\n${getShareUrl()}` : getShareUrl();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const handleCopyThumb = () => {
+    const ctx = window._wmShareContext || {};
+    const thumbUrl = ctx.thumbnailUrl || "";
+    if (!thumbUrl) return;
+    navigator.clipboard.writeText(thumbUrl).then(() => {
+      setCopiedThumb(true);
+      setTimeout(() => setCopiedThumb(false), 2000);
+    });
   };
 
   const open = Boolean(anchorEl);
@@ -159,6 +193,20 @@ export function SocialShare({ responsiveProps, iconClass }) {
             {t("socialmedia")}
           </Box>
 
+          {/* Preview card — shows what will be shared */}
+          {(() => {
+            const ctx = window._wmShareContext || {};
+            const title = ctx.searchTerm || ctx.montageTitle || "";
+            const thumb = ctx.thumbnailUrl || "";
+            if (!title && !thumb) return null;
+            return (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, p: 1, borderRadius: 1, bgcolor: "rgba(0,0,0,0.06)" }}>
+                {thumb && <img src={thumb} alt="" style={{ width: 48, height: 36, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
+                {title && <Box sx={{ fontSize: "0.75rem", fontWeight: 600, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</Box>}
+              </Box>
+            );
+          })()}
+
           <Box
             sx={{
               display: "flex",
@@ -179,7 +227,7 @@ export function SocialShare({ responsiveProps, iconClass }) {
             </IconButton>
 
             <IconButton
-              onClick={() => window.open("https://www.facebook.com/")}
+              onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getShareUrl())}`)}
             >
               <FacebookIcon
                 className={`tabs_icon ${iconClass}`}
@@ -187,7 +235,12 @@ export function SocialShare({ responsiveProps, iconClass }) {
               />
             </IconButton>
 
-            <IconButton onClick={() => window.open("https://twitter.com/")}>
+            <IconButton onClick={() => {
+              const ctx = window._wmShareContext || {};
+              const title = ctx.searchTerm || ctx.montageTitle || "";
+              const twitterUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(getShareUrl())}${title ? `&text=${encodeURIComponent(title)}` : ""}`;
+              window.open(twitterUrl);
+            }}>
               <TwitterIcon
                 className={`tabs_icon ${iconClass}`}
                 sx={{ color: "#1DA1F2" }}
@@ -202,7 +255,7 @@ export function SocialShare({ responsiveProps, iconClass }) {
             </IconButton>
 
             <IconButton
-              onClick={() => window.open("https://www.pinterest.com/")}
+              onClick={() => window.open(`https://pinterest.com/pin/create/button/?url=${encodeURIComponent(getShareUrl())}`)}
             >
               <PinterestIcon
                 className={`tabs_icon ${iconClass}`}
@@ -211,13 +264,33 @@ export function SocialShare({ responsiveProps, iconClass }) {
             </IconButton>
 
             <IconButton
-              onClick={() => window.open("https://www.linkedin.com/")}
+              onClick={() => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(getShareUrl())}`)}
             >
               <LinkedInIcon
                 className={`tabs_icon ${iconClass}`}
                 sx={{ color: "#0077B5" }}
               />
             </IconButton>
+
+            <Tooltip title={copied ? t("copied_") : t("copy_link_")}>
+              <IconButton onClick={handleCopy}>
+                <ContentCopyIcon
+                  className={`tabs_icon ${iconClass}`}
+                  sx={{ color: copied ? "#0EE6AC" : "inherit" }}
+                />
+              </IconButton>
+            </Tooltip>
+
+            {(window._wmShareContext?.thumbnailUrl) && (
+              <Tooltip title={copiedThumb ? t("copied_") : t("copy_thumbnail_")}>
+                <IconButton onClick={handleCopyThumb}>
+                  <ImageIcon
+                    className={`tabs_icon ${iconClass}`}
+                    sx={{ color: copiedThumb ? "#0EE6AC" : "inherit" }}
+                  />
+                </IconButton>
+              </Tooltip>
+            )}
           </Box>
         </Box>
       </Popover>

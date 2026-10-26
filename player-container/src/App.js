@@ -49,6 +49,7 @@ import {
   useEnvironments,
   EnvironmentsProvider,
 } from "./contexts/EnvironmentsContext.js";
+import { BASE_THUMBNAIL_URL } from "./contexts/MontagesContext";
 import { UIProvider } from "./Playlists/contexts/UIContext";
 import { useSession, SessionProvider } from "./contexts/SessionContext";
 import { PlaylistsProvider, usePlaylists } from "./contexts/PlaylistsContext";
@@ -446,6 +447,16 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
     track: "",
   });
 
+  useEffect(() => {
+    if (webPlayerOverlayInfo.montageName) {
+      window._wmShareContext = {
+        ...window._wmShareContext,
+        montageTitle: webPlayerOverlayInfo.montageName,
+        thumbnailUrl: webPlayerOverlayInfo.thumbnailUrl || "",
+      };
+    }
+  }, [webPlayerOverlayInfo.montageName, webPlayerOverlayInfo.thumbnailUrl]);
+
   console.log(
     "[App PlayerIntegration] isDemo, currentTheme(), theme, userId/session",
     isDemo,
@@ -537,10 +548,14 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
       const montage = playlist?.montages?.[montagePosition];
       const montageName =
         montage?.name || `Montage ${(montagePosition || 0) + 1}`;
+      const thumbnailUrl = montage?.thumbnail_url
+        ? `${BASE_THUMBNAIL_URL}&session:${userId}&artwork=${montage.thumbnail_url}`
+        : "";
 
       const overlayInfo = {
         playlistName,
         montageName,
+        thumbnailUrl,
         track: track || "1",
       };
 

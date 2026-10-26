@@ -209,6 +209,10 @@ const ShowMontages = (
     }
   }, []);
 
+  useEffect(() => {
+    window._wmShareContext = { ...window._wmShareContext, searchTerm };
+  }, [searchTerm]);
+
   // Effect: Fetch and sort data (with debounced search)
   useEffect(() => {
     console.log("[Montage Selection] searchMontages filters", { searchTerm });
@@ -725,8 +729,8 @@ const ShowMontages = (
                       variant="div"
                       color="text.secondary"
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto 1fr",
                         alignItems: "center",
                         position: "sticky",
                         top: 0,
@@ -744,19 +748,15 @@ const ShowMontages = (
                           {montage.tracks}
                         </span>
                       </span>
-                      <div
-                        style={{ display: "flex", justifyContent: "center" }}
-                      >
-                        <span style={{ verticalAlign: "middle" }}>
-                          {t("_duration")} {calculateDuration(montage.duration)}
-                        </span>
-                      </div>
-                      <span style={{ verticalAlign: "middle" }}>
+                      <span style={{ verticalAlign: "middle", textAlign: "center" }}>
+                        {t("_duration")} {calculateDuration(montage.duration)}
+                      </span>
+                      <span style={{ verticalAlign: "middle", display: "flex", justifyContent: "flex-end" }}>
                         {montage.rating === "NC-17" && <SixteenPlusIcon />}
                       </span>
                     </Typography>
                     <Typography
-                      variant="h5"
+                      variant="h6"
                       component="div"
                       style={{
                         display: "flex",
@@ -832,7 +832,7 @@ const ShowMontages = (
                               )
                             }
                           >
-                            Play
+                            {t("play_")}
                           </Button>
                         </Tooltip>
                         <Tooltip title={tooltipAdd}>
@@ -847,7 +847,7 @@ const ShowMontages = (
                               )
                             }
                           >
-                            Add
+                            {t("add_")}
                           </Button>
                         </Tooltip>
                       </CardActions>

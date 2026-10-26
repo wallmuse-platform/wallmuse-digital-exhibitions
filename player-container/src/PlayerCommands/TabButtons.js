@@ -35,6 +35,8 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
   const { isMobile, isTablet, isSmartTV, isSmartTVHD, isSmartTVUHD, iconSize } =
     responsiveProps;
 
+  const isPlugin = document.getElementById('root')?.dataset?.plugin === 'true';
+
   // Guest action popup hook - Must be here so it persists when modal closes
   const { handleAction: guestHandleAction, isDemo, popup } = useGuestActionPopup();
 
@@ -266,7 +268,7 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
             </Button>
           </Tooltip>
         </Stack>
-        {!isMobile && !isTablet && !isSmartTV && (
+        {!isMobile && !isTablet && !isSmartTV && !isPlugin && (
           <div
             style={{ position: "absolute", right: 10 }}
             onClick={() => setOpenPCPlayerApp(true)}
@@ -372,7 +374,7 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
         </Box>
       </Modal>
 
-      <Modal
+      {!isPlugin && <Modal
         className="modal"
         open={openPCPlayerApp}
         onClose={handleClosePCPlayerApp}
@@ -462,7 +464,7 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
             </a>
           </div>
         </Box>
-      </Modal>
+      </Modal>}
       {popup}
     </ThemeProvider>
   );

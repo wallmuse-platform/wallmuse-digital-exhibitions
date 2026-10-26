@@ -441,14 +441,14 @@ const AssociateDisplays = ({
                 displayEmpty
               >
                 <MenuItem value="">
-                  <em>None</em>
+                  <em>{t("none_")}</em>
                 </MenuItem>
                 {relatedMontage &&
                   Array.from(
                     { length: relatedMontage.tracks_count },
                     (_, i) => (
                       <MenuItem key={i} value={String(i + 1)}>
-                        Track {i + 1}
+                        {t("track_")} {i + 1}
                       </MenuItem>
                     ),
                   )}
