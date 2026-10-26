@@ -149,7 +149,7 @@ export default function Details({ thumbnail, name, setName, setCategories, check
                 </Grid>
                 <Grid item xs={3} sx={ detailsGridStyles }>
                     <Stack spacing={1}>
-                        <Typography variant="subtitle1">Main details</Typography>
+                        <Typography variant="subtitle1">{t('details.main', 'Main details')}</Typography>
                         <TextField id="standard-basic" placeholder="Montage name" variant="standard" value={ name } onChange={ handleNameChange }/>
                         <LanguageSelector language={language} handleLanguageChange={setLanguage} textLabel="Language" />
                         <Categories setCategories={setCategories} checkedCategories={ checkedCategories } variant="standard"/>

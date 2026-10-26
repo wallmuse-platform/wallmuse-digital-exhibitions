@@ -1,30 +1,23 @@
-// AIPromptBar.js — Stub for future AI prompt assistance
-
 import React from 'react';
-import { Box, TextField, Button, Typography } from '@mui/material';
+import { Box, Alert, Button, Tooltip } from '@mui/material';
 import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
 
-function AIPromptBar({ onParsed }) {
+function AIPromptBar() {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 2, opacity: 0.5, pointerEvents: 'none' }}>
-      <TextField
-        fullWidth
-        size="small"
-        multiline
-        maxRows={2}
-        placeholder={'Describe what you want — e.g. \u201c3-track montage of Zimmermann calligraphy sorted by date, copyright\u201d (AI assistance coming soon)'}
-        disabled
-        InputProps={{ readOnly: true }}
-      />
-      <Button
-        variant="outlined"
-        size="small"
-        disabled
-        startIcon={<AutoFixHighOutlinedIcon />}
-        sx={{ whiteSpace: 'nowrap', mt: '1px' }}
-      >
-        Parse
-      </Button>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+      <Alert severity="info" sx={{ flex: 1, fontSize: '0.85rem', py: 0.5 }}>
+        Describe what you want — e.g. <strong>&#x201C;3-track exhibition of Zimmermann calligraphy sorted by date&#x201D;</strong>
+      </Alert>
+      <Tooltip title="AI assistance coming soon">
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<AutoFixHighOutlinedIcon />}
+          sx={{ whiteSpace: 'nowrap' }}
+        >
+          Parse
+        </Button>
+      </Tooltip>
     </Box>
   );
 }

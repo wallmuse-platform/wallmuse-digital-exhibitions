@@ -58,7 +58,9 @@ export default function Rights({
         // Auto-apply when a right already exists for the current country
         if (rights && rights.length > 0) {
             const hasRight = rights.some(r =>
-                currentRightCountry === ALL ? typeof r.country === 'undefined' : r.country === currentRightCountry
+                currentRightCountry === ALL
+                    ? typeof r.country === 'undefined' || r.country === ALL
+                    : r.country === currentRightCountry
             );
             if (hasRight) {
                 const newRight = { type: newType, direction: 'A' };

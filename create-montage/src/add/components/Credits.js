@@ -177,7 +177,7 @@ const Credits = ({
                 <Box sx={{ flex: 1 }}>
                     <TextField
                         fullWidth
-                        label="Name"
+                        label={t('credits.name', 'Name')}
                         value={creditName}
                         onChange={(e) => setCreditName(e.target.value)}
                     />
@@ -185,21 +185,21 @@ const Credits = ({
                 {/* Type Select */}
                 <Box sx={{ flex: 1 }}>
                     <FormControl fullWidth>
-                        <InputLabel id="type-label">Type</InputLabel>
+                        <InputLabel id="type-label">{t('credits.type', 'Type')}</InputLabel>
                         <Select
                             labelId="type-label"
                             value={creditType}
                             onChange={(e) => setCreditType(e.target.value)}
                         >
-                            <MenuItem value="AUT">Author or Right Holder</MenuItem>
-                            <MenuItem value="LOC">Location</MenuItem>
-                            <MenuItem value="OWN">Artwork Owner</MenuItem>
-                            <MenuItem value="PHO">Photographer/Capturer</MenuItem>
-                            <MenuItem value="REP">Representation Rights</MenuItem>
+                            <MenuItem value="AUT">{t('credits.type.author', 'Author or Right Holder')}</MenuItem>
+                            <MenuItem value="LOC">{t('credits.type.location', 'Location')}</MenuItem>
+                            <MenuItem value="OWN">{t('credits.type.owner', 'Content Owner')}</MenuItem>
+                            <MenuItem value="PHO">{t('credits.type.photographer', 'Photographer/Capturer')}</MenuItem>
+                            <MenuItem value="REP">{t('credits.type.representation', 'Representation Rights')}</MenuItem>
                         </Select>
                     </FormControl>
                     <FormControl fullWidth sx={{ mt: 2 }}>
-                        <InputLabel id="location-label">Location</InputLabel>
+                        <InputLabel id="location-label">{t('credits.location', 'Location')}</InputLabel>
                         <Select
                             labelId="location-label"
                             value={creditLocation}
@@ -222,7 +222,7 @@ const Credits = ({
                     onClick={handleAddOrUpdateCredit}
                     disabled={!creditName || !creditType}
                 >
-                    {editing ? t("Update Credit") : t("Add Credit")}
+                    {editing ? t('credits.update', 'Update Credit') : t('credits.add', 'Add Credit')}
                 </Button>
             </Box>
             {/* List of Credits */}

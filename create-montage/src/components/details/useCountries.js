@@ -1,17 +1,17 @@
 // useCountries.js
+import { useTranslation } from 'react-i18next';
 import countriesEN from '../../locales/en/countriesEN.json';
 import countriesFR from '../../locales/fr/countriesFR.json';
 
-export const useCountries = (lang = 'en') => {
-  const localeData = lang === 'fr' ? countriesFR : countriesEN;
+const LOCALE_MAP = { fr: countriesFR };
 
-  const countries = Object.entries(localeData).map(([value, label]) => ({
-    value,
-    label,
-  }));
+export const useCountries = () => {
+  const { i18n, t } = useTranslation();
+  const lang = (i18n.language || 'en').split('-')[0];
+  const localeData = LOCALE_MAP[lang] || countriesEN;
 
-  // Add the 'ALL' option manually if not in the JSON
-  countries.unshift({ value: 'ALL', label: 'All Countries' });
+  const countries = Object.entries(localeData).map(([value, label]) => ({ value, label }));
+  countries.unshift({ value: 'ALL', label: t('countries.all', 'All Countries') });
 
   return countries;
 };

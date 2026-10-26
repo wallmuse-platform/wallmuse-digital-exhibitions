@@ -47,7 +47,7 @@ ErrorDialog.propTypes = {
     callbackfn: PropTypes.func
 };
 
-export default function BasicGrid() {
+export default function BasicGrid({ pendingEdit, clearPendingEdit }) {
 
     const { t } = useTranslation();
 
@@ -98,6 +98,7 @@ export default function BasicGrid() {
     const [saveNew, setSaveNew] = React.useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = React.useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+    const [wizardTips, setWizardTips] = React.useState(null);
 
     const handleOperationChange = (event, newOperation) => {
         if (newOperation !== null && newOperation !== operation) {
@@ -137,6 +138,18 @@ export default function BasicGrid() {
         console.log('[Grid] currentUser.id:', currentUser?.id);
     }, [currentUser]);
 
+    useEffect(() => {
+        if (!pendingEdit) return;
+        setOperation(OperationTypes.MODIFY);
+        setElement(BinTypes.ARTWORK);
+        handleEditMontageDrop({ id: pendingEdit.montageId })
+            .then(() => {
+                setWizardTips({ tracksUnaligned: pendingEdit.tracksUnaligned });
+            })
+            .catch(err => console.error('[Grid] wizard redirect — failed to load montage:', err));
+        clearPendingEdit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pendingEdit]);
 
     useEffect(() => {
         let desc = selectedChip === "1" ? searchTerm : null;
@@ -475,6 +488,25 @@ export default function BasicGrid() {
                     </Snackbar>
                 ) : null
             }
+
+            {wizardTips && (
+                <Snackbar
+                    open={true}
+                    autoHideDuration={null}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                    onClose={() => setWizardTips(null)}
+                >
+                    <Alert severity="info" onClose={() => setWizardTips(null)}>
+                        <ul style={{ margin: 0, paddingLeft: '1.2em' }}>
+                            <li>{t('wizard.redirect.tip.thumbnail', 'Select a thumbnail by double-clicking an artwork from the left list.')}</li>
+                            <li>{t('wizard.redirect.tip.description', 'Add a description in the Details panel.')}</li>
+                            {wizardTips.tracksUnaligned && (
+                                <li>{t('wizard.redirect.tip.tracks', "Track durations don't align — adjust item durations to synchronize tracks.")}</li>
+                            )}
+                        </ul>
+                    </Alert>
+                </Snackbar>
+            )}
 
             {/* Top row: natural content height, no vh */}
             <Box sx={{ display: 'flex', flexShrink: 0 }}>

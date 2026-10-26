@@ -166,7 +166,8 @@ export const theme = palette => {
                     root: {
                         margin: '0 10px',
                         border: '1px solid',
-                        borderColor: mainColor
+                        borderColor: mainColor,
+                        color: textPrimary,
                     }
                     // Specific targeting when used within Accordion
                 }

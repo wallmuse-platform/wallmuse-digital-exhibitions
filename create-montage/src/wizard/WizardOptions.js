@@ -38,7 +38,7 @@ function WizardOptions({ tracks, setTracks, order, setOrder, copyright, setCopyr
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Typography variant="subtitle2" color="text.secondary">
+      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
         {t('wizard.options.title', 'Options')}
       </Typography>
 
@@ -58,7 +58,7 @@ function WizardOptions({ tracks, setTracks, order, setOrder, copyright, setCopyr
         {/* Name prefix */}
         <TextField
           size="small"
-          label={t('wizard.options.name', 'Montage name')}
+          label={t('wizard.options.name', 'Exhibition name')}
           placeholder={t('wizard.options.name.placeholder', 'e.g. Zimmermann_2023')}
           value={namePrefix}
           onChange={e => setNamePrefix(e.target.value)}

@@ -560,9 +560,27 @@ export async function uploadAdditionalFiles(file, kind, artworkId, onProgress = 
         if (response.status === 200) {
             const responseData = response.data;
 
+            // Fast string-based quota check before XML parsing (catches parse failures too)
+            if (typeof responseData === 'string' &&
+                (responseData.includes('code="507"') || responseData.includes("code='507'") ||
+                 responseData.includes('QuotaExceeded') || responseData.includes('Error507'))) {
+                throw new Error(t('error.quota.exceeded', 'Storage quota exceeded. Upgrade your plan to upload more files.'));
+            }
+
             // Parse the XML response
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(responseData, 'application/xml');
+
+            // Check for server-side error before extracting URLs
+            const errorEl = xmlDoc.getElementsByTagName('error')[0];
+            if (errorEl) {
+                const code = errorEl.getAttribute('code');
+                const msg  = errorEl.getAttribute('message') || '';
+                if (code === '507' || msg.includes('QuotaExceeded')) {
+                    throw new Error(t('error.quota.exceeded', 'Storage quota exceeded. Upgrade your plan to upload more files.'));
+                }
+                throw new Error(msg || `Server error ${code}`);
+            }
 
             // Extract the URLs from the XML
             const urlElements = xmlDoc.getElementsByTagName('url');

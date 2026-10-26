@@ -117,7 +117,7 @@ export default function SearchArea({
                         onPageChange={ (e, p) => setPage(p) }
                         rowsPerPage={rowsPerPage}
                         onRowsPerPageChange={handleChangeRowsPerPage}
-                        labelRowsPerPage="Show: "
+                        labelRowsPerPage={t('sort.show', 'Show: ')}
                         className="wm-pagination"
                     />
                 </Box>

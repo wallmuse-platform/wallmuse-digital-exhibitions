@@ -16,6 +16,9 @@ import ReplayIcon from '@mui/icons-material/Replay';
 import { selectTheme } from '../theme/ThemeUtils';
 import { ThemeProvider } from '@mui/material/styles';
 import { useUserContext } from '../context/UserContext';
+import { useTranslation } from 'react-i18next';
+import batchUploadEN from '../locales/en/batchUploadEN.json';
+import batchUploadFR from '../locales/fr/batchUploadFR.json';
 import {
   checkBatchFiles,
   saveBatchChoices,
@@ -29,6 +32,31 @@ const TEMPLATE_PATH = '/wallmuse/components/com_wmbatchartworkupload/views/wmbat
 const templateUrl = window.location.hostname.includes('wallmuse.com')
   ? TEMPLATE_PATH
   : `https://wallmuse.com${TEMPLATE_PATH}`;
+
+const LICENSE_TYPE_MAP = {
+  // String labels
+  FREE:                  '-1',
+  COPYRIGHT:             '-2',
+  COPYLEFT:              '-3',
+  CC_BY:                 '-4',
+  CC_BY_SA:              '-5',
+  CC_BY_ND:              '-6',
+  CC_BY_NC:              '-7',
+  CC_BY_NC_SA:           '-8',
+  CC_BY_NC_ND:           '-9',
+  OTHER:                 '-10',
+  NO_ACCESS:             '-11',
+  CC0:                   '-12',
+  NO_PUBLIC_PLACES:      '-13',
+  NO_HOSPITALS:          '-14',
+  NO_EDUCATION_FREE:     '-15',
+  NO_MON_EDUCATION_FREE: '-16',
+  // Numeric IDs (pass-through)
+  '-1': '-1', '-2': '-2', '-3': '-3', '-4': '-4',
+  '-5': '-5', '-6': '-6', '-7': '-7', '-8': '-8',
+  '-9': '-9', '-10': '-10', '-11': '-11', '-12': '-12',
+  '-13': '-13', '-14': '-14', '-15': '-15', '-16': '-16',
+};
 
 const getFilename = (path) => {
   if (!path) return '';
@@ -44,6 +72,54 @@ const parseTSV = (text) => {
     .map(line => line.split('\t'));
 };
 
+// Re-encode a TSV string as UTF-16 LE with BOM (matches the server's expected format)
+const toUtf16LE = (str) => {
+  const buf = new ArrayBuffer(str.length * 2);
+  const view = new DataView(buf);
+  for (let i = 0; i < str.length; i++) {
+    view.setUint16(i * 2, str.charCodeAt(i), true); // true = little-endian
+  }
+  return buf;
+};
+
+// Transform column 23 (License Type) from string labels to numeric codes before upload
+const transformCsvLicenseTypes = (file, licenseMap) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsText(file, 'UTF-16');
+    reader.onload = (e) => {
+      try {
+        const rows = parseTSV(e.target.result);
+        let changed = false;
+        const transformed = rows.map((row, idx) => {
+          if (idx === 0) return row; // header row unchanged
+          const lt = (row[23] || '').trim().toUpperCase();
+          const mapped = lt && licenseMap[lt];
+          if (mapped && mapped !== row[23]) {
+            changed = true;
+            const newRow = [...row];
+            newRow[23] = mapped;
+            return newRow;
+          }
+          return row;
+        });
+        if (!changed) { resolve(file); return; }
+        const tsv = '\uFEFF' + transformed.map(r => r.join('\t')).join('\r\n');
+        const blob = new Blob([toUtf16LE(tsv)], { type: 'text/plain' });
+        resolve(new File([blob], file.name, { type: file.type }));
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = reject;
+  });
+
+const interpolate = (str, vars) =>
+  Object.entries(vars).reduce((acc, [k, v]) => acc.replace(`{${k}}`, v), str);
+
+const useBatchStrings = () => {
+  const { i18n } = useTranslation();
+  return i18n.language?.startsWith('fr') ? batchUploadFR : batchUploadEN;
+};
+
 const ROW_COLORS = {
   default: 'inherit',
   matched: '#e3f2fd',
@@ -51,25 +127,21 @@ const ROW_COLORS = {
   error:   '#ffebee',
 };
 
-const STEPS = ['Metadata file', 'Content files', 'Check', 'Upload', 'Import', 'Done'];
-
 // ─── AI Preamble ──────────────────────────────────────────────────────────────
 
-function AIPreamble() {
+function AIPreamble({ s }) {
   return (
     <Accordion disableGutters sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-          AI-Assisted Template Guide - How to fill the metadata spreadsheet
+          {s.guideTitle}
         </Typography>
       </AccordionSummary>
       <AccordionDetails>
         <Stack spacing={2}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Alert severity="info" sx={{ fontSize: '0.85rem', flex: 1 }}>
-              You can use an AI assistant (ChatGPT, Claude, etc.) to pre-fill the batch template.
-              Copy the prompt below, paste it into your AI tool, and use the result to fill
-              the Excel spreadsheet before exporting it as <strong>UTF-16 Unicode Text (.txt)</strong>.
+              {s.guideAlert}
             </Alert>
             <Button
               variant="outlined"
@@ -80,72 +152,35 @@ function AIPreamble() {
               download="batch_upload_template.xls"
               sx={{ whiteSpace: 'nowrap' }}
             >
-              Download template
+              {s.downloadTemplate}
             </Button>
           </Box>
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Prompt template</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{s.promptLabel}</Typography>
           <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50', fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap' }}>
-{`I need to fill a batch upload spreadsheet for [N] contents by [Author First Name] [Author Last Name], created in [YEAR].
-All works belong to the category [CATEGORY]. The Rights Representative is [CMO acronym or author's name].
-
-Please create one tab-separated row per artwork using these column headers in order:
-Author first name | Author nick name | Author surname | Artwork title | Year
-| Description Eng | Description Fr | Description Other | Other Language
-| Category1 | Category2 | Category3 | Categories | Country
-| Rights Representation Acronym | Rights Holder | Place | Credits
-| Path artwork (HD) | Path trailer (TR) | Path Image | Keywords | Streaming (1/0) | License Type
-
-Title, Surname, Category, Year (YYYY or YYYY-YYYY) are mandatory.
-For Rights, use one of: COPYRIGHT, FREE, COPYLEFT, CC_BY, CC_BY_SA, CC_BY_ND, CC_BY_NC, CC_BY_NC_SA, CC_BY_NC_ND, CC0, OTHER, NO_ACCESS
-For Streaming (1/0): use 1 for web player (default), 0 for standalone player only.
-
-The contents (file names) are:
-- [filename_1.mp4]
-- [filename_2.mp4]
-
-The result should be in UTF-16 Unicode Text (.txt) format.
-`}
+            {s.prompt}
           </Paper>
 
           <Divider />
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            Rights Representation - what to enter
-          </Typography>
-          <Typography sx={{ fontSize: '0.85rem' }}>
-            Examples: <strong>ADAGP</strong> - France &nbsp;|&nbsp; <strong>DACS</strong> - UK &nbsp;|&nbsp; <strong>VG Bild-Kunst</strong> - Germany &nbsp;|&nbsp; <strong>SIAE</strong> - Italy &nbsp;|&nbsp; <strong>VEGAP</strong> - Spain &nbsp;|&nbsp; <strong>SABAM</strong> - Belgium &nbsp;|&nbsp; <strong>BONO</strong> - Norway &nbsp;|&nbsp; <strong>Bildupphovsrätt</strong> - Sweden
-          </Typography>
-          <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>
-            <strong>If the Author is NOT a member of any CMO</strong>, enter the author's own full name
-            as the Rights Holder (e.g. <em>Christian Zimmermann</em>).
-          </Alert>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{s.rightsRepTitle}</Typography>
+          <Typography sx={{ fontSize: '0.85rem' }}>{s.rightsRepExamples}</Typography>
+          <Alert severity="warning" sx={{ fontSize: '0.85rem' }}>{s.rightsRepWarning}</Alert>
 
           <Divider />
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Streaming (1/0) - what to enter</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{s.streamingTitle}</Typography>
           <Box component="ul" sx={{ pl: 3, mt: 0, '& li': { fontSize: '0.85rem', mb: 0.5 } }}>
-            <li><strong>1</strong> (or leave blank) - artwork streams via the web player (default for all plugin uploads)</li>
-            <li><strong>0</strong> - URL is hidden from the web player; artwork plays only in the protected standalone player</li>
+            <li>{s.streaming1}</li>
+            <li>{s.streaming0}</li>
           </Box>
 
           <Divider />
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>License Type - what to enter</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{s.fileNamingTitle}</Typography>
           <Box component="ul" sx={{ pl: 3, mt: 0, '& li': { fontSize: '0.85rem', mb: 0.5 } }}>
-            <li><strong>COPYRIGHT</strong> - all rights reserved</li>
-            <li><strong>CC_BY</strong> - Creative Commons Attribution</li>
-            <li><strong>CC_BY_SA</strong> - CC Attribution-ShareAlike &nbsp;|&nbsp; <strong>CC_BY_ND</strong> - CC Attribution-NoDerivs</li>
-            <li><strong>CC_BY_NC</strong> - CC Attribution-NonCommercial &nbsp;|&nbsp; <strong>CC_BY_NC_SA</strong> / <strong>CC_BY_NC_ND</strong></li>
-            <li><strong>CC0</strong> - public domain &nbsp;|&nbsp; <strong>FREE</strong> - free use &nbsp;|&nbsp; <strong>COPYLEFT</strong> &nbsp;|&nbsp; <strong>OTHER</strong> &nbsp;|&nbsp; <strong>NO_ACCESS</strong></li>
-          </Box>
-
-          <Divider />
-
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>File naming rules</Typography>
-          <Box component="ul" sx={{ pl: 3, mt: 0, '& li': { fontSize: '0.85rem', mb: 0.5 } }}>
-            <li>Use hyphens <code>-</code> or underscores <code>_</code> instead of spaces.</li>
-            <li>The filename in the spreadsheet must match the file you upload (accents are supported).</li>
+            <li>{s.fileNaming1}</li>
+            <li>{s.fileNaming2}</li>
           </Box>
         </Stack>
       </AccordionDetails>
@@ -211,6 +246,7 @@ function BatchUpload({ wpLoggedIn }) {
   const theme = selectTheme();
   const { isPremium } = useUserContext() || {};
   const canAccess = wpLoggedIn || isPremium;
+  const s = useBatchStrings();
 
   // Files
   const [csvFile,      setCsvFile]      = useState(null);
@@ -249,8 +285,9 @@ function BatchUpload({ wpLoggedIn }) {
   const [snackbar, setSnackbar] = useState({ open: false, text: '', severity: 'success' });
 
   // Scroll refs
-  const actionRef   = useRef(null); // action buttons row
-  const progressRef = useRef(null); // upload progress section
+  const actionRef        = useRef(null); // action buttons row
+  const progressRef      = useRef(null); // upload progress section
+  const transformedCsvRef = useRef(null); // CSV with numeric license codes for server
 
   // ── Snackbar helpers ─────────────────────────────────────────────────────
 
@@ -262,11 +299,11 @@ function BatchUpload({ wpLoggedIn }) {
 
   useEffect(() => {
     if (checkDone && !checkHasErrors) {
-      notify('All files validated - click Upload Contents to continue');
+      notify(s.notifyValidated);
       actionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     if (checkDone && checkHasErrors) {
-      notify('Some rows have errors - review the table below', 'warning');
+      notify(s.notifyRowErrors, 'warning');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkDone, checkHasErrors]);
@@ -279,7 +316,7 @@ function BatchUpload({ wpLoggedIn }) {
 
   useEffect(() => {
     if (uploadDone) {
-      notify('Upload complete - click Import Contents to finish');
+      notify(s.notifyUploadDone);
       actionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -287,7 +324,7 @@ function BatchUpload({ wpLoggedIn }) {
 
   useEffect(() => {
     if (importResult?.success) {
-      notify('All contents imported successfully!');
+      notify(s.notifyImportDone);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importResult]);
@@ -333,7 +370,7 @@ function BatchUpload({ wpLoggedIn }) {
       f.type.startsWith('text/')
     );
     if (!file) {
-      setMessage({ severity: 'error', text: 'Please select a UTF-16 Unicode Text (.txt) file.' });
+      setMessage({ severity: 'error', text: s.msgWrongFormat });
       return;
     }
     const reader = new FileReader();
@@ -341,7 +378,7 @@ function BatchUpload({ wpLoggedIn }) {
     reader.onload = (e) => {
       const rows = parseTSV(e.target.result);
       if (rows.length < 2) {
-        setMessage({ severity: 'error', text: 'The file appears empty or invalid.' });
+        setMessage({ severity: 'error', text: s.msgEmptyFile });
         return;
       }
       hdMap.current = {};
@@ -361,6 +398,7 @@ function BatchUpload({ wpLoggedIn }) {
         const licenseType  = (row[23] || '').trim();
         return { title: row[3] || '', artist: artist + (row[1] ? ` (${row[1]})` : ''), hdPath: row[18] || '', streaming, licenseType };
       });
+      transformedCsvRef.current = null;
       setCsvFile(file);
       setTableRows(parsed);
       setRowStatus(newStatus);
@@ -371,17 +409,17 @@ function BatchUpload({ wpLoggedIn }) {
       setUploadDone(false);
       setImportResult(null);
       setUploadProgress({});
-      setMessage({ severity: 'success', text: `"${file.name}" loaded — ${parsed.length} row(s).` });
+      setMessage({ severity: 'success', text: interpolate(s.msgFileLoaded, { filename: file.name, n: parsed.length }) });
     };
     reader.onerror = () =>
-      setMessage({ severity: 'error', text: `Unable to read "${file.name}". Make sure it is UTF-16 Unicode Text.` });
+      setMessage({ severity: 'error', text: interpolate(s.msgReadError, { filename: file.name }) });
   }, []);
 
   // ── Artwork files handling ────────────────────────────────────────────────
 
   const handleArtworkFiles = useCallback((files) => {
     if (!csvFile) {
-      setMessage({ severity: 'warning', text: 'Upload the TXT metadata file first.' });
+      setMessage({ severity: 'warning', text: s.msgNoCSV });
       return;
     }
     const newRowStatus = {};
@@ -395,7 +433,7 @@ function BatchUpload({ wpLoggedIn }) {
       if (found) toAdd.push(file);
     });
     if (toAdd.length === 0) {
-      setMessage({ severity: 'warning', text: 'None of the selected files matched filenames in the spreadsheet.' });
+      setMessage({ severity: 'warning', text: s.msgNoMatch });
       return;
     }
     setRowStatus(prev => ({ ...prev, ...newRowStatus }));
@@ -403,7 +441,7 @@ function BatchUpload({ wpLoggedIn }) {
       const existing = new Set(prev.map(f => f.name));
       return [...prev, ...toAdd.filter(f => !existing.has(f.name))];
     });
-    setMessage({ severity: 'info', text: `${toAdd.length} file(s) matched and ready - click Check Files.` });
+    setMessage({ severity: 'info', text: interpolate(s.msgFilesMatched, { n: toAdd.length }) });
   }, [csvFile]);
 
   // ── Check files ───────────────────────────────────────────────────────────
@@ -411,7 +449,9 @@ function BatchUpload({ wpLoggedIn }) {
   const handleCheck = async () => {
     setChecking(true);
     setMessage(null);
-    const result = await checkBatchFiles(csvFile, artworkFiles);
+    const fileToCheck = await transformCsvLicenseTypes(csvFile, LICENSE_TYPE_MAP);
+    transformedCsvRef.current = fileToCheck;
+    const result = await checkBatchFiles(fileToCheck, artworkFiles);
     setChecking(false);
     if (result.error) {
       setMessage({ severity: 'error', text: result.error });
@@ -429,6 +469,31 @@ function BatchUpload({ wpLoggedIn }) {
         newStatus[i] = 'ok';
       }
     });
+    // Client-side license type validation
+    tableRows.forEach((row, i) => {
+      const lt = (row.licenseType || '').trim().toUpperCase();
+      if (!lt && !isPremium) {
+        if (newStatus[i] !== 'error') errorCount++;
+        newStatus[i] = 'error';
+        newErrors[i] = newErrors[i]
+          ? `${newErrors[i]}; ${s.errLicenseRequired}`
+          : s.errLicenseRequired;
+        return;
+      }
+      if (!lt) return;
+      let ltError = null;
+      if (!(lt in LICENSE_TYPE_MAP)) {
+        ltError = interpolate(s.errInvalidLicense, { lt: row.licenseType, valid: Object.keys(LICENSE_TYPE_MAP).join(', ') });
+      } else if ((lt === 'COPYRIGHT' || lt === '-2') && !isPremium) {
+        ltError = s.errCopyrightPremium;
+      }
+      if (ltError) {
+        if (newStatus[i] !== 'error') errorCount++;
+        newStatus[i] = 'error';
+        newErrors[i] = newErrors[i] ? `${newErrors[i]}; ${ltError}` : ltError;
+      }
+    });
+
     setRowStatus(prev => ({ ...prev, ...newStatus }));
     setRowErrors(newErrors);
     setCheckDone(true);
@@ -440,13 +505,14 @@ function BatchUpload({ wpLoggedIn }) {
   const handleUpload = async () => {
     setUploading(true);
     setMessage(null);
-    await saveBatchChoices(csvFile, artworkFiles);
+    await saveBatchChoices(transformedCsvRef.current || csvFile, artworkFiles);
 
     const initial = {};
     artworkFiles.forEach(f => { initial[f.name] = { percent: 0, status: 'pending' }; });
     setUploadProgress(initial);
 
     // Upload one at a time - safer for large video files
+    let quotaHit = false;
     for (const file of artworkFiles) {
       setUploadProgress(prev => ({ ...prev, [file.name]: { percent: 0, status: 'uploading' } }));
       const result = await uploadBatchArtwork(csvFile, file, (pct) => {
@@ -459,9 +525,14 @@ function BatchUpload({ wpLoggedIn }) {
           status: result.success ? 'success' : 'error',
         },
       }));
+      if (result.quota) {
+        setMessage({ severity: 'error', text: s.errQuotaExceeded || 'Storage quota exceeded. Upgrade your plan to upload more files.' });
+        quotaHit = true;
+        break;
+      }
     }
     setUploading(false);
-    setUploadDone(true);
+    if (!quotaHit) setUploadDone(true);
   };
 
   // ── Import artworks ───────────────────────────────────────────────────────
@@ -469,7 +540,7 @@ function BatchUpload({ wpLoggedIn }) {
   const handleImport = async () => {
     setImporting(true);
     setMessage(null);
-    const result = await importBatchArtworks(csvFile);
+    const result = await importBatchArtworks(transformedCsvRef.current || csvFile);
     setImporting(false);
     setImportResult(result);
   };
@@ -493,8 +564,7 @@ function BatchUpload({ wpLoggedIn }) {
       <ThemeProvider theme={theme}>
         <Box sx={{ p: 4, textAlign: 'center' }}>
           <Alert severity="warning" sx={{ maxWidth: 480, mx: 'auto' }}>
-            <strong>Account Restricted</strong> - Batch Upload is available for logged-in editors
-            and administrators only.
+            {s.accountRestricted}
           </Alert>
         </Box>
       </ThemeProvider>
@@ -506,12 +576,12 @@ function BatchUpload({ wpLoggedIn }) {
       <Box sx={{ maxWidth: 900, mx: 'auto', px: { xs: 2, sm: 3 }, py: 3 }}>
 
         <Typography variant="h6" align="center" sx={{ mb: 2, fontWeight: 700, letterSpacing: 1 }}>
-          BATCH UPLOAD
+          {s.pageTitle}
         </Typography>
 
         {/* ── Stepper ── */}
         <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 3 }}>
-          {STEPS.map(label => (
+          {s.steps.map(label => (
             <Step key={label}>
               <StepLabel>{label}</StepLabel>
             </Step>
@@ -519,7 +589,7 @@ function BatchUpload({ wpLoggedIn }) {
         </Stepper>
 
         {/* AI preamble */}
-        <AIPreamble />
+        <AIPreamble s={s} />
 
         {/* Inline message */}
         {message && (
@@ -530,11 +600,11 @@ function BatchUpload({ wpLoggedIn }) {
 
         {/* ── Step 1: TXT file ── */}
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-          Step 1 - Select the UTF-16 metadata file (.txt)
+          {s.step1Title}
         </Typography>
         <Dropzone
-          label="Drop your UTF-16 Unicode Text file here, or click to browse"
-          hint="Export from Excel: Save As → Unicode Text (.txt)"
+          label={s.dropZone1Label}
+          hint={s.dropZone1Hint}
           accept=".txt,.csv,text/*"
           multiple={false}
           onFiles={handleCSVFiles}
@@ -553,19 +623,21 @@ function BatchUpload({ wpLoggedIn }) {
         {tableRows.length > 0 && (
           <Box sx={{ mt: 3 }}>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Contents preview ({tableRows.length} row{tableRows.length !== 1 ? 's' : ''})
+              {tableRows.length === 1
+                ? interpolate(s.tablePreview, { n: tableRows.length })
+                : interpolate(s.tablePreviewPlural, { n: tableRows.length })}
             </Typography>
             <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300, overflow: 'auto' }}>
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700 }}>#</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Title</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Author</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>HD file</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Streaming</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>License</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{s.colTitle}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{s.colAuthor}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{s.colHD}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{s.colStreaming}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{s.colLicense}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{s.colStatus}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -588,12 +660,12 @@ function BatchUpload({ wpLoggedIn }) {
                           {row.licenseType || 'COPYRIGHT'}
                         </TableCell>
                         <TableCell>
-                          {status === 'default' && <Chip label="Waiting"  size="small" />}
-                          {status === 'matched' && <Chip label="Matched"  size="small" color="primary" />}
+                          {status === 'default' && <Chip label={s.statusWaiting}  size="small" />}
+                          {status === 'matched' && <Chip label={s.statusMatched}  size="small" color="primary" />}
                           {status === 'ok'      && <Chip label="OK"       size="small" color="success" icon={<CheckCircleIcon />} />}
                           {status === 'error'   && (
-                            <Tooltip title={rowErrors[i] || 'Error'}>
-                              <Chip label="Error" size="small" color="error" icon={<ErrorIcon />} />
+                            <Tooltip title={rowErrors[i] || s.statusError}>
+                              <Chip label={s.statusError} size="small" color="error" icon={<ErrorIcon />} />
                             </Tooltip>
                           )}
                         </TableCell>
@@ -610,11 +682,11 @@ function BatchUpload({ wpLoggedIn }) {
         {csvFile && !uploadDone && (
           <Box sx={{ mt: 3 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-              Step 2 - Select content files
+              {s.step2Title}
             </Typography>
             <Dropzone
-              label="Drop content files here, or click to browse"
-              hint="Select all files at once (MP4, JPG, PNG…). Only files matching the spreadsheet are accepted."
+              label={s.dropZone2Label}
+              hint={s.dropZone2Hint}
               accept="video/*,image/*"
               multiple
               onFiles={handleArtworkFiles}
@@ -649,7 +721,7 @@ function BatchUpload({ wpLoggedIn }) {
                 startIcon={checking ? <HourglassEmptyIcon /> : null}
                 sx={{ mb: 1 }}
               >
-                {checking ? 'Checking files…' : 'Check Files'}
+                {checking ? s.btnChecking : s.btnCheck}
               </Button>
             )}
             {checking && <LinearProgress sx={{ mb: 2, borderRadius: 2 }} />}
@@ -667,8 +739,10 @@ function BatchUpload({ wpLoggedIn }) {
                 sx={{ mb: 1 }}
               >
                 {uploading
-                  ? `Uploading… ${overallPercent}%`
-                  : `Upload ${artworkFiles.length} Content${artworkFiles.length !== 1 ? 's' : ''}`}
+                  ? interpolate(s.btnUploading, { pct: overallPercent })
+                  : artworkFiles.length === 1
+                    ? interpolate(s.btnUpload, { n: artworkFiles.length })
+                    : interpolate(s.btnUploadPlural, { n: artworkFiles.length })}
               </Button>
             )}
 
@@ -684,7 +758,7 @@ function BatchUpload({ wpLoggedIn }) {
                 startIcon={importing ? <HourglassEmptyIcon /> : null}
                 sx={{ mb: 1 }}
               >
-                {importing ? 'Importing contents…' : 'Import Contents'}
+                {importing ? s.btnImporting : s.btnImport}
               </Button>
             )}
             {importing && <LinearProgress color="success" sx={{ mb: 2, borderRadius: 2 }} />}
@@ -698,12 +772,12 @@ function BatchUpload({ wpLoggedIn }) {
           <Box ref={progressRef} sx={{ mt: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography variant="subtitle2">
-                Upload progress
+                {s.uploadProgressTitle}
               </Typography>
               {uploadDone && (
                 <Typography variant="caption" color={uploadFailCount > 0 ? 'error' : 'success.main'}>
-                  {uploadSuccessCount}/{artworkFiles.length} succeeded
-                  {uploadFailCount > 0 && ` · ${uploadFailCount} failed`}
+                  {interpolate(s.uploadSucceeded, { ok: uploadSuccessCount, total: artworkFiles.length })}
+                  {uploadFailCount > 0 && interpolate(s.uploadFailed, { n: uploadFailCount })}
                 </Typography>
               )}
             </Box>
@@ -729,7 +803,7 @@ function BatchUpload({ wpLoggedIn }) {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                       <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{f.name}</Typography>
                       <Typography variant="caption" color={isError ? 'error' : isDone ? 'success.main' : 'text.secondary'}>
-                        {isError ? '✗ Failed' : isDone ? '✓ Done' : isPending ? 'Waiting…' : `${prog.percent}%`}
+                        {isError ? s.fileStatusFailed : isDone ? s.fileStatusDone : isPending ? s.fileStatusWaiting : `${prog.percent}%`}
                       </Typography>
                     </Box>
                     <LinearProgress
@@ -751,21 +825,21 @@ function BatchUpload({ wpLoggedIn }) {
           <Box sx={{ mt: 3 }}>
             {importResult.success ? (
               <Alert severity="success" icon={<CheckCircleIcon />} sx={{ fontSize: '1rem' }}>
-                <strong>Import complete.</strong> All contents are now visible in <em>Add Content → List Contents</em> and <em>Curate → Contents</em>.
+                {s.importSuccess}
               </Alert>
             ) : (
               <Box>
                 <Alert severity="error" sx={{ mb: 1 }}>
-                  <strong>Some contents could not be imported.</strong> Others were saved successfully.
+                  {s.importPartialError}
                 </Alert>
                 <TableContainer component={Paper} variant="outlined">
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 700 }}>Line</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Artwork</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Author</TableCell>
-                        <TableCell sx={{ fontWeight: 700 }}>Error</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>{s.errColLine}</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>{s.errColArtwork}</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>{s.errColAuthor}</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>{s.errColError}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -774,7 +848,7 @@ function BatchUpload({ wpLoggedIn }) {
                           <TableCell>{err.line || '—'}</TableCell>
                           <TableCell>{err.artwork || '—'}</TableCell>
                           <TableCell>{[err.firstname, err.lastname].filter(Boolean).join(' ') || '—'}</TableCell>
-                          <TableCell>{err.error}</TableCell>
+                          <TableCell>{err.quota ? (s.errQuotaExceeded || 'Storage quota exceeded. Upgrade your plan to upload more files.') : err.error}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -792,7 +866,7 @@ function BatchUpload({ wpLoggedIn }) {
               onClick={handleReset}
               sx={{ mt: 3 }}
             >
-              Upload Another Batch
+              {s.btnRestart}
             </Button>
           </Box>
         )}
@@ -803,11 +877,11 @@ function BatchUpload({ wpLoggedIn }) {
       <Snackbar
         open={snackbar.open}
         autoHideDuration={5000}
-        onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <MuiAlert
-          onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
           severity={snackbar.severity}
           variant="filled"
           elevation={6}

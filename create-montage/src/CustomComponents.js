@@ -289,7 +289,7 @@ export const CustomSnackbar = ({
     // Base styles with modified dimensions and animation
     const baseStyles = {
         display: open || isVisible ? 'block' : 'none',
-        maxWidth: '300px',
+        maxWidth: '600px',
         minWidth: '175px',
         width: '100%',
         transition: `opacity ${transitionDuration}ms, transform ${transitionDuration}ms`,

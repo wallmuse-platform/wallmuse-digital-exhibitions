@@ -45,11 +45,11 @@ function WizardFilters({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Typography variant="subtitle2" color="text.secondary">
-        {t('wizard.filters.title', 'Artwork Selection')}
+      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+        {t('wizard.filters.title', 'Contents Selection')}
         {' '}
         <Chip
-          label={`${filteredCount} ${t('wizard.filters.artworks', 'artworks')}`}
+          label={`${filteredCount} ${t('wizard.filters.artworks', 'contents')}`}
           size="small"
           color={filteredCount > 0 ? 'primary' : 'default'}
           sx={{ ml: 1 }}

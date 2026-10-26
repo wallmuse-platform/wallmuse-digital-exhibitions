@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { BaseThumbnailContext } from '../context/ArtworksContext';
 import { useSession } from '../context/UserContext';
 
-function WizardPreview({ distributedTracks, namePrefix, saving, saveResult, onSave }) {
+function WizardPreview({ distributedTracks, namePrefix, saving, onSave }) {
   const { t } = useTranslation();
   const baseThumbnailURL = useContext(BaseThumbnailContext);
   const sessionId = useSession();
@@ -38,13 +38,13 @@ function WizardPreview({ distributedTracks, namePrefix, saving, saveResult, onSa
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="subtitle2" color="text.secondary">
+        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
           {t('wizard.preview.title', 'Preview')}
           {' — '}
           <strong>{namePrefix || t('wizard.preview.unnamed', 'Untitled')}</strong>
           {', '}
           {distributedTracks.length} {t('wizard.preview.tracks', 'tracks')},
-          {' '}{totalArtworks} {t('wizard.preview.artworks', 'artworks')}
+          {' '}{totalArtworks} {t('wizard.preview.artworks', 'contents')}
         </Typography>
         <Button
           variant="contained"
@@ -53,19 +53,13 @@ function WizardPreview({ distributedTracks, namePrefix, saving, saveResult, onSa
           onClick={onSave}
           disabled={saving || !namePrefix}
         >
-          {saving ? t('wizard.preview.saving', 'Saving…') : t('wizard.preview.save', 'Save Montage')}
+          {saving ? t('wizard.preview.saving', 'Saving…') : t('wizard.preview.save', 'Save Exhibition')}
         </Button>
       </Box>
 
       {!namePrefix && (
         <Alert severity="warning" sx={{ py: 0 }}>
-          {t('wizard.preview.name.required', 'Please enter a montage name before saving.')}
-        </Alert>
-      )}
-
-      {saveResult && (
-        <Alert severity={saveResult.success ? 'success' : 'error'} sx={{ py: 0 }}>
-          {saveResult.message}
+          {t('wizard.preview.name.required', 'Please enter an exhibition name before saving.')}
         </Alert>
       )}
 
@@ -75,7 +69,7 @@ function WizardPreview({ distributedTracks, namePrefix, saving, saveResult, onSa
             <Typography variant="body2" fontWeight={500}>
               {t('wizard.preview.track', 'Track')} {idx + 1}
               <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                ({track.length} {t('wizard.preview.artworks', 'artworks')})
+                ({track.length} {t('wizard.preview.artworks', 'contents')})
               </Typography>
             </Typography>
           </AccordionSummary>

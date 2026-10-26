@@ -20,6 +20,12 @@ function App() {
   const theme = selectTheme();
   const { t } = useTranslation();
   const [section, setSection] = useState('basicGrid'); // Default section is 'basicGrid'
+  const [pendingEdit, setPendingEdit] = useState(null);
+
+  const handleWizardSaveSuccess = (montageId, tracksUnaligned) => {
+    setPendingEdit({ montageId, tracksUnaligned });
+    setSection('basicGrid');
+  };
 
   const sessionId = getUserId();
   console.log('[CreateMontage App] sessionId', sessionId);
@@ -61,6 +67,9 @@ function App() {
   console.log('[CreateMontage App] isUserLoggedIn, isDemo, isPremium, wpLoggedIn', isUserLoggedIn, isDemo, isPremium, wpLoggedIn);
 
   // Conditionally render the component based on the section state
+  // NOTE: BasicGrid and MontageWizard are rendered as direct JSX, not via a
+  // ComponentToRender lambda, to keep the component type stable across re-renders.
+  // A new lambda each render = React unmounts/remounts the component, wiping state.
   let ComponentToRender;
   switch (section) {
     case 'addContents':
@@ -69,14 +78,11 @@ function App() {
     case 'batchUpload':
       ComponentToRender = () => <BatchUpload wpLoggedIn={wpLoggedIn} />;
       break;
-    case 'wizard':
-      ComponentToRender = MontageWizard;
-      break;
     case 'delegations':
       ComponentToRender = Delegations;
       break;
-    default: // Default is 'basicGrid', which is the "Create Montage/Curate" section
-      ComponentToRender = BasicGrid;
+    default:
+      ComponentToRender = null;
       break;
   }
 
@@ -91,8 +97,18 @@ function App() {
           {/* Render the TabButtons component */}
           <TabButtons t={t} setSection={setSection} wpLoggedIn={wpLoggedIn} />
 
-          {/* Conditionally render the selected component */}
-          <ComponentToRender className="rootMontageElement" />
+          {section === 'wizard' && (
+            <MontageWizard onSaveSuccess={handleWizardSaveSuccess} />
+          )}
+          {section === 'basicGrid' && (
+            <BasicGrid
+              pendingEdit={pendingEdit}
+              clearPendingEdit={() => setPendingEdit(null)}
+            />
+          )}
+          {ComponentToRender && (
+            <ComponentToRender className="rootMontageElement" />
+          )}
         </UserContext.Provider>
       </SessionContext.Provider>
     </ThemeProvider>

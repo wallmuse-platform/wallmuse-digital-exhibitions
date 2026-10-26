@@ -981,6 +981,7 @@ export const checkBatchFiles = async (csvFile, files) => {
     const artworks = Array.from(artworkEls).map(el => ({
       path: el.getAttribute('path-artwork'),
       errors: el.getAttribute('errors') || null,
+      rights: el.getAttribute('rights') || '',
     }));
     return { artworks };
   } catch (err) {
@@ -1038,7 +1039,7 @@ export const uploadBatchArtwork = async (csvFile, file, onProgress) => {
   formData.append('file', file);
 
   try {
-    await axios.post(`${baseURL}/upload_artwork`, formData, {
+    const response = await axios.post(`${baseURL}/upload_artwork`, formData, {
       responseType: 'text',
       onUploadProgress: (event) => {
         if (event.total) {
@@ -1046,6 +1047,19 @@ export const uploadBatchArtwork = async (csvFile, file, onProgress) => {
         }
       },
     });
+    if (response.data) {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(response.data, 'application/xml');
+      const errorEl = xmlDoc.getElementsByTagName('error')[0];
+      if (errorEl) {
+        const code = errorEl.getAttribute('code');
+        const msg  = errorEl.getAttribute('message') || '';
+        if (code === '507' || msg.includes('QuotaExceeded')) {
+          return { success: false, error: msg || 'Storage quota exceeded', quota: true };
+        }
+        return { success: false, error: msg || `Server error ${code}` };
+      }
+    }
     return { success: true };
   } catch (err) {
     console.error('[api] uploadBatchArtwork error:', file.name, err);
@@ -1075,13 +1089,19 @@ export const importBatchArtworks = async (csvFile) => {
     if (errorEls.length === 0) {
       return { success: true };
     }
-    const errors = Array.from(errorEls).map(el => ({
-      line: el.getAttribute('line'),
-      artwork: el.getAttribute('artwork'),
-      firstname: el.getAttribute('artist-firstname'),
-      lastname: el.getAttribute('artist-lastname'),
-      error: el.getAttribute('error') || el.getAttribute('message'),
-    }));
+    const errors = Array.from(errorEls).map(el => {
+      const raw = el.getAttribute('error') || el.getAttribute('message') || '';
+      const code = el.getAttribute('code') || '';
+      const quota = code === '507' || raw.includes('QuotaExceeded') || raw.includes('Error507');
+      return {
+        line: el.getAttribute('line'),
+        artwork: el.getAttribute('artwork'),
+        firstname: el.getAttribute('artist-firstname'),
+        lastname: el.getAttribute('artist-lastname'),
+        error: raw,
+        quota,
+      };
+    });
     return { success: false, errors };
   } catch (err) {
     console.error('[api] importBatchArtworks error:', err);

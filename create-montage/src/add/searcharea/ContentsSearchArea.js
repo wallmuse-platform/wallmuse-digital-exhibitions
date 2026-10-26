@@ -61,14 +61,14 @@ export default function ContentsSearchArea({
             <Box className="contents-search-box">
                 <Stack direction="row" spacing={2} className="chips" justifyContent="center" sx={{ mb: 1 }}>
                     <Chip
-                        label="Alphabetical"
+                        label={t('sort.alphabetical', 'Alphabetical')}
                         clickable
                         onClick={() => setSortingOption("alphabetical")}
                         variant={sortingOption === "alphabetical" ? "filled" : "outlined"}
                         className="wm-chip"
                     />
                     <Chip
-                        label="Newest"
+                        label={t('sort.newest', 'Newest')}
                         clickable
                         onClick={() => setSortingOption("newest")}
                         variant={sortingOption === "newest" ? "filled" : "outlined"}
@@ -101,7 +101,7 @@ export default function ContentsSearchArea({
                     onPageChange={(e, p) => setPage(p)}
                     rowsPerPage={rowsPerPage}
                     onRowsPerPageChange={handleChangeRowsPerPage}
-                    labelRowsPerPage="Show: "
+                    labelRowsPerPage={t('sort.show', 'Show: ')}
                     className="wm-pagination-contents"
                 />
             </Box>

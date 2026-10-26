@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Box, Button, CircularProgress, Typography, Divider, Paper,
+  Box, Button, CircularProgress, Typography, Divider, Paper, Snackbar, Alert,
 } from '@mui/material';
 import PreviewOutlinedIcon from '@mui/icons-material/PreviewOutlined';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { selectTheme } from '../theme/ThemeUtils';
 
 import { searchArtworks, countArtworks, getCategories, saveMontages } from '../api';
+import { getArtworkDuration } from '../components/artworks/ArtworkUtils';
 
 import AIPromptBar from './AIPromptBar';
 import WizardFilters from './WizardFilters';
@@ -43,7 +44,7 @@ function distributeToTracks(artworks, numTracks) {
   return result;
 }
 
-function MontageWizard() {
+function MontageWizard({ onSaveSuccess }) {
   const { t } = useTranslation();
   const theme = selectTheme();
 
@@ -160,15 +161,25 @@ function MontageWizard() {
               tag_name: 'item',
               artwork_id: artwork.id.toString(),
               offset: '0',
-              duration: artwork.type === 'VID' ? (artwork.duration || '5').toString() : '5',
+              duration: getArtworkDuration(artwork).toString(),
               repeat: '1',
             })),
           })),
       };
-      await saveMontages(montage);
-      setSaveResult({ success: true, message: t('wizard.save.success', `"${namePrefix}" saved successfully.`) });
+      const response = await saveMontages(montage);
+      const newId = response?.data?.id;
+      const trackTotals = distributedTracks
+        .filter(track => track.length > 0)
+        .map(track => track.reduce((sum, aw) => sum + getArtworkDuration(aw), 0));
+      const tracksUnaligned = trackTotals.length > 1 &&
+        (Math.max(...trackTotals) - Math.min(...trackTotals)) > 1;
+      if (onSaveSuccess && newId) {
+        onSaveSuccess(newId, tracksUnaligned);
+      } else {
+        setSaveResult({ success: true, message: t('wizard.save.success', `"${namePrefix}" saved successfully.`, { name: namePrefix }) });
+      }
     } catch (err) {
-      setSaveResult({ success: false, message: t('wizard.save.error', 'Save failed. Please try again.') });
+      setSaveResult({ success: false, message: err.message || t('wizard.save.error', 'Save failed. Please try again.') });
     } finally {
       setSaving(false);
     }
@@ -189,7 +200,7 @@ function MontageWizard() {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <CircularProgress size={18} />
               <Typography variant="body2" color="text.secondary">
-                {t('wizard.loading', 'Loading artworks…')}
+                {t('wizard.loading', 'Loading contents…')}
               </Typography>
             </Box>
           )}
@@ -236,12 +247,12 @@ function MontageWizard() {
                   disabled={filteredArtworks.length === 0 || filteredArtworks.length < tracks}
                 >
                   {filteredArtworks.length < tracks && filteredArtworks.length > 0
-                    ? t('wizard.preview.not.enough', `Need at least ${tracks} artworks`)
+                    ? t('wizard.preview.not.enough', `Need at least ${tracks} contents`)
                     : t('wizard.preview.button', 'Preview Distribution')}
                 </Button>
                 {filteredArtworks.length === 0 && !loading && (
                   <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
-                    {t('wizard.no.artworks', 'No artworks match the current filters.')}
+                    {t('wizard.no.artworks', 'No contents match the current filters.')}
                   </Typography>
                 )}
               </Box>
@@ -254,7 +265,6 @@ function MontageWizard() {
                     distributedTracks={distributedTracks}
                     namePrefix={namePrefix}
                     saving={saving}
-                    saveResult={saveResult}
                     onSave={handleSave}
                   />
                 </>
@@ -262,6 +272,21 @@ function MontageWizard() {
             </>
           )}
         </Paper>
+
+        <Snackbar
+          open={!!saveResult}
+          autoHideDuration={6000}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          onClose={() => setSaveResult(null)}
+        >
+          <Alert
+            severity={saveResult?.success ? 'success' : 'error'}
+            onClose={() => setSaveResult(null)}
+          >
+            {saveResult?.message}
+          </Alert>
+        </Snackbar>
+
       </Box>
     </ThemeProvider>
   );
