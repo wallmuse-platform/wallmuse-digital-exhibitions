@@ -1,0 +1,6 @@
+node_modules/
+build/
+coverage/
+descriptions/
+node_modules/
+.DS_Store

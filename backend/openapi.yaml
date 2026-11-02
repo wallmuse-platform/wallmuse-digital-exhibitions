@@ -1,0 +1,1537 @@
+openapi: 3.0.3
+
+info:
+  title: WallMuse Web Services API
+  version: "1.0"
+  description: |
+    REST API for the WallMuse platform. All endpoints are served at:
+
+    `https://wallmuse.com:8443/wallmuse/ws/<endpoint>`
+
+    ## Authentication
+
+    Most endpoints accept one or both of these query parameters for authorisation:
+
+    | Parameter | Description |
+    |-----------|-------------|
+    | `key`     | Environment encryption key (machine-level auth) |
+    | `session` | WordPress session ID of the logged-in user |
+
+    **Important:** WordPress session IDs may contain spaces. The frontend preserves
+    spaces using a custom `serializeParams()` serialiser — do **not** URL-encode
+    spaces as `+`.
+
+    ## Common Use Cases
+
+    ### 1 · New user onboarding
+    ```
+    /add_user → /add_house → /add_environment → /add_screen
+    ```
+    Creates a user account, their first house (account context), a web-player
+    environment inside it, and a browser screen.
+
+    ### 2 · Guest → registered user
+    ```
+    /authenticate → /get_playlists (guest) → /upd_playlist (copy montages) → /update_user
+    ```
+    A guest session is upgraded by authenticating, then the guest playlists are
+    copied over to the new account.
+
+    ### 3 · Playing a montage on a screen
+    ```
+    /load_montage → /master_alive (heartbeat every ~5 s) → /send_command (pause/seek/…)
+    ```
+    `load_montage` pushes the montage to all screens in the environment.
+    `master_alive` keeps the session alive and broadcasts position/status to slaves.
+
+    ### 4 · Multi-screen synchronisation
+    ```
+    /slave_alive (each slave) → /get_commands (poll) → apply commands
+    ```
+    Slave screens register with `slave_alive` and poll `get_commands` for
+    instructions issued by the master.
+
+    ### 5 · Building a montage
+    ```
+    /add_montage → /add_track × N → /add_track_element × M → /set_track_screen
+    ```
+    Creates the montage container, adds one or more tracks, populates each track
+    with artwork elements, then optionally pins tracks to physical screens.
+
+    ### 6 · Batch artwork upload
+    ```
+    /upload_artworks_check → /upload_artworks_choices → /upload_artwork × N
+      → /upload_artworks_import
+    ```
+    Validates a CSV manifest, maps filenames to uploaded files, uploads each
+    artwork, then triggers the database import.
+
+    ### 7 · Descriptions app (real-time artwork info)
+    ```
+    /get_wp_user → /get_current_artworks (poll every playlist duration)
+    ```
+    The companion descriptions app fetches the current user context once, then
+    polls for the active artwork list, using the `<playlist position>` attribute
+    to anchor the client clock so late-joiners see the correct artwork immediately.
+
+servers:
+  - url: https://wallmuse.com:8443/wallmuse/ws
+    description: Production
+
+tags:
+  - name: System
+    description: Health, cache, and maintenance
+  - name: Auth
+    description: User authentication and session management
+  - name: User
+    description: User account management
+  - name: Delegation
+    description: Account delegation and child accounts
+  - name: House
+    description: House (top-level account context) management
+  - name: Environment
+    description: Environment (logical group of screens) management
+  - name: Screen
+    description: Individual display screen management
+  - name: Manager
+    description: Playback control — load montages, send commands, heartbeat
+  - name: Artwork
+    description: Artwork CRUD, search, upload, thumbnails, copyright
+  - name: Montage
+    description: Montage and track management
+  - name: Playlist
+    description: Playlist management
+  - name: Media
+    description: Video conversion, thumbnail generation, S3 storage
+  - name: BackOffice
+    description: Internal stats, reporting, and database maintenance
+
+paths:
+
+  # ── System ──────────────────────────────────────────────────────────────────
+
+  /ping:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Returns a simple OK response to verify the server is reachable.
+      responses:
+        "200": { description: Server is up }
+
+  /empty_cache:
+    get:
+      tags: [System]
+      summary: Flush server cache
+      description: Clears the Redis / in-memory cache. Useful after bulk data changes.
+      responses:
+        "200": { description: Cache cleared }
+
+  /cache_state:
+    get:
+      tags: [System]
+      summary: Cache statistics
+      responses:
+        "200": { description: Cache state payload }
+
+  /cache_recompute:
+    get:
+      tags: [System]
+      summary: Force cache recomputation
+      responses:
+        "200": { description: Cache recomputed }
+
+  /check_crons:
+    get:
+      tags: [System]
+      summary: Trigger scheduled job check
+      responses:
+        "200": { description: Cron jobs evaluated }
+
+  /check_players:
+    get:
+      tags: [System]
+      summary: Check active players
+      parameters:
+        - name: errors
+          in: query
+          description: "Include only erroring players (0 = all, 1 = errors only)"
+          schema: { type: integer, default: 0 }
+      responses:
+        "200": { description: Player status list }
+
+  /clean_db:
+    post:
+      tags: [System]
+      summary: Database cleanup
+      description: Removes orphaned records and temporary data.
+      responses:
+        "200": { description: Cleanup completed }
+
+  # ── Auth ────────────────────────────────────────────────────────────────────
+
+  /authenticate:
+    get:
+      tags: [Auth]
+      summary: Authenticate user with login/password
+      parameters:
+        - name: login
+          in: query
+          required: true
+          schema: { type: string }
+        - name: pwd
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Session token and user data }
+        "401": { description: Invalid credentials }
+
+  /get_joomla_session:
+    get:
+      tags: [Auth]
+      summary: Obtain a Joomla/legacy session token
+      parameters:
+        - name: username
+          in: query
+          required: true
+          schema: { type: string }
+        - name: passwd
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Session token }
+
+  # ── User ────────────────────────────────────────────────────────────────────
+
+  /add_user:
+    post:
+      tags: [User]
+      summary: Create a new user
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema: { type: string }
+        - name: login
+          in: query
+          required: true
+          schema: { type: string }
+        - name: password
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: User created, returns user ID }
+
+  /add_temp_user:
+    post:
+      tags: [User]
+      summary: Create a temporary (guest) user
+      description: Temporary accounts are cleaned up by `/purge_temp_user`.
+      responses:
+        "200": { description: Temporary user created }
+
+  /purge_temp_user:
+    post:
+      tags: [User]
+      summary: Delete expired temporary users
+      responses:
+        "200": { description: Expired accounts removed }
+
+  /update_user:
+    post:
+      tags: [User]
+      summary: Update user type / role
+      parameters:
+        - name: session
+          in: query
+          required: true
+          schema: { type: string }
+        - name: type
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: User updated }
+
+  /get_user:
+    get:
+      tags: [User]
+      summary: Get user by login and password
+      parameters:
+        - name: login
+          in: query
+          required: true
+          schema: { type: string }
+        - name: password
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: User object }
+
+  /get_wp_user:
+    get:
+      tags: [User]
+      summary: Get user from WordPress (or Joomla) session
+      description: |
+        Resolves a platform session ID to a WallMuse user record.
+        Previously also exposed as `/get_joomla_user` (deprecated alias — use this endpoint).
+      parameters:
+        - name: session
+          in: query
+          required: true
+          description: WordPress (or legacy Joomla) session ID. Spaces must not be encoded as `+`.
+          schema: { type: string }
+      responses:
+        "200": { description: User object with house / environment context }
+
+  /heartbeat:
+    get:
+      tags: [User]
+      summary: Keep session alive
+      description: Lightweight ping sent periodically to prevent session expiry.
+      parameters:
+        - name: session
+          in: query
+          schema: { type: string }
+        - name: key
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Session extended }
+
+  # ── Delegation ──────────────────────────────────────────────────────────────
+
+  /get_categories:
+    get:
+      tags: [Delegation]
+      summary: List artwork categories visible to a user
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Category list }
+
+  /add_delegate:
+    post:
+      tags: [Delegation]
+      summary: Delegate access from one user to another
+      parameters:
+        - { name: owner, in: query, required: true, schema: { type: integer } }
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: delegate, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Delegation created }
+
+  /del_delegate:
+    post:
+      tags: [Delegation]
+      summary: Remove a delegation
+      parameters:
+        - { name: owner, in: query, required: true, schema: { type: string } }
+        - { name: user, in: query, required: true, schema: { type: string } }
+        - { name: delegate, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Delegation removed }
+
+  /api_add_child:
+    post:
+      tags: [Delegation]
+      summary: Add a child account relationship
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: string } }
+        - { name: child, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Child relationship created }
+
+  /api_add_delegate:
+    post:
+      tags: [Delegation]
+      summary: API-level delegate creation
+      parameters:
+        - { name: owner, in: query, schema: { type: string } }
+        - { name: cuser, in: query, schema: { type: string } }
+        - { name: user, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Delegation created }
+
+  /api_add_user_delegate:
+    post:
+      tags: [Delegation]
+      summary: Add user-level delegation
+      parameters:
+        - { name: owner, in: query, required: true, schema: { type: string } }
+        - { name: user, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Delegation created }
+
+  /api_get_delegations:
+    get:
+      tags: [Delegation]
+      summary: List delegations for a user or owner
+      parameters:
+        - { name: user, in: query, schema: { type: string } }
+        - { name: owner, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Delegation list }
+
+  # ── House ───────────────────────────────────────────────────────────────────
+
+  /add_house:
+    post:
+      tags: [House]
+      summary: Create a house
+      description: A house is the top-level organisational unit for a user's environments.
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: House ID }
+
+  /upd_house:
+    post:
+      tags: [House]
+      summary: Rename a house
+      parameters:
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: House updated }
+
+  /del_house:
+    post:
+      tags: [House]
+      summary: Delete a house
+      parameters:
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: House deleted }
+
+  /get_house_state:
+    get:
+      tags: [House]
+      summary: Get current playback state for a house
+      description: Returns active montage, current position, and screen states.
+      parameters:
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: House state object }
+
+  /set_autostart:
+    post:
+      tags: [House]
+      summary: Configure house autostart
+      parameters:
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: autostart, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+        - { name: session, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Autostart setting saved }
+
+  /has_log:
+    get:
+      tags: [House]
+      summary: Check whether a log file exists for a house
+      parameters:
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Boolean result }
+
+  /upload_log:
+    post:
+      tags: [House]
+      summary: Upload a log file for a house
+      parameters:
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Log uploaded }
+
+  # ── Environment ─────────────────────────────────────────────────────────────
+
+  /add_environment:
+    post:
+      tags: [Environment]
+      summary: Create an environment
+      description: An environment groups one or more screens inside a house.
+      parameters:
+        - { name: house, in: query, schema: { type: integer } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: keys, in: query, required: true, schema: { type: string }, description: "Network interface keys identifying this machine" }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Environment ID }
+
+  /get_joomla_environment:
+    get:
+      tags: [Environment]
+      summary: Get environment by session and key
+      parameters:
+        - { name: session, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Environment object }
+
+  /upd_environment:
+    post:
+      tags: [Environment]
+      summary: Update environment name or keys
+      parameters:
+        - { name: environ, in: query, required: true, schema: { type: integer } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: keys, in: query, schema: { type: string } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Environment updated }
+
+  /del_environment:
+    post:
+      tags: [Environment]
+      summary: Delete an environment
+      parameters:
+        - { name: environ, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Environment deleted }
+
+  /add_environment_log:
+    post:
+      tags: [Environment]
+      summary: Append a log entry to an environment
+      parameters:
+        - { name: environ, in: query, required: true, schema: { type: integer } }
+        - { name: logs, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Log appended }
+
+  /get_environment_log:
+    get:
+      tags: [Environment]
+      summary: Retrieve environment logs
+      parameters:
+        - { name: environ, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Log entries }
+
+  # ── Screen ──────────────────────────────────────────────────────────────────
+
+  /add_screen:
+    post:
+      tags: [Screen]
+      summary: Add a screen to an environment
+      parameters:
+        - { name: environ, in: query, required: true, schema: { type: integer } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Screen ID }
+
+  /upd_screen:
+    post:
+      tags: [Screen]
+      summary: Update screen name, state, or parameters
+      parameters:
+        - { name: screen, in: query, required: true, schema: { type: integer } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: enabled, in: query, schema: { type: integer } }
+        - { name: params, in: query, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Screen updated }
+
+  /del_screen:
+    post:
+      tags: [Screen]
+      summary: Delete a screen
+      parameters:
+        - { name: screen, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Screen deleted }
+
+  # ── Manager (Playback) ──────────────────────────────────────────────────────
+
+  /get_commands:
+    get:
+      tags: [Manager]
+      summary: Poll for pending commands (slave screens)
+      description: Slave screens call this endpoint to receive commands from the master.
+      parameters:
+        - { name: environ, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Command list (binary octet-stream)
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+
+  /send_command:
+    post:
+      tags: [Manager]
+      summary: Send a playback command to screens
+      description: |
+        Sends control commands (play, pause, seek, mute, volume, …) to all screens
+        in a house, optionally targeting a specific destination screen.
+      parameters:
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: dest, in: query, schema: { type: integer }, description: "Target screen ID (omit for broadcast)" }
+        - { name: command, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Command sent }
+
+  /load_montage:
+    post:
+      tags: [Manager]
+      summary: Load a montage into an environment
+      description: Pushes montage data to all screens in the house and starts playback.
+      parameters:
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: montage, in: query, required: true, schema: { type: integer } }
+        - { name: language, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Montage loaded }
+
+  /load_missing_montage:
+    post:
+      tags: [Manager]
+      summary: Load a montage only if not already loaded in the environment
+      parameters:
+        - { name: environ, in: query, required: true, schema: { type: integer } }
+        - { name: montage, in: query, required: true, schema: { type: integer } }
+        - { name: language, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Result (loaded or already present) }
+
+  /load_playlist:
+    post:
+      tags: [Manager]
+      summary: Load a playlist into an environment
+      parameters:
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: playlist, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Playlist loaded }
+
+  /master_alive:
+    post:
+      tags: [Manager]
+      summary: Master heartbeat — broadcasts position and state to slaves
+      description: |
+        Called every ~5 seconds by the master screen to keep the session alive and
+        broadcast current playback state to slave screens and the descriptions app.
+        The response may include pending commands for the master.
+      parameters:
+        - { name: environ, in: query, required: true, schema: { type: integer } }
+        - { name: montage, in: query, required: true, schema: { type: integer } }
+        - { name: time, in: query, required: true, schema: { type: number, format: double }, description: "Current playback position in seconds" }
+        - { name: ip, in: query, required: true, schema: { type: string } }
+        - { name: port, in: query, required: true, schema: { type: integer } }
+        - { name: content, in: query, schema: { type: string } }
+        - { name: screens, in: query, required: true, schema: { type: string }, description: "Comma-separated list of active screen IDs" }
+        - { name: new, in: query, schema: { type: integer }, description: "1 if this is the first heartbeat for this session" }
+        - { name: status, in: query, schema: { type: string }, description: "Playback status (playing, paused, …)" }
+        - { name: volume, in: query, schema: { type: number, format: double } }
+        - { name: fullscreen, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Pending commands for the master }
+
+  /slave_alive:
+    post:
+      tags: [Manager]
+      summary: Slave heartbeat — registers screen presence
+      parameters:
+        - { name: environ, in: query, required: true, schema: { type: integer } }
+        - { name: screens, in: query, required: true, schema: { type: string } }
+        - { name: ip, in: query, required: true, schema: { type: string } }
+        - { name: port, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Acknowledged }
+
+  # ── Artwork ──────────────────────────────────────────────────────────────────
+
+  /add_artwork:
+    post:
+      tags: [Artwork]
+      summary: Create an artwork record
+      parameters:
+        - { name: type, in: query, required: true, schema: { type: string } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: url, in: query, schema: { type: string } }
+        - { name: md5, in: query, schema: { type: string } }
+        - { name: size, in: query, schema: { type: integer, format: int64 } }
+        - { name: duration, in: query, schema: { type: number, format: double } }
+        - { name: session, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Artwork ID }
+
+  /add_artwork_url:
+    post:
+      tags: [Artwork]
+      summary: Add a URL (HD/SD/thumbnail) to an existing artwork
+      parameters:
+        - { name: artwork, in: query, required: true, schema: { type: integer } }
+        - { name: url, in: query, required: true, schema: { type: string } }
+        - { name: kind, in: query, required: true, schema: { type: string }, description: "hd, sd, thumbnail, …" }
+        - { name: md5, in: query, required: true, schema: { type: string } }
+        - { name: size, in: query, required: true, schema: { type: integer, format: int64 } }
+        - { name: session, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: URL added }
+
+  /del_artwork:
+    post:
+      tags: [Artwork]
+      summary: Delete an artwork
+      parameters:
+        - { name: artwork, in: query, required: true, schema: { type: integer } }
+        - { name: real, in: query, schema: { type: integer, default: 0 }, description: "1 = hard delete, 0 = soft delete" }
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Artwork deleted }
+
+  /get_all_artworks_count:
+    get:
+      tags: [Artwork]
+      summary: Count all artworks for a user
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: display, in: query, schema: { type: integer, default: 1 } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Count }
+
+  /get_all_artworks:
+    get:
+      tags: [Artwork]
+      summary: List all artworks for a user (paginated)
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: page, in: query, required: true, schema: { type: integer } }
+        - { name: page_size, in: query, required: true, schema: { type: integer } }
+        - { name: sort, in: query, required: true, schema: { type: string } }
+        - { name: display, in: query, schema: { type: integer, default: 1 } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Artwork list (XML) }
+
+  /search_artworks_count:
+    get:
+      tags: [Artwork]
+      summary: Count artworks matching search criteria
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: mine, in: query, schema: { type: integer, default: 0 } }
+        - { name: desc, in: query, schema: { type: string } }
+        - { name: categories, in: query, schema: { type: string } }
+        - { name: display, in: query, schema: { type: integer, default: 0 } }
+        - { name: keywords, in: query, schema: { type: string } }
+        - { name: author, in: query, schema: { type: integer } }
+        - { name: sauthor, in: query, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Count }
+
+  /search_artworks:
+    get:
+      tags: [Artwork]
+      summary: Search artworks (paginated)
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: mine, in: query, schema: { type: integer, default: 0 } }
+        - { name: desc, in: query, schema: { type: string } }
+        - { name: categories, in: query, schema: { type: string } }
+        - { name: page, in: query, required: true, schema: { type: integer } }
+        - { name: page_size, in: query, required: true, schema: { type: integer } }
+        - { name: sort, in: query, required: true, schema: { type: string } }
+        - { name: display, in: query, schema: { type: integer, default: 0 } }
+        - { name: keywords, in: query, schema: { type: string } }
+        - { name: author, in: query, schema: { type: integer } }
+        - { name: sauthor, in: query, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Artwork list (XML) }
+
+  /set_artwork_full:
+    post:
+      tags: [Artwork]
+      summary: Save full artwork metadata (XML payload)
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: artwork, in: query, required: true, schema: { type: string }, description: "XML-encoded artwork descriptor" }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Artwork saved }
+
+  /get_artwork_thumbnail:
+    get:
+      tags: [Artwork]
+      summary: Fetch artwork thumbnail image
+      parameters:
+        - { name: artwork, in: query, required: true, schema: { type: integer } }
+        - { name: sd, in: query, required: true, schema: { type: integer }, description: "1 = SD thumbnail, 0 = HD" }
+        - { name: session, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Thumbnail image binary
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+
+  /get_keywords:
+    get:
+      tags: [Artwork]
+      summary: Autocomplete artwork keywords
+      parameters:
+        - { name: label, in: query, required: true, schema: { type: string } }
+        - { name: session, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Matching keyword list }
+
+  /del_category:
+    post:
+      tags: [Artwork]
+      summary: Delete a category
+      parameters:
+        - { name: category, in: query, required: true, schema: { type: integer } }
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Category deleted }
+
+  /search_copyright_owner:
+    get:
+      tags: [Artwork]
+      summary: Search copyright owners by name and kind
+      description: Returns exact and fuzzy matches. The frontend uses this to resolve
+        author IDs before saving artworks and to populate split name fields on load.
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: kind, in: query, required: true, schema: { type: string }, description: "person, organisation, …" }
+        - { name: max, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Matching copyright owner list with split name fields (first_name, middle_name, name, sur_name)
+
+  /add_copyright_owner:
+    post:
+      tags: [Artwork]
+      summary: Create a copyright owner (person or organisation)
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: first_name, in: query, schema: { type: string } }
+        - { name: middle_name, in: query, schema: { type: string } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: sur_name, in: query, schema: { type: string } }
+        - { name: comment, in: query, schema: { type: string } }
+        - { name: birth_date, in: query, schema: { type: string } }
+        - { name: birth_location, in: query, schema: { type: string } }
+        - { name: death_date, in: query, schema: { type: string } }
+        - { name: death_location, in: query, schema: { type: string } }
+        - { name: alive, in: query, schema: { type: integer } }
+        - { name: kind, in: query, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: New owner ID }
+
+  /update_copyright_owner:
+    post:
+      tags: [Artwork]
+      summary: Update a copyright owner
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: owner, in: query, required: true, schema: { type: integer } }
+        - { name: first_name, in: query, schema: { type: string } }
+        - { name: middle_name, in: query, schema: { type: string } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: sur_name, in: query, schema: { type: string } }
+        - { name: comment, in: query, schema: { type: string } }
+        - { name: birth_date, in: query, schema: { type: string } }
+        - { name: birth_location, in: query, schema: { type: string } }
+        - { name: death_date, in: query, schema: { type: string } }
+        - { name: death_location, in: query, schema: { type: string } }
+        - { name: alive, in: query, schema: { type: integer } }
+        - { name: kind, in: query, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Owner updated }
+
+  /upload_file:
+    post:
+      tags: [Artwork]
+      summary: Upload a file (image or video) for an artwork
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: artwork, in: query, required: true, schema: { type: integer } }
+        - { name: kind, in: query, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200": { description: File stored }
+
+  /upload_artworks_check:
+    post:
+      tags: [Artwork]
+      summary: "Batch upload step 1: validate CSV manifest and filename list"
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+        - { name: filenames, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Validation result with per-file status }
+
+  /upload_artworks_choices:
+    post:
+      tags: [Artwork]
+      summary: "Batch upload step 2: map CSV rows to uploaded filenames"
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+        - { name: csv, in: query, required: true, schema: { type: string } }
+        - { name: filenames, in: query, required: true, schema: { type: string } }
+        - { name: choices, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Choices saved }
+
+  /upload_artwork:
+    post:
+      tags: [Artwork]
+      summary: "Batch upload step 3: upload a single artwork file"
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+        - { name: csv, in: query, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200": { description: File uploaded }
+
+  /upload_artwork_progress:
+    get:
+      tags: [Artwork]
+      summary: Poll upload progress for a batch file
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+        - { name: csv, in: query, required: true, schema: { type: string } }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Progress percentage }
+
+  /upload_artworks_import:
+    post:
+      tags: [Artwork]
+      summary: "Batch upload step 4: import uploaded artworks into the database"
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+        - { name: csv, in: query, required: true, schema: { type: string } }
+        - { name: owner, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Import summary }
+
+  /import_artworks:
+    post:
+      tags: [Artwork]
+      summary: Server-side folder import
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: path_root, in: query, required: true, schema: { type: string } }
+        - { name: url_root, in: query, schema: { type: string } }
+        - { name: owner, in: query, required: true, schema: { type: string } }
+        - { name: s3, in: query, schema: { type: integer } }
+        - { name: author, in: query, schema: { type: integer, default: 1 } }
+        - { name: v, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: Import result }
+
+  /create_montage_artwork:
+    post:
+      tags: [Artwork]
+      summary: Create a standard artwork suitable for montage use
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: artwork, in: query, schema: { type: integer } }
+        - { name: owner, in: query, schema: { type: string } }
+        - { name: rep, in: query, schema: { type: string } }
+        - { name: account, in: query, schema: { type: string } }
+        - { name: video, in: query, schema: { type: integer, default: 1 } }
+        - { name: duration, in: query, schema: { type: number, format: double, default: 20 } }
+      responses:
+        "200": { description: Artwork ID }
+
+  /redo_thumbnails:
+    post:
+      tags: [Artwork]
+      summary: Regenerate thumbnails for all artworks of a user
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Thumbnail jobs queued }
+
+  /remove_extra_audio:
+    post:
+      tags: [Artwork]
+      summary: Strip extra audio tracks from video artworks
+      responses:
+        "200": { description: Done }
+
+  /api_add_movie_artwork:
+    post:
+      tags: [Artwork]
+      summary: API — create a movie artwork with HD (and optional SD) URLs
+      parameters:
+        - { name: converted, in: query, required: true, schema: { type: integer } }
+        - { name: login, in: query, required: true, schema: { type: string } }
+        - { name: password, in: query, required: true, schema: { type: string } }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+        - { name: pattern, in: query, required: true, schema: { type: string } }
+        - { name: duration, in: query, schema: { type: number, format: double } }
+        - { name: hd_url, in: query, required: true, schema: { type: string } }
+        - { name: hd_width, in: query, schema: { type: integer } }
+        - { name: hd_height, in: query, schema: { type: integer } }
+        - { name: hd_size, in: query, schema: { type: integer, format: int64 } }
+        - { name: hd_md5, in: query, schema: { type: string } }
+        - { name: sd_url, in: query, schema: { type: string } }
+        - { name: sd_width, in: query, schema: { type: integer } }
+        - { name: sd_height, in: query, schema: { type: integer } }
+        - { name: sd_size, in: query, schema: { type: integer, format: int64 } }
+        - { name: sd_md5, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Artwork ID }
+
+  /api_add_image_artwork:
+    post:
+      tags: [Artwork]
+      summary: API — create an image artwork
+      parameters:
+        - { name: login, in: query, required: true, schema: { type: string } }
+        - { name: password, in: query, required: true, schema: { type: string } }
+        - { name: filename, in: query, required: true, schema: { type: string } }
+        - { name: pattern, in: query, required: true, schema: { type: string } }
+        - { name: url, in: query, required: true, schema: { type: string } }
+        - { name: size, in: query, schema: { type: integer, format: int64 } }
+        - { name: md5, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Artwork ID }
+
+  /api_has_artwork:
+    get:
+      tags: [Artwork]
+      summary: Check if an artwork pattern already exists
+      parameters:
+        - { name: converted, in: query, required: true, schema: { type: integer } }
+        - { name: login, in: query, required: true, schema: { type: string } }
+        - { name: password, in: query, required: true, schema: { type: string } }
+        - { name: pattern, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Boolean result }
+
+  /api_import_root_folder:
+    post:
+      tags: [Artwork]
+      summary: Import an entire root folder of artworks
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: url, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Import result }
+
+  /api_check_folder:
+    get:
+      tags: [Artwork]
+      summary: Validate a folder before import
+      parameters:
+        - { name: user, in: query, schema: { type: string } }
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: url, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Folder validation report }
+
+  /api_move_to_s3:
+    post:
+      tags: [Artwork]
+      summary: Move local artwork files to S3
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: url, in: query, required: true, schema: { type: string } }
+        - { name: delete, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Move result }
+
+  /api_check_urls:
+    get:
+      tags: [Artwork]
+      summary: Verify all artwork URLs are reachable
+      responses:
+        "200": { description: Broken URL report }
+
+  # ── Montage ──────────────────────────────────────────────────────────────────
+
+  /add_montage:
+    post:
+      tags: [Montage]
+      summary: Create a new montage
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: thumbnail_url, in: query, schema: { type: string } }
+        - { name: rating, in: query, schema: { type: string } }
+        - { name: stars, in: query, schema: { type: integer } }
+        - { name: duration, in: query, schema: { type: number, format: double } }
+        - { name: language, in: query, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Montage ID }
+
+  /upd_montage:
+    post:
+      tags: [Montage]
+      summary: Update montage metadata
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: montage, in: query, required: true, schema: { type: integer } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: thumbnail_url, in: query, required: true, schema: { type: string } }
+        - { name: rating, in: query, required: true, schema: { type: string } }
+        - { name: stars, in: query, schema: { type: integer } }
+        - { name: duration, in: query, schema: { type: number, format: double } }
+        - { name: language, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Montage updated }
+
+  /del_montage:
+    post:
+      tags: [Montage]
+      summary: Delete a montage
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: montage, in: query, required: true, schema: { type: integer } }
+        - { name: real, in: query, schema: { type: integer, default: 0 } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Montage deleted }
+
+  /add_track:
+    post:
+      tags: [Montage]
+      summary: Add a track to a montage
+      parameters:
+        - { name: montage, in: query, required: true, schema: { type: integer } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Track number }
+
+  /add_track_element:
+    post:
+      tags: [Montage]
+      summary: Add an artwork to a track
+      parameters:
+        - { name: montage, in: query, schema: { type: integer } }
+        - { name: seq, in: query, schema: { type: integer } }
+        - { name: track, in: query, schema: { type: integer } }
+        - { name: artwork, in: query, required: true, schema: { type: integer } }
+        - { name: duration, in: query, required: true, schema: { type: number, format: double } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Element added }
+
+  /set_track_screen:
+    post:
+      tags: [Montage]
+      summary: Assign a track to a specific screen
+      parameters:
+        - { name: montage, in: query, schema: { type: integer } }
+        - { name: seq, in: query, schema: { type: integer } }
+        - { name: track, in: query, schema: { type: integer } }
+        - { name: screen, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Track pinned to screen }
+
+  /set_track_noscreen:
+    post:
+      tags: [Montage]
+      summary: Remove screen assignment from a track
+      parameters:
+        - { name: montage, in: query, schema: { type: integer } }
+        - { name: seq, in: query, schema: { type: integer } }
+        - { name: track, in: query, schema: { type: integer } }
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Screen assignment removed }
+
+  /set_montage_screens:
+    post:
+      tags: [Montage]
+      summary: Bulk-assign screens to a montage
+      parameters:
+        - { name: montage, in: query, required: true, schema: { type: integer } }
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: screens, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Screens assigned }
+
+  /get_montage_full:
+    get:
+      tags: [Montage]
+      summary: Get full montage data including tracks and artworks
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: montage, in: query, required: true, schema: { type: integer } }
+        - { name: test, in: query, schema: { type: integer, default: 0 } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Full montage XML }
+
+  /get_all_montages_count:
+    get:
+      tags: [Montage]
+      summary: Count all montages for a user
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: display, in: query, schema: { type: integer, default: 0 } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Count }
+
+  /get_all_montages_full:
+    get:
+      tags: [Montage]
+      summary: List all montages (paginated, full data)
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: page, in: query, required: true, schema: { type: integer } }
+        - { name: page_size, in: query, required: true, schema: { type: integer } }
+        - { name: sort, in: query, required: true, schema: { type: string } }
+        - { name: display, in: query, schema: { type: integer, default: 0 } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Montage list (XML) }
+
+  /search_montages_count:
+    get:
+      tags: [Montage]
+      summary: Count montages matching search filters
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: desc, in: query, schema: { type: string } }
+        - { name: categories, in: query, schema: { type: string } }
+        - { name: commercial, in: query, schema: { type: integer } }
+        - { name: splittable, in: query, schema: { type: integer } }
+        - { name: deconstructable, in: query, schema: { type: integer } }
+        - { name: portrait, in: query, schema: { type: integer } }
+        - { name: uhd, in: query, schema: { type: integer } }
+        - { name: display, in: query, schema: { type: integer, default: 0 } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Count }
+
+  /search_montages_full:
+    get:
+      tags: [Montage]
+      summary: Search montages (paginated, full data)
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: desc, in: query, schema: { type: string } }
+        - { name: categories, in: query, schema: { type: string } }
+        - { name: commercial, in: query, schema: { type: integer } }
+        - { name: splittable, in: query, schema: { type: integer } }
+        - { name: deconstructable, in: query, schema: { type: integer } }
+        - { name: portrait, in: query, schema: { type: integer } }
+        - { name: uhd, in: query, schema: { type: integer } }
+        - { name: page, in: query, required: true, schema: { type: integer } }
+        - { name: page_size, in: query, required: true, schema: { type: integer } }
+        - { name: sort, in: query, required: true, schema: { type: string } }
+        - { name: display, in: query, schema: { type: integer, default: 0 } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Montage list (XML) }
+
+  /set_montage_full:
+    post:
+      tags: [Montage]
+      summary: Save full montage metadata (XML payload)
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: montage, in: query, required: true, schema: { type: string }, description: "XML-encoded montage descriptor" }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Montage saved }
+
+  /get_montages:
+    get:
+      tags: [Montage]
+      summary: List montages (lightweight)
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Montage list }
+
+  /send_stats:
+    post:
+      tags: [Montage]
+      summary: Submit playback statistics
+      parameters:
+        - { name: stats, in: query, required: true, schema: { type: string } }
+        - { name: house, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Stats recorded }
+
+  # ── Playlist ─────────────────────────────────────────────────────────────────
+
+  /get_playlists:
+    get:
+      tags: [Playlist]
+      summary: List playlists for a user
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Playlist list (XML) }
+
+  /add_playlist:
+    post:
+      tags: [Playlist]
+      summary: Create a playlist
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Playlist ID }
+
+  /upd_playlist:
+    post:
+      tags: [Playlist]
+      summary: Update playlist name, order, or montage list
+      description: |
+        Pass `montages` as a comma-separated list of montage IDs to set the playlist
+        content in one call. Pass `random=1` to enable shuffle mode.
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: playlist, in: query, schema: { type: integer } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: random, in: query, schema: { type: integer } }
+        - { name: montages, in: query, schema: { type: string }, description: "Comma-separated montage IDs" }
+        - { name: checks, in: query, schema: { type: string } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Playlist updated }
+
+  /del_playlist:
+    post:
+      tags: [Playlist]
+      summary: Delete a playlist
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: playlist, in: query, required: true, schema: { type: integer } }
+        - { name: key, in: query, schema: { type: string } }
+        - { name: session, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Playlist deleted }
+
+  # ── Media ────────────────────────────────────────────────────────────────────
+
+  /convert:
+    post:
+      tags: [Media]
+      summary: Transcode a video file via FFmpeg
+      parameters:
+        - { name: src, in: query, required: true, schema: { type: string } }
+        - { name: dst, in: query, required: true, schema: { type: string } }
+        - { name: hd, in: query, schema: { type: integer, default: 0 } }
+        - { name: mute, in: query, schema: { type: integer, default: 0 } }
+        - { name: start, in: query, schema: { type: integer } }
+        - { name: end, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: Conversion started or completed }
+
+  /generate_thumbnail:
+    post:
+      tags: [Media]
+      summary: Generate a thumbnail image from a video
+      parameters:
+        - { name: src, in: query, required: true, schema: { type: string } }
+        - { name: dst, in: query, required: true, schema: { type: string } }
+        - { name: size, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Thumbnail generated }
+
+  /s3_add_file:
+    post:
+      tags: [Media]
+      summary: Upload a file to S3
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: delete, in: query, schema: { type: integer, default: 0 } }
+        - { name: root, in: query, schema: { type: string } }
+        - { name: recursive, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200": { description: File(s) uploaded }
+
+  /s3_upd_file:
+    post:
+      tags: [Media]
+      summary: Update (overwrite) a file on S3
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: delete, in: query, schema: { type: integer, default: 0 } }
+        - { name: root, in: query, schema: { type: string } }
+      responses:
+        "200": { description: File updated }
+
+  /s3_del_file:
+    post:
+      tags: [Media]
+      summary: Delete a file from S3
+      parameters:
+        - { name: path, in: query, schema: { type: string } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: root, in: query, schema: { type: string } }
+        - { name: recursive, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200": { description: File(s) deleted }
+
+  /s3_get_file:
+    get:
+      tags: [Media]
+      summary: Download a file from S3
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: File binary
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+
+  /s3_list_files:
+    get:
+      tags: [Media]
+      summary: List files in an S3 path
+      parameters:
+        - { name: path, in: query, schema: { type: string } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: root, in: query, schema: { type: string } }
+      responses:
+        "200": { description: File list }
+
+  /s3_garbage_collect:
+    post:
+      tags: [Media]
+      summary: Remove S3 files no longer referenced by the database
+      parameters:
+        - { name: test, in: query, schema: { type: integer, default: 1 }, description: "1 = dry run, 0 = real delete" }
+      responses:
+        "200": { description: GC report }
+
+  # ── Back-office ──────────────────────────────────────────────────────────────
+
+  /bo_compute_counts:
+    post:
+      tags: [BackOffice]
+      summary: Recompute aggregated counters
+      responses:
+        "200": { description: Counts updated }
+
+  /bo_create_stats:
+    post:
+      tags: [BackOffice]
+      summary: Generate a statistics report
+      parameters:
+        - { name: user, in: query, required: true, schema: { type: integer } }
+        - { name: montage, in: query, required: true, schema: { type: integer } }
+        - { name: tracks, in: query, required: true, schema: { type: string } }
+        - { name: width, in: query, required: true, schema: { type: integer } }
+        - { name: from, in: query, required: true, schema: { type: string } }
+        - { name: to, in: query, required: true, schema: { type: string } }
+        - { name: percentage, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Stats report }

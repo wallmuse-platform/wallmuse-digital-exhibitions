@@ -1,0 +1,214 @@
+# I was on playlist 2, 
+  #[PlayLists] playlistsgt... 
+  #(3) [{…}, {…}, {…}]
+  #0
+  #: 
+  #id
+  #: 
+  #"1040"
+  #montages
+  #: 
+  #Array(2)
+  #0
+  #: 
+  #{tag_name: 'montage', is_checked: '1', id: '1553', user: '3216', name: 'Catène de Containers', …}
+  #1
+  #: 
+  #{tag_name: 'montage', is_checked: '1', id: '1551', user: '3216', name: 'Temple of Poseidon at Sounion', …}
+  #length
+  #: 
+  #2
+  #[[Prototype]]
+  #: 
+  #Array(0)
+  #name
+  #: 
+  #"Heritage and installations"
+  #random
+  #: 
+  #"0"
+  #tag_name
+  #: 
+  #"playlist"
+  #user_id
+  #: 
+  #"2124"
+  #[[Prototype]]
+  #: 
+  #Object
+  #1
+  #: 
+  #id
+  #: 
+  #"1039"
+  #montages
+  #: 
+  #Array(1)
+  #0
+  #: 
+  #{tag_name: 'montage', is_checked: '1', id: '1398', user: '512', name: 'Between Waters and Skies (Impressionism)', …}
+  #length
+  #: 
+  #1
+  #[[Prototype]]
+  #: 
+  #Array(0)
+  #name
+  #: 
+  #"Impressionists"
+  #random
+  #: 
+  #"0"
+  #tag_name
+  #: 
+  #"playlist"
+  #user_id
+  #: 
+  #"2124"
+  #[[Prototype]]
+  #: 
+  #Object
+  #2
+  #: 
+  #{montages: Array(2)}
+  #length
+  #: 
+  #3
+  #[[Prototype]]
+  #: 
+  #Array(0)
+# a montage just with images (Between Waters and Skies (Impressionism), pasted playlists /montages above
+# this is what the container of webplayer shows when playing
+
+[Overlay] Calculating info: {playlistId: '1039', montagePosition: 0, track: '1'}
+App.js:447 [Overlay] Result: {playlistName: 'Impressionists', montageName: 'Between Waters and Skies (Impressionism)', track: '1'}montageName: "Between Waters and Skies (Impressionism)"playlistName: "Impressionists"track: "1"[[Prototype]]: Objectconstructor: ƒ Object()hasOwnProperty: ƒ hasOwnProperty()isPrototypeOf: ƒ isPrototypeOf()propertyIsEnumerable: ƒ propertyIsEnumerable()toLocaleString: ƒ toLocaleString()toString: ƒ toString()valueOf: ƒ valueOf()__defineGetter__: ƒ __defineGetter__()__defineSetter__: ƒ __defineSetter__()__lookupGetter__: ƒ __lookupGetter__()__lookupSetter__: ƒ __lookupSetter__()__proto__: (...)get __proto__: ƒ __proto__()set __proto__: ƒ __proto__()
+# stopping current Playlist
+Sequencer.ts:1498 [Sequencer] loop: Runner cleared - stopping
+#New playlust is indicated
+ws-tools.ts:224 [WS-TOOLS] Message received: {"tag_name":"playlist","id":"1040","name":"Heritage and installations","random":"0","montages":[{"tag_name":"montage","id":"1553","tracks":"3","screens":[{"tag_name":"screen","id":"184619","name":"Mai
+ws-tools.ts:229 [WS-TOOLS] Parsed JSON data keys: (5) ['tag_name', 'id', 'name', 'random', 'montages']
+ws-tools.ts:258 [WS-TOOLS] Processing playlist: 1040
+ws-tools.ts:350 [WS-TOOLS] Setting initial playlist: 1040
+LogHelper.ts:11 [2025-08-05 21:16:53.779] setCurrentPlaylist: Setting initial playlist: 1040 (Heritage and installations)
+Sequencer.ts:458 [Sequencer] assumeNewPlaylist: Setting playlist: ID 1040 (Heritage and installations)
+Sequencer.ts:468 [Sequencer] assumeNewPlaylist: Forcing React app re-initialization
+App.tsx:558 [App] Forcing reinitialization
+App.tsx:497 [App] Resetting video elements (component is mounted)
+App.tsx:504 [App] Clearing image state but keeping video components mounted
+Utils.js:25 [Utils] DOM dataset full: {"user":"wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1","theme":"wallmuse","house":"278"}
+Utils.js:181 [utils] isDemoAccount - basic demo: true wpLoggedIn: false
+PlaylistsContext.js:11 [PlaylistsContext] usePlaylists
+App.js:358 [App PlayerIntegration] isDemo, currentTheme(), theme, userId/session true wallmuse {breakpoints: {…}, direction: 'ltr', components: {…}, palette: {…}, spacing: ƒ, …} wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1
+App.js:709 [App PlayerIntegration NAV] Selected track for screen: 1 Screen ID: 193413
+App.js:728 [PlayerIntegration] playModeRef {current: false}
+BaseLine.js:11 [BaseLine] themeName, t: wallmuse ƒ (e,t){let a;if("object"!==typeof t){for(var s=arguments.length,l=new Array(s>2?s-2:0),c=2;c<s;c++)l[c-2]=arguments[c];a=r.options.overloadTranslationOptionHandler([e,t].concat(l))}else a=(0,o.A)({},t…
+PlayLists.js:113 [Playlists] Playlists started, isDemo true
+Utils.js:25 [Utils] DOM dataset full: {"user":"wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1","theme":"wallmuse","house":"278"}
+Utils.js:181 [utils] isDemoAccount - basic demo: true wpLoggedIn: false
+PlayLists.js:620 [PlayLists] playlistsgt... (3) [{…}, {…}, {…}]
+MontageSelection.js:82 [MontageSelection] userDetails  null  isDemo  false  isPremium false
+MontageSelection.js:88 [Montage Selection] playlists, setPlaylists (3) [{…}, {…}, {…}] ƒ ns(e,t,n){var o=nc(e),r={lane:o,action:n,hasEagerState:!1,eagerState:null,next:null};if(os(e))rs(t,r);else{var i=e.alternate;if(0===e.lanes&&(null===i||0===i.lanes)&&null!==(i=t.lastRenderedReducer))…
+Utils.js:25 [Utils] DOM dataset full: {"user":"wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1","theme":"wallmuse","house":"278"}
+Utils.js:25 [Utils] DOM dataset full: {"user":"wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1","theme":"wallmuse","house":"278"}
+Utils.js:181 [utils] isDemoAccount - basic demo: true wpLoggedIn: false
+App.tsx:667 [LOG] App.render state: {imageShown: 0, videoShown: 0, imagePreloading: 0, videoPreloading: 0, volume: 0, …}
+EssentialLogger.ts:36 📽️ [MEDIA] App render state {imageShown: 0, videoShown: 0, video1: undefined, video2: undefined, isShown: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Video rendering check {videoElementsInDOM: 0, video1: undefined, video2: undefined, video1Exists: false, video2Exists: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Image rendering check {image1: undefined, image2: undefined, image1Exists: false, image2Exists: false, willRenderImage1: false, …}
+App.tsx:750 [App.render] RENDER CONDITIONS: {hasVideo1: false, hasVideo2: false, hasImage1: false, hasImage2: false, videoShown: 0, …}
+App.tsx:769 [App.render] RENDER DECISION: {isShown: false, loading: false, willShowPlaceholder: true, willShowError: false, canWork: ƒ, …}
+App.tsx:779 [App.render] RENDERING APP COMPONENT: {hasImage1: false, hasImage2: false, hasVideo1: false, hasVideo2: false, imageShown: 0, …}
+App.tsx:517 [App] Image state cleared, video components remain mounted
+Sequencer.ts:1498 [Sequencer] loop: Runner cleared - stopping
+App.tsx:667 [LOG] App.render state: {imageShown: 0, videoShown: 0, imagePreloading: 0, videoPreloading: 0, volume: 0, …}
+EssentialLogger.ts:36 📽️ [MEDIA] App render state {imageShown: 0, videoShown: 0, video1: undefined, video2: undefined, isShown: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Video rendering check {videoElementsInDOM: 0, video1: undefined, video2: undefined, video1Exists: false, video2Exists: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Image rendering check {image1: undefined, image2: undefined, image1Exists: false, image2Exists: false, willRenderImage1: false, …}
+App.tsx:750 [App.render] RENDER CONDITIONS: {hasVideo1: false, hasVideo2: false, hasImage1: false, hasImage2: false, videoShown: 0, …}
+App.tsx:769 [App.render] RENDER DECISION: {isShown: false, loading: false, willShowPlaceholder: true, willShowError: false, canWork: ƒ, …}
+App.tsx:779 [App.render] RENDERING APP COMPONENT: {hasImage1: false, hasImage2: false, hasVideo1: false, hasVideo2: false, imageShown: 0, …}
+Sequencer.ts:1498 [Sequencer] loop: Runner cleared - stopping
+App.tsx:667 [LOG] App.render state: {imageShown: 0, videoShown: 0, imagePreloading: 0, videoPreloading: 0, volume: 0, …}
+EssentialLogger.ts:36 📽️ [MEDIA] App render state {imageShown: 0, videoShown: 0, video1: undefined, video2: undefined, isShown: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Video rendering check {videoElementsInDOM: 0, video1: undefined, video2: undefined, video1Exists: false, video2Exists: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Image rendering check {image1: undefined, image2: undefined, image1Exists: false, image2Exists: false, willRenderImage1: false, …}
+App.tsx:750 [App.render] RENDER CONDITIONS: {hasVideo1: false, hasVideo2: false, hasImage1: false, hasImage2: false, videoShown: 0, …}
+App.tsx:769 [App.render] RENDER DECISION: {isShown: false, loading: false, willShowPlaceholder: true, willShowError: false, canWork: ƒ, …}
+App.tsx:779 [App.render] RENDERING APP COMPONENT: {hasImage1: false, hasImage2: false, hasVideo1: false, hasVideo2: false, imageShown: 0, …}
+WebPlayer.js:23 [WebPlayer] Player loaded successfully (will not reload again)
+WebPlayer.js:23 [WebPlayer] Montage order signature changed: 1398
+2Sequencer.ts:1498 [Sequencer] loop: Runner cleared - stopping
+App.tsx:667 [LOG] App.render state: {imageShown: 0, videoShown: 0, imagePreloading: 0, videoPreloading: 0, volume: 0, …}
+EssentialLogger.ts:36 📽️ [MEDIA] App render state {imageShown: 0, videoShown: 0, video1: undefined, video2: undefined, isShown: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Video rendering check {videoElementsInDOM: 0, video1: undefined, video2: undefined, video1Exists: false, video2Exists: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Image rendering check {image1: undefined, image2: undefined, image1Exists: false, image2Exists: false, willRenderImage1: false, …}
+App.tsx:750 [App.render] RENDER CONDITIONS: {hasVideo1: false, hasVideo2: false, hasImage1: false, hasImage2: false, videoShown: 0, …}
+App.tsx:769 [App.render] RENDER DECISION: {isShown: false, loading: false, willShowPlaceholder: true, willShowError: false, canWork: ƒ, …}
+App.tsx:779 [App.render] RENDERING APP COMPONENT: {hasImage1: false, hasImage2: false, hasVideo1: false, hasVideo2: false, imageShown: 0, …}
+App.tsx:564 [App] Forcing complete React app re-initialization
+App.tsx:571 [App] Cleared root-wm-player element
+App.tsx:575 [App] Calling window.forceAppReinitialization
+index.tsx:201 [React] forceAppReinitialization called - re-initializing React app
+index.tsx:207 [React] Cleared root-wm-player element
+Sequencer.ts:1498 [Sequencer] loop: Runner cleared - stopping
+App.tsx:667 [LOG] App.render state: {imageShown: 0, videoShown: 0, imagePreloading: 0, videoPreloading: 0, volume: 0, …}
+EssentialLogger.ts:36 📽️ [MEDIA] App render state {imageShown: 0, videoShown: 0, video1: undefined, video2: undefined, isShown: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Video rendering check {videoElementsInDOM: 0, video1: undefined, video2: undefined, video1Exists: false, video2Exists: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Image rendering check {image1: undefined, image2: undefined, image1Exists: false, image2Exists: false, willRenderImage1: false, …}
+App.tsx:750 [App.render] RENDER CONDITIONS: {hasVideo1: false, hasVideo2: false, hasImage1: false, hasImage2: false, videoShown: 0, …}
+App.tsx:769 [App.render] RENDER DECISION: {isShown: false, loading: false, willShowPlaceholder: true, willShowError: false, canWork: ƒ, …}
+App.tsx:779 [App.render] RENDERING APP COMPONENT: {hasImage1: false, hasImage2: false, hasVideo1: false, hasVideo2: false, imageShown: 0, …}
+Sequencer.ts:1498 [Sequencer] loop: Runner cleared - stopping
+App.tsx:667 [LOG] App.render state: {imageShown: 0, videoShown: 0, imagePreloading: 0, videoPreloading: 0, volume: 0, …}
+EssentialLogger.ts:36 📽️ [MEDIA] App render state {imageShown: 0, videoShown: 0, video1: undefined, video2: undefined, isShown: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Video rendering check {videoElementsInDOM: 0, video1: undefined, video2: undefined, video1Exists: false, video2Exists: false, …}
+EssentialLogger.ts:36 📽️ [MEDIA] Image rendering check {image1: undefined, image2: undefined, image1Exists: false, image2Exists: false, willRenderImage1: false, …}
+App.tsx:750 [App.render] RENDER CONDITIONS: {hasVideo1: false, hasVideo2: false, hasImage1: false, hasImage2: false, videoShown: 0, …}
+App.tsx:769 [App.render] RENDER DECISION: {isShown: false, loading: false, willShowPlaceholder: true, willShowError: false, canWork: ƒ, …}
+App.tsx:779 [App.render] RENDERING APP COMPONENT: {hasImage1: false, hasImage2: false, hasVideo1: false, hasVideo2: false, imageShown: 0, …}
+PlayLists.js:589 [doLoadPlaylist] NOW calling onMontageNavigation(1040, 1)
+App.js:542 [NAV] handleMontageNavigation: {selectedPlaylistId: '1040', selectedPlaylistPosition: 1}
+App.js:564 [NAV] Playlist change detected, setting flag
+App.js:568 [NAV] Updating currentPlaylist from 1039 to 1040
+App.js:424 [Overlay] Calculating info: {playlistId: '1040', montagePosition: 1, track: '1'}
+App.js:447 [Overlay] Result: {playlistName: 'Heritage and installations', montageName: 'Temple of Poseidon at Sounion', track: '1'}
+App.js:481 [App PlayerIntegration Track MONTAGE_INDEX NAV] Updating current montage index from 0 to 1
+NavigationManager.js:123 [NAV-MANAGER] 📝 Adding command (remount #1): {playlist: '1040', position: {…}, timestamp: 1754421413929, remountCount: 1, id: 'cmd-1754421413929-f16mt'}
+NavigationManager.js:135 [NAV-MANAGER] ⏳ Command queued - waiting for ready state
+PlayLists.js:591 [doLoadPlaylist] onMontageNavigation call completed
+App.js:120 [DontStartBefore] started
+PlaylistsContext.js:11 [PlaylistsContext] usePlaylists
+App.js:149 [DontStartBefore] house: 278 environments.length: 117 currentPlaylist: 1040 initalLoading: false syncLoading: false playlistsLoading: false
+Utils.js:25 [Utils] DOM dataset full: {"user":"wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1","theme":"wallmuse","house":"278"}
+Utils.js:181 [utils] isDemoAccount - basic demo: true wpLoggedIn: false
+Utils.js:181 [utils] isDemoAccount - basic demo: true wpLoggedIn: false
+App.js:161 [DontStartBefore DEBUG] isDemoAccount(userId): true
+App.js:193 [DontStartBefore] initialLoading:  false , syncLoading:  false , playlistsLoading:  false
+App.js:232 [DontStartBefore] Finished, rendering PlayerIntegration
+Utils.js:25 [Utils] DOM dataset full: {"user":"wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1","theme":"wallmuse","house":"278"}
+Utils.js:181 [utils] isDemoAccount - basic demo: true wpLoggedIn: false
+PlaylistsContext.js:11 [PlaylistsContext] usePlaylists
+App.js:358 [App PlayerIntegration] isDemo, currentTheme(), theme, userId/session true wallmuse {breakpoints: {…}, direction: 'ltr', components: {…}, palette: {…}, spacing: ƒ, …} wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1
+App.js:709 [App PlayerIntegration NAV] Selected track for screen: 1 Screen ID: 193413
+App.js:728 [PlayerIntegration] playModeRef {current: false}
+BaseLine.js:11 [BaseLine] themeName, t: wallmuse ƒ (e,t){let a;if("object"!==typeof t){for(var s=arguments.length,l=new Array(s>2?s-2:0),c=2;c<s;c++)l[c-2]=arguments[c];a=r.options.overloadTranslationOptionHandler([e,t].concat(l))}else a=(0,o.A)({},t…
+PlayerCommands.js:49 [PlayerCommands] Rendering with volumeRef.current, currentPlaylist): 0 1040
+PlayerCommands.js:53 [PlayerCommands] isPlaying true
+IOSAudioHandler.js:17 [IOSAudioHandler] Component rendered with props: {variant: 'banner', showPrompt: false, hasHandlePlayPause: true, hasOnPlay: true}
+IOSAudioHandler.js:105 [IOSAudioHandler] Render decision - showPrompt: false
+IOSAudioHandler.js:108 [IOSAudioHandler] Not rendering - showPrompt is false
+PlayLists.js:113 [Playlists] Playlists started, isDemo true
+Utils.js:25 [Utils] DOM dataset full: {"user":"wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1","theme":"wallmuse","house":"278"}
+Utils.js:181 [utils] isDemoAccount - basic demo: true wpLoggedIn: false
+PlayLists.js:620 [PlayLists] playlistsgt... (3) [{…}, {…}, {…}]
+MontageSelection.js:82 [MontageSelection] userDetails  null  isDemo  false  isPremium false
+MontageSelection.js:88 [Montage Selection] playlists, setPlaylists (3) [{…}, {…}, {…}] ƒ ns(e,t,n){var o=nc(e),r={lane:o,action:n,hasEagerState:!1,eagerState:null,next:null};if(os(e))rs(t,r);else{var i=e.alternate;if(0===e.lanes&&(null===i||0===i.lanes)&&null!==(i=t.lastRenderedReducer))…
+Utils.js:25 [Utils] DOM dataset full: {"user":"wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1","theme":"wallmuse","house":"278"}
+Utils.js:25 [Utils] DOM dataset full: {"user":"wp-freeaccount-1-9360c44751f327c087cf9c030ffa58d1","theme":"wallmuse","house":"278"}
+Utils.js:181 [utils] isDemoAccount - basic demo: true wpLoggedIn: false
+WebPlayer.js:23 [WebPlayer] Montage order signature changed: 1553,1551
+NavigationManager.js:90 [NAV-MANAGER] 🚦 Ready state changed: true -> true
+App.js:424 [Overlay] Calculating info: {playlistId: '1040', montagePosition: 0, track: '1'}
+#This is wrong, it should be montage 2 the one I selected "Temple of Poseidon at Sounion"
+#For me this is the sole error I see, do you see others? So the issue is in App.js?
+App.js:447 [Overlay] Result: {playlistName: 'Heritage and installations', montageName: 'Catène de Containers', track: '1'}

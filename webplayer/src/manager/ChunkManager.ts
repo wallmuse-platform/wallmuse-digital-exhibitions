@@ -1,0 +1,238 @@
+// ABANDONED — custom chunk streaming was disabled (Jan 2026).
+// Root cause: every navigation restart re-fetched video from byte 0, causing 200-600
+// parallel Range requests per video and server overload under normal use.
+// Current approach: direct <video src="..."> — browser handles Range requests natively
+// with a single connection per video. This file is kept for reference only.
+import { LogHelper } from './LogHelper';
+
+interface ChunkRequest {
+  url: string;
+  startByte: number;
+  endByte: number;
+  priority: 'high' | 'normal' | 'low';
+  abortController?: AbortController;
+}
+
+interface ChunkResponse {
+  data: ArrayBuffer;
+  startByte: number;
+  endByte: number;
+  loadTime: number;
+}
+
+interface VideoStreamConfig {
+  chunkSize: number;
+  aheadTime: number;
+  maxConcurrentChunks: number;
+  retryAttempts: number;
+  retryDelay: number;
+  timeout: number;
+}
+
+export class ChunkManager {
+  private static instance: ChunkManager;
+  private activeRequests: Map<string, ChunkRequest> = new Map();
+  private requestQueue: ChunkRequest[] = [];
+  private processingQueue = false;
+  private config: VideoStreamConfig;
+
+  private constructor() {
+    this.config = {
+      chunkSize: 500000, // 500KB chunks (legacy config)
+      aheadTime: 2, // 2 seconds ahead (legacy config)
+      maxConcurrentChunks: 1, // Reduced: Prevent connection pool exhaustion
+      retryAttempts: 2,
+      retryDelay: 1000,
+      timeout: 8000,
+    };
+  }
+
+  public static getInstance(): ChunkManager {
+    if (!ChunkManager.instance) {
+      ChunkManager.instance = new ChunkManager();
+    }
+    return ChunkManager.instance;
+  }
+
+  public setConfig(config: Partial<VideoStreamConfig>) {
+    this.config = { ...this.config, ...config };
+  }
+
+  public async requestChunk(
+    url: string,
+    startByte: number,
+    endByte: number,
+    priority: 'high' | 'normal' | 'low' = 'normal'
+  ): Promise<ChunkResponse> {
+    console.log(`[ChunkManager.requestChunk] ENTRY: bytes=${startByte}-${endByte}, activeRequests=${this.activeRequests.size}, maxConcurrent=${this.config.maxConcurrentChunks}, queueLength=${this.requestQueue.length}`);
+
+    const requestId = `${url}-${startByte}-${endByte}`;
+
+    // Check if already requested
+    if (this.activeRequests.has(requestId)) {
+      console.log(`[ChunkManager.requestChunk] Request already exists, calling waitForRequest: ${requestId}`);
+      const existing = this.activeRequests.get(requestId)!;
+      if (priority === 'high' && existing.priority !== 'high') {
+        // Upgrade priority
+        existing.priority = 'high';
+        this.reorderQueue();
+      }
+      // Return existing promise or wait for completion
+      return this.waitForRequest(requestId);
+    }
+
+    const abortController = new AbortController();
+    const request: ChunkRequest = {
+      url,
+      startByte,
+      endByte,
+      priority,
+      abortController,
+    };
+
+    // Check if we can process immediately BEFORE adding to activeRequests
+    if (this.activeRequests.size < this.config.maxConcurrentChunks) {
+      console.log(`[ChunkManager.requestChunk] Processing immediately (under concurrent limit)`);
+      this.activeRequests.set(requestId, request);
+      return this.processRequest(requestId, request);
+    } else {
+      console.log(`[ChunkManager.requestChunk] Adding to queue (at concurrent limit)`);
+      // Add to queue
+      this.requestQueue.push(request);
+      this.reorderQueue();
+      return this.waitForRequest(requestId);
+    }
+  }
+
+  private async processRequest(requestId: string, request: ChunkRequest): Promise<ChunkResponse> {
+    const startTime = Date.now();
+    let attempts = 0;
+
+    while (attempts <= this.config.retryAttempts) {
+      try {
+        console.log(`[ChunkManager] Attempt ${attempts}: Fetching ${request.url} with Range: bytes=${request.startByte}-${request.endByte}`);
+
+        // Create timeout with AbortController for browser compatibility (Safari 15, older browsers)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+        const response = await fetch(request.url, {
+          headers: {
+            Range: `bytes=${request.startByte}-${request.endByte}`,
+          },
+          signal: controller.signal,
+        });
+
+        console.log(`[ChunkManager] Response received: status=${response.status}, ok=${response.ok}`);
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        console.log(`[ChunkManager] Reading response body as ArrayBuffer...`);
+        const data = await response.arrayBuffer();
+        console.log(`[ChunkManager] ArrayBuffer received: ${data.byteLength} bytes`);
+        const loadTime = Date.now() - startTime;
+
+        // LogHelper.log('ChunkManager', `Chunk loaded: ${request.startByte}-${request.endByte} in ${loadTime}ms`);
+
+        // Clean up
+        this.activeRequests.delete(requestId);
+        this.processNextInQueue();
+
+        return {
+          data,
+          startByte: request.startByte,
+          endByte: request.endByte,
+          loadTime,
+        };
+      } catch (error) {
+        attempts++;
+        // LogHelper.error('ChunkManager', `Chunk request failed (attempt ${attempts}):`, error);
+
+        if (attempts > this.config.retryAttempts) {
+          this.activeRequests.delete(requestId);
+          this.processNextInQueue();
+          throw error;
+        }
+
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, this.config.retryDelay * attempts));
+      }
+    }
+
+    throw new Error('Max retry attempts exceeded');
+  }
+
+  private async waitForRequest(requestId: string): Promise<ChunkResponse> {
+    return new Promise((resolve, reject) => {
+      const checkComplete = () => {
+        if (!this.activeRequests.has(requestId)) {
+          // Request completed, resolve with result
+          // Note: In a real implementation, you'd need to store the result
+          resolve({} as ChunkResponse);
+        } else {
+          setTimeout(checkComplete, 100);
+        }
+      };
+      checkComplete();
+    });
+  }
+
+  private reorderQueue() {
+    this.requestQueue.sort((a, b) => {
+      const priorityOrder = { high: 3, normal: 2, low: 1 };
+      return priorityOrder[b.priority] - priorityOrder[a.priority];
+    });
+  }
+
+  private processNextInQueue() {
+    if (
+      this.requestQueue.length > 0 &&
+      this.activeRequests.size < this.config.maxConcurrentChunks
+    ) {
+      const nextRequest = this.requestQueue.shift()!;
+      const requestId = `${nextRequest.url}-${nextRequest.startByte}-${nextRequest.endByte}`;
+      this.processRequest(requestId, nextRequest);
+    }
+  }
+
+  public cancelAllRequests() {
+    // Cancel all active requests
+    this.activeRequests.forEach(request => {
+      request.abortController?.abort();
+    });
+    this.activeRequests.clear();
+    this.requestQueue = [];
+  }
+
+  public cancelRequestsForUrl(url: string) {
+    // Cancel requests for specific URL
+    const toCancel = Array.from(this.activeRequests.entries()).filter(([requestId]) =>
+      requestId.startsWith(url)
+    );
+
+    toCancel.forEach(([requestId, request]) => {
+      request.abortController?.abort();
+      this.activeRequests.delete(requestId);
+    });
+
+    // Remove from queue
+    this.requestQueue = this.requestQueue.filter(req => req.url !== url);
+  }
+
+  public getStats() {
+    return {
+      activeRequests: this.activeRequests.size,
+      queuedRequests: this.requestQueue.length,
+      config: this.config,
+    };
+  }
+}
+
+// Add to window for debugging
+if (typeof window !== 'undefined') {
+  (window as any).chunkManager = ChunkManager.getInstance();
+}

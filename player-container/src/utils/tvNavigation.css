@@ -1,0 +1,145 @@
+/* tvNavigation.css - Improved version for better TV remote compatibility */
+
+/* 
+ * Base styles for TV navigation
+ * These styles ensure buttons are large enough for remote control navigation
+ */
+.tv-mode [data-tv-focusable="true"] {
+  /* Increase target size for remote controls */
+  min-height: 48px; 
+  min-width: 48px;
+  cursor: pointer;
+}
+
+/* 
+ * Focus styles that are more visible on TV screens
+ * Uses a thicker outline and glow effect for better visibility
+ */
+.tv-mode [data-tv-focusable="true"]:focus,
+.tv-mode [data-tv-focusable="true"][data-tv-focused="true"] {
+  /* Use !important sparingly and only where necessary */
+  outline: 3px solid #cc9931 !important;
+  outline-offset: 3px;
+  /* Add a subtle glow for better visibility on TVs */
+  box-shadow: 0 0 12px rgba(204, 153, 49, 0.7);
+  /* Ensure focus is visible above other elements */
+  z-index: 10;
+  /* No transition to ensure immediate visual feedback */
+  transition: none !important;
+}
+
+/* 
+ * Specific styling for Button (previously CustomIconButton) to ensure it works with the TV navigation
+ */
+.tv-mode .Button[data-tv-focusable="true"]:focus,
+.tv-mode .Button[data-tv-focusable="true"][data-tv-focused="true"] {
+  /* Keep original colors to maintain theme consistency */
+  background-color: inherit;
+  color: inherit;
+  /* Clear focus outline in secondary color */
+  outline: 3px solid #cc9931 !important;
+  outline-offset: 3px;
+}
+
+/* 
+ * Make buttons with text more readable on TV screens
+ */
+.tv-mode .custom-icon-button.tabs_text {
+  font-size: 1.2rem;
+  padding: 12px 24px !important;
+  /* Improved letter spacing for better readability on TVs */
+  letter-spacing: 0.5px;
+}
+
+/* 
+ * Add a subtle visual indication for the current focus
+ * This helps users track their position on the screen
+ */
+.tv-mode [data-button-index]:focus::after,
+.tv-mode [data-button-index][data-tv-focused="true"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #cc9931;
+}
+
+/* 
+ * Ensure all interactive elements in TV mode have proper hover states
+ */
+.tv-mode [data-tv-focusable="true"]:hover {
+  opacity: 0.9;
+}
+
+/* 
+ * Special handling for Link components to ensure they work with TV navigation
+ */
+.tv-mode a[data-tv-focusable="true"]:focus,
+.tv-mode a[data-tv-focusable="true"][data-tv-focused="true"] {
+  text-decoration: none;
+  outline: 3px solid #cc9931 !important;
+  outline-offset: 3px;
+}
+
+/* 
+ * Modal focus handling - ensure close buttons are properly highlighted
+ */
+.tv-mode .modal .MuiIconButton-root:focus {
+  outline: 3px solid #cc9931 !important;
+  outline-offset: 3px;
+  background-color: rgba(204, 153, 49, 0.2) !important;
+}
+
+/* 
+ * Add debug outlines during development
+ * Uncomment these lines to visualize focusable elements 
+ */
+/*
+.tv-mode [data-tv-focusable="true"] {
+  outline: 1px dashed rgba(255, 0, 0, 0.5);
+}
+
+.tv-mode [data-tv-group] {
+  outline: 1px dashed rgba(0, 0, 255, 0.5);
+}
+*/
+
+/* 
+ * Add visual cues for TV navigation 
+ * Only shown in TV mode
+ */
+.tv-navigation-helper {
+  display: none;
+}
+
+.tv-mode .tv-navigation-helper {
+  display: flex;
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 24px;
+  z-index: 9999;
+  font-size: 14px;
+  align-items: center;
+  gap: 16px;
+}
+
+.tv-navigation-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  margin-right: 8px;
+}

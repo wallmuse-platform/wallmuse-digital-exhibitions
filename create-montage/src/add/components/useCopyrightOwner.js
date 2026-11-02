@@ -1,0 +1,115 @@
+// Update to the useCopyrightOwner.js file to improve the integration with AddContent.js
+
+import { useState, useCallback, useEffect } from 'react';
+import { searchCopyrightOwner } from '../../api'; // Update this path if needed
+import { getUserId } from '../../utils/Utils'; // Update this path if needed
+
+/**
+ * Custom hook to manage copyright owner selection state and logic
+ * 
+ * @returns {Object} Hook state and methods
+ */
+export function useCopyrightOwner() {
+    const [selectedOwnerId, setSelectedOwnerId] = useState("-1");
+    const [authorName, setAuthorName] = useState("");
+    const [showOwnerSelector, setShowOwnerSelector] = useState(false);
+    const [potentialOwners, setPotentialOwners] = useState([]);
+    const [searchPending, setSearchPending] = useState(false);
+    const sessionId = getUserId();
+
+    const setShowOwnerSelectorWithLog = useCallback((value) => {
+        console.log('[useCopyrightOwner] showOwnerSelector changed to:', value);
+        setShowOwnerSelector(value);
+    }, []);
+
+    // Perform the search when authorName changes and search is requested
+    useEffect(() => {
+        if (!searchPending || !authorName || authorName.trim() === '') {
+            return; // Skip if no search pending or no name
+        }
+
+        const performSearch = async () => {
+            try {
+                console.log('[useCopyrightOwner] Searching for author:', authorName);
+                const owners = await searchCopyrightOwner(sessionId, authorName);
+
+                if (owners.length > 0) {
+                    console.log('[useCopyrightOwner] Found potential matches:', owners);
+
+                    // Check for EXACT match first (case-insensitive)
+                    const searchName = authorName.trim().toLowerCase();
+                    const exactMatch = owners.find(owner =>
+                        (owner.name && owner.name.toLowerCase() === searchName) ||
+                        (owner.displayName && owner.displayName.toLowerCase() === searchName)
+                    );
+
+                    if (exactMatch) {
+                        // Put exact match first so it's pre-highlighted in the popup
+                        const ordered = [exactMatch, ...owners.filter(o => o.id !== exactMatch.id)];
+                        setPotentialOwners(ordered);
+                    } else {
+                        setPotentialOwners(owners);
+                    }
+                    setShowOwnerSelector(true);
+                } else {
+                    console.log('[useCopyrightOwner] No matches found, using as new author');
+                    setSelectedOwnerId("-1");
+                    setShowOwnerSelector(false);
+                }
+            } catch (error) {
+                console.error('[useCopyrightOwner] Error searching:', error);
+                setSelectedOwnerId("-1");
+                setShowOwnerSelector(false);
+            } finally {
+                setSearchPending(false);
+            }
+        };
+
+        // Debounce the search (1 second like legacy code)
+        const timer = setTimeout(performSearch, 1000);
+        return () => clearTimeout(timer);
+    }, [authorName, searchPending, sessionId]);
+
+    // Handle when an owner is selected
+    const handleOwnerSelected = useCallback((ownerId, ownerName) => {
+        console.log('[useCopyrightOwner] Owner selected:', ownerId, ownerName);
+        setSelectedOwnerId(String(ownerId));
+        setAuthorName(ownerName);
+        setShowOwnerSelector(false);
+    }, []);
+
+    // Trigger the owner search
+    const searchOwner = useCallback((name) => {
+        if (!name || name.trim() === '') {
+            resetOwner();
+            return;
+        }
+        console.log('[useCopyrightOwner] Triggering search for:', name);
+        setAuthorName(name);
+        setSearchPending(true);
+    }, []);
+
+    // Reset the owner selection
+    const resetOwner = useCallback(() => {
+        console.log('[useCopyrightOwner] Resetting owner');
+        setSelectedOwnerId("-1");
+        setAuthorName("");
+        setShowOwnerSelector(false);
+        setPotentialOwners([]);
+        setSearchPending(false);
+    }, []);
+
+    return {
+        selectedOwnerId,
+        setSelectedOwnerId,
+        authorName,
+        potentialOwners,
+        showOwnerSelector,
+        setShowOwnerSelector: setShowOwnerSelectorWithLog,
+        handleOwnerSelected,
+        searchOwner,
+        resetOwner
+    };
+}
+
+export default useCopyrightOwner;
