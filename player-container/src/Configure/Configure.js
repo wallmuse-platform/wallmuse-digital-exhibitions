@@ -5,7 +5,6 @@ import { useEnvironments } from "../contexts/EnvironmentsContext.js";
 import {
   removeScreen,
   removeEnvironment,
-  deactivateEnvironment,
   deactivateScreen,
   detailsUser,
 } from "../utils/api.js";
@@ -136,7 +135,7 @@ export function ConfigureDisplays({ t, onClose, handleAction }) {
         "[Configure] Cannot remove active environment:",
         environmentToRemove,
       );
-      alert("configure.cannot.remove.env.active");
+      alert(t("configure.cannot.remove.env.active"));
       return;
     }
     console.log(
@@ -219,22 +218,16 @@ export function ConfigureDisplays({ t, onClose, handleAction }) {
         }
       }
 
-      // Step 2: Deactivate the environment
-      console.log("[Configure] Now deactivating environment:", id);
-      await deactivateEnvironment(id);
-      console.log("[Configure] Environment deactivated via API");
-
-      // Step 3: Update local state to reflect all deactivations
+      // Step 2: Update local state to reflect screen deactivations
       const newEnvironments = environments.map((env) => {
         if (String(env.id) === String(id)) {
           return {
             ...env,
-            alive: "0", // Set environment as inactive
             screens:
               env.screens?.map((screen) => ({
                 ...screen,
-                on: "0", // Set screen as off (but keep enabled/linked)
-                // enabled stays the same - screen remains linked to environment
+                enabled: "0",
+                on: "0",
               })) || [],
           };
         }
@@ -301,6 +294,9 @@ export function ConfigureDisplays({ t, onClose, handleAction }) {
       style={{
         display: "grid",
         minWidth: "360px",
+        maxWidth: "1600px",
+        width: "100%",
+        margin: "0 auto",
         gridTemplateColumns: isMobile
           ? "2px 2px repeat(11, 1fr) 2px 2px"
           : "repeat(15, 1fr)",

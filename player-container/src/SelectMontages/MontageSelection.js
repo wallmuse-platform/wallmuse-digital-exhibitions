@@ -38,7 +38,6 @@ import {
   getPlaylists,
   getOrCreateMonoPlaylist,
 } from "../utils/api.js";
-import { monitorPlayback } from "../wsTools";
 import { BaseThumbnailContext } from "../contexts/MontagesContext.js";
 import { getUserId } from "../utils/Utils";
 import FilterBar from "./FilterBar.js";

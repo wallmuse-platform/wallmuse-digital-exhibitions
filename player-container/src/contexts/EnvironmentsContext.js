@@ -802,6 +802,14 @@ export const EnvironmentsProvider = ({ children }) => {
               // so that get_wp_user returns it in subsequent calls and Configure can display it.
               // The child WebPlayer may also create its own environment via WebSocket — the
               // needsSecondRefresh / cleanup logic in the existing account path handles deduplication.
+              //
+              // Still required as of Nov 2026: this branch only runs when isNewAccount &&
+              // newAccountHouseId === houseId (see the enclosing if above) — gated on the
+              // accountJustCreated/newAccountHouseId flags, set only during actual account
+              // creation. It's unrelated to, and not replaced by, the WebPlayer.js environ=0
+              // fix (see TROUBLESHOOTING_ACCOUNT_CREATION.md) — that fix stops unnecessary
+              // re-creation on returning sessions, but does nothing for a brand-new account's
+              // very first load, which is exactly what this branch covers.
               try {
                 console.log(
                   "[fetchEnvironmentDetails] No environments found — creating via REST API for house:",

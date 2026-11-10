@@ -103,23 +103,37 @@ This is necessary because `useInitialData` fetches playlists on mount before the
 
 ## Known Issues
 
-### Double Environment Creation
-**Problem:** Account creation results in 2 environments instead of 1
-- Environment with IP `127.0.0.1` (master)
-- Environment without IP (duplicate with faulty screen dimensions `0x0`)
+### Environment Accumulation / Double Creation
 
-### Root Cause Analysis
-1. **Single creation call** triggers `createDefaultEnvironment` once
-2. **Child WebPlayer** creates additional environment
-3. **needsSecondRefresh cleanup** was previously removing the duplicate
-4. **Removing needsSecondRefresh** exposed the underlying issue
+Two distinct bugs have contributed to accounts accumulating extra "Web player" environments. One is fixed; the other is a narrower, still-present architectural race.
+
+### Fixed (Nov 2026): `WebPlayer.js` forced `environ=0` on every load
+
+**Problem:** `getScreenId()` in `WebPlayer.js` was hardcoded to always return `null` ("child will handle screen creation"). The load gate was `if (!environmentId || !screenId)` — since `screenId` could never be anything but `null`, this fired on **every page load**, discarding any valid `environmentId` already known from `localStorage['wm-house']` and forcing `environ=0&screen=0` in the player URL regardless.
+
+**Effect:** webplayer2B's `checkHouse()` gates its entire localStorage-reuse logic on `environ === 0` in the URL (`ws-tools.ts`). With `environ` always forced to `0`, it skipped reuse unconditionally and called `add_environment` fresh on **every single load**, for every account — not just new ones. This, not the account-creation race below, is what actually produced the large environment counts seen in production (one house observed with 20+ "Web player" environments).
+
+**Fix:** narrow the gate to `if (!environmentId)`; `screenId` now defaults to `"0"` independently of whether `environmentId` was found, since by design the child always owns screen creation/attachment regardless of environment reuse. `checkHouse()` gates reuse solely on `environ`, so passing a known `environmentId` with `screen=0` is safe — the child resolves/attaches the existing screen itself.
+
+**Validated:** live console + Network + localStorage inspection across two different accounts (a demo guest and a registered account) — environment and screen IDs now stay stable across reloads and Configure opens instead of incrementing each time.
+
+### Still present: new-account first-load race (narrow)
+
+The original, smaller-scope issue — relevant only to the single `fetchEnvironmentDetails` call right after a brand-new account's house is created (e.g. the demo "try first" → write/edit → account-creation-prompt flow), before `wm-house` exists in localStorage for the fix above to find anything to reuse:
+
+1. Parent (`EnvironmentsContext`) sees `houseEnvironments.length === 0` for the new house and calls `createDefaultEnvironment` once via REST.
+2. Child WebPlayer, with no `wm-house` to restore from either, creates its own environment via WebSocket at essentially the same time.
+3. Neither side can detect the other's environment (see "Why dedup can't catch the duplicate" below), so both can succeed — producing 2 environments for that one house: one with IP `127.0.0.1` (master), one without IP (faulty screen dimensions `0x0`).
+4. `needsSecondRefresh` cleanup (still active) detects and removes the non-master/faulty one afterward.
+
+**`createDefaultEnvironment` is still required.** It's the only thing populating Configure immediately for a brand-new account, since the child's WebSocket-created environment is invisible to the REST endpoint until something refreshes it (see Architecture Notes below). Removing it would not reintroduce the per-load bug fixed above, but would reopen the "Configure shows 0 environments" gap for brand-new accounts specifically.
 
 ### Architecture Notes
 - **Environment creation** handled at two levels:
   - **Parent (EnvironmentsContext)**: creates environment + screen via REST API, so `get_wp_user` returns it immediately and Configure shows it
   - **Child WebPlayer (TypeScript)**: creates environment via WebSocket; this one is NOT returned by `get_wp_user` — it only appears after a second refresh
-- **Race conditions** between initial mount and house-created event possible
-- **Critical**: If the REST API creation block in `fetchEnvironmentDetails` is removed, new accounts will show 0 environments in Configure even though the player works (the WebSocket environment is invisible to the REST endpoint)
+- **Partial mitigation already in place:** `Configure.js`'s `ConfigureDisplays` does a silent `detailsUser()` refresh whenever the Configure modal opens, so manually opening Configure catches an environment the child created that the parent doesn't know about yet — just reactively, only on that user action, not proactively.
+- **Critical**: If the REST API creation block in `fetchEnvironmentDetails` is removed, new accounts will show 0 environments in Configure until the user opens Configure (or some other refresh fires), even though the player works (the WebSocket environment is invisible to the REST endpoint)
 
 ### Server-Side Investigation (Aug 2026)
 Checked with the backend whether `add_environment` has a server-side bug causing the duplicate. Verdict: **no server-side bug** — the double creation is an architectural consequence of two independent creation paths, not faulty dedup logic.

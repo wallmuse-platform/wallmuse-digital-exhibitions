@@ -79,8 +79,8 @@ wp-{login}-{domainId}-{md5(login + domainId + secret)}
 ```
 
 Examples:
-- `wp-freeaccount-1-9360c44…`   → guest on wallmuse.com / sharex (domain 1)
-- `wp-Unregistered-8-0220ca…`   → guest on ooo2 (domain 8)
+- `wp-freeaccount-1-9360c44…`   → demo on wallmuse.com / sharex (domain 1)
+- `wp-Unregistered-8-0220ca…`   → demo on ooo2 (domain 8)
 - `wp-Education1071-1-…`         → logged-in WP user on wallmuse.com
 - `wp-mymuseum-42-abc123…`       → WP plugin customer (token from `authenticate_with_key`)
 

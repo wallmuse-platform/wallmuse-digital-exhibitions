@@ -24,14 +24,13 @@ import {
   activateScreen,
   deactivateScreen,
   activateEnvironment,
-  deactivateEnvironment,
 } from "../utils/api";
 
 import {
   isEnvironmentActive,
   isScreenActive,
   hasValidDimensions,
-  getAllActiveScreens,
+  getAllScreens,
   validateScreenSetup,
   canUseEnvironmentForPlayback,
 } from "../utils/environmentUtils";
@@ -213,22 +212,33 @@ export function ConfigureEnvironmentScreen({
 
         try {
           if (isCurrentlyActive) {
-            // Deactivate environment (you'll need to create activateEnvironment function)
-            await deactivateEnvironment(environment.id);
+            // Disable all screens in this environment group
+            const thisGroup = environmentGroup.find(
+              ({ environment: env }) => env.id === environment.id,
+            );
+            if (thisGroup?.screens) {
+              for (const screen of thisGroup.screens) {
+                if (isScreenActive(screen)) {
+                  await deactivateScreen(screen.id);
+                }
+              }
+            }
           } else {
-            // Activate environment - you'll need to create this API function
             await activateEnvironment(environment.id);
           }
 
           // Update local state immediately for responsive UI
           const updatedEnvironmentGroup = environmentGroup.map(
-            ({ environment: env, screens }) => ({
-              environment:
-                env.id === environment.id
-                  ? { ...env, alive: isCurrentlyActive ? "0" : "1" }
-                  : env,
-              screens,
-            }),
+            ({ environment: env, screens }) => {
+              if (env.id !== environment.id) return { environment: env, screens };
+              if (isCurrentlyActive) {
+                return {
+                  environment: env,
+                  screens: screens.map((s) => ({ ...s, on: "0", enabled: "0" })),
+                };
+              }
+              return { environment: { ...env, alive: "1" }, screens };
+            },
           );
 
           if (onEnvironmentGroupUpdate) {
@@ -256,10 +266,9 @@ export function ConfigureEnvironmentScreen({
   };
 
   const getScreenStatusTooltip = (screen) => {
-    if (!isScreenActive(screen)) return "Screen is off - click to activate";
-    if (!hasValidDimensions(screen))
-      return "Screen active but may need page refresh for dimensions";
-    return "Screen active and ready";
+    if (!isScreenActive(screen)) return t("configure.screen.off");
+    if (!hasValidDimensions(screen)) return t("configure.screen.active.dimensions");
+    return t("configure.screen.active.ready");
   };
 
   // Enhanced environment status indicator
@@ -274,7 +283,7 @@ export function ConfigureEnvironmentScreen({
   };
 
   const getEnvironmentStatusTooltip = (environment) => {
-    if (!isEnvironmentActive(environment)) return "Environment is inactive";
+    if (!isEnvironmentActive(environment)) return t("configure.environment.inactive");
 
     const playbackCheck = canUseEnvironmentForPlayback(environment);
     return playbackCheck.reason;
@@ -591,20 +600,22 @@ export function ConfigureEnvironmentScreen({
                       overflow: "hidden",
                     }}
                   >
-                    <Switch
-                      size={isMobile ? "small" : "medium"}
-                      style={{ alignSelf: "center" }}
-                      checked={isEnvironmentActive(environment)}
-                      onChange={() => handleEnvironmentToggle(environment)}
-                      classes={{
-                        thumb: {
-                          boxShadow: "none",
-                          border: "1px solid",
-                          borderColor: theme.palette.primary.main,
-                          backgroundColor: theme.palette.primary.main,
-                        },
-                      }}
-                    />
+                    <Tooltip title={t("configure.end.session.tooltip")}>
+                      <Switch
+                        size={isMobile ? "small" : "medium"}
+                        style={{ alignSelf: "center" }}
+                        checked={isEnvironmentActive(environment)}
+                        onChange={() => handleEnvironmentToggle(environment)}
+                        classes={{
+                          thumb: {
+                            boxShadow: "none",
+                            border: "1px solid",
+                            borderColor: theme.palette.primary.main,
+                            backgroundColor: theme.palette.primary.main,
+                          },
+                        }}
+                      />
+                    </Tooltip>
 
                     <Tooltip title={getEnvironmentStatusTooltip(environment)}>
                       <IconButton>
