@@ -82,14 +82,14 @@ const WebPlayer = React.memo(function WebPlayer({
         hasLoadedOnce.current = true;
 
         let environmentId = getEnvironmentId();
-        let screenId = getScreenId(environmentId);
+        // getScreenId always returns null by design — the child WebPlayer owns screen
+        // creation/attachment regardless of whether we already know the environment.
+        let screenId = getScreenId(environmentId) || "0";
 
-        if (!environmentId || !screenId) {
-          // If no environments exist, use fallback values - child WebPlayer will create actual environment
-          logInfo("⚠️ No environment/screen found, using fallback values - child WebPlayer will create environment");
-          // Use fallback values - child TypeScript app will handle environment creation
+        if (!environmentId) {
+          // No stored environment found at all — genuinely new session, let the child create one.
+          logInfo("⚠️ No environment found, using fallback value - child WebPlayer will create environment");
           environmentId = "0"; // Child WebPlayer will create real environment
-          screenId = "0"; // Child WebPlayer will create real screen
         }
 
         const sessionId = getUserId();

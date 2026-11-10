@@ -462,42 +462,6 @@ export const removeEnvironment = async (id) => {
 };
 
 /**
- * Deactivate an environment (set alive to "0") using upd_environment
- * @param {string|number} environId - The environment ID to deactivate
- * @returns {Promise} - Promise resolving to the API response
- *
- * WS: "/upd_environment", "int environ, String name?, String keys?, String key, String session?"
- */
-export const deactivateEnvironment = async (environId) => {
-  checkString(environId, "api: environId");
-
-  console.log("[api] deactivateEnvironment: sessionID", sessionId);
-  console.log("[api] deactivateEnvironment: environId", environId);
-
-  try {
-    // Use upd_environment to set the environment as inactive
-    const response = await axios.post(`${baseURL}/upd_environment`, null, {
-      headers: {
-        Accept: "text/x-json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      params: {
-        version: 1,
-        environ: environId,
-        alive: "0", // Set environment as inactive
-        session: sessionId,
-      },
-    });
-
-    console.log("[api] deactivateEnvironment: response.data", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("[api] Error deactivating environment:", error);
-    throw error;
-  }
-};
-
-/**
  * Activate an environment (set alive to "1") using upd_environment
  * @param {string|number} environId - The environment ID to activate
  * @returns {Promise} - Promise resolving to the API response
@@ -906,19 +870,12 @@ export const deactivateScreen = async (screenId, sessionIdParam) => {
       activeSessionId,
     );
 
-    // Simple screen parameters - just turn off
-    const screenParams = JSON.stringify({
-      on: 0, // Set screen as off (but keep it linked)
-    });
-
-    // Deactivate the screen (turn off but keep enabled/linked)
     const response = await axios.get(`${baseURL}/upd_screen`, {
       headers: { Accept: "text/x-json" },
       params: {
         version: 1,
         screen: screenId,
-        // enabled: keep current value (don't unlink)
-        params: screenParams, // Just set on: 0
+        enabled: 0,
         session: activeSessionId,
       },
     });
@@ -1165,11 +1122,12 @@ export const authenticateUser = async (login, password) => {
  * Gets the current user from the server
  * @returns {Promise} - Promise resolving to the user data
  *
- * WS: "/get_joomla_user", "String session"
+ * WS: "/get_wp_user", "String session"
  */
 export const getUser = async () => {
   try {
-    const response = await axios.get(`${baseURL}/get_joomla_user`, {
+    //20261110: changed from get_joomla_user
+    const response = await axios.get(`${baseURL}/get_wp_user`, {
       headers: {
         Accept: "text/x-json",
         "Cache-Control": "no-cache",
