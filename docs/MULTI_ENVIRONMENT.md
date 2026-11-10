@@ -17,18 +17,19 @@ Account (login)
 
 **House** — a named location associated with the account (e.g. "My Gallery", "Museum X"). Currently one house per account. The house carries the autostart playlist setting.
 
-**Environment** — a device session. Identified by a `crypt_key` generated at creation. The environment key is how the Core Player establishes its WebSocket connection. One active environment at a time per house.
+**Environment** — a device (browser, PC app) or display group. Identified by its id and one or more **environment keys** (`wmm_environment_key`), registered at creation. The environment key is how the Core Player establishes its WebSocket connection (not to be confused with the house `crypt_key`). Per house, multiple environments are allowed.
 
 **Screen** — a display within an environment. A web browser is always one screen. The PC Desktop App can manage multiple screens per environment (multi-monitor / video wall).
 
 ### Environment and Screen States
 
-| Property | Value | Meaning |
+| Property | Set by | Meaning |
 |---|---|---|
-| `alive` | `"1"` | Environment is active |
-| `alive` | `"0"` | Environment is inactive |
-| `on` | `"1"` | Screen is active |
-| `on` | `"0"` | Screen is inactive (but still valid) |
+| `alive` (environment) | server, computed | `"1"` if the player called the server recently (last call < alive delay), else `"0"`. Cannot be set by a client. |
+| `on` (screen) | server, from player reports | `"1"` if the screen is reported playing **and** its environment is alive. Cannot be set by a client. |
+| `enabled` (screen) | client, `upd_screen?enabled=0/1` | The only switch a user can change: turn a screen off/on. |
+
+Note: `upd_screen?params={"on":0}` only stores the text in `params`; it does not change `on`. `upd_environment` has no `alive` parameter.
 
 ---
 
@@ -53,13 +54,24 @@ Playlist
 
 ## How They Connect
 
-The App Web Player (player-container) creates an environment via REST API, which returns a `crypt_key`. It passes that key to the Core Player (webplayer) via URL parameters. The Core Player uses the key to open a WebSocket connection to the backend server, which then drives playback by pushing the active playlist content.
+Environments are created by **webplayer2** (Core Player); the player-container only creates one as a fallback.
+
+1. **webplayer2** looks for a saved environment in `localStorage` (per device fingerprint). If none, it calls
+   `add_environment?house=…&name=Web player&keys=<random uuid>,<fingerprint>` with the account session, then `add_screen`.
+   The key stays on the device.
+2. **player-container**: if the account has no environment at all (`get_wp_user` returns none), it creates one via
+   `createDefaultEnvironment` so Configure can display it. It can also delete environments.
+3. If the parent passes `house`, `environ`, `screen` and `key` in the URL, webplayer2 uses them directly.
+4. webplayer2 registers on the WebSocket with `environ` + `key`; the server then pushes playlist / montage / track data.
 
 ```
-player-container  →  REST API  →  creates environment (crypt_key)
-player-container  →  URL params  →  webplayer receives (environ, screen, house, session)
-webplayer  →  WebSocket  →  server pushes playlist / montage / track data
+webplayer2        →  REST add_environment (session)  →  environment + key (kept on device)
+player-container  →  REST add_environment (fallback, only if none) / del_environment
+webplayer2        →  WebSocket <registration environ key>  →  server pushes playlist / montage / track data
 ```
+
+Credentials: the **session** proves the account (create/delete environments, edit content);
+the **environment key** proves the device (registration, commands, playlists, media links).
 
 Multi-screen synchronization is maintained by the server broadcasting `seekOffset` corrections to all connected environments sharing the same playlist.
 
