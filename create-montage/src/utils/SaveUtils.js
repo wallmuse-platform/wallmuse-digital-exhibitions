@@ -4,6 +4,7 @@ import {
 } from "../components/artworks/ArtworkUtils";
 import { isTitle } from "../components/tools/ToolUtils";
 import i18next from '../i18n';
+import { currentTheme } from '../theme/ThemeUtils';
 
 export const calculateTrackEndTime = track => track.length !== 0 ? track[track.length - 1].endTime : 0
 
@@ -33,13 +34,13 @@ export const constructMontageToSave = (name, thumbnail, suitableForChildren, tra
 export const validate = (name, thumbnail, trackArtworks, setErrors) => {
     const errors = []
     if (name.trim().length === 0) {
-        errors.push(i18next.t("error.save.name"))
+        errors.push(i18next.t("error.save.name." + currentTheme()))
     }
     if (thumbnail == null) {
-        errors.push(i18next.t("error.save.thumbnail"))
+        errors.push(i18next.t("error.save.thumbnail." + currentTheme()))
     }
     if (trackArtworks.length === 0 || (trackArtworks.length === 1 && trackArtworks[0].length === 0)) {
-        errors.push(i18next.t("error.save.artworks"))
+        errors.push(i18next.t("error.save.artworks." + currentTheme()))
     } else {
         const endTime = calculateTrackEndTime(trackArtworks[0])
         for (let i = 1; i < calculateNumberOfTracks(trackArtworks); i++) {

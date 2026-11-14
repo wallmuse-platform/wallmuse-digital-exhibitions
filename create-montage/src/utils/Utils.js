@@ -23,14 +23,7 @@ export function getWpLoggedIn() {
 export function isBasicDemoAccount(userId) {
   if (!userId) return false;
   const id = userId.toLowerCase();
-
-  // Keep backward compatibility: check both 'freeaccount' and 'free'
-  // Check both 'Unregistered' and 'unregistered' (case-insensitive)
-  const isFree = id.includes('free');
-  const isUnregistered = id.includes('unregistered');
-
-  console.log('[Utils] isBasicDemoAccount - isFree:', isFree, 'isUnregistered:', isUnregistered);
-  return isFree || isUnregistered;
+  return id.includes('free') || id.includes('unregistered') || id.includes('demo');
 }
 
 /**

@@ -322,7 +322,8 @@ export const deleteMontage = async (userId, montageId) => {
 
 export const getUser = async () => {
   const sessionId = getUserId();
-  const response = await axios.get(`${baseURL}/get_joomla_user`, {
+  //20261110: changed from get_joomla_user
+  const response = await axios.get(`${baseURL}/get_wp_user`, {
     headers: {
       Accept: 'text/x-json',
     },

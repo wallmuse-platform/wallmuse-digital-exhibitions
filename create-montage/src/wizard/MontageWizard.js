@@ -10,6 +10,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { selectTheme } from '../theme/ThemeUtils';
 
 import { searchArtworks, countArtworks, getCategories, saveMontages } from '../api';
+import useGuestActionPopup from '../accounts/useGuestActionPopup';
 import { getArtworkDuration } from '../components/artworks/ArtworkUtils';
 
 import AIPromptBar from './AIPromptBar';
@@ -47,6 +48,7 @@ function distributeToTracks(artworks, numTracks) {
 function MontageWizard({ onSaveSuccess }) {
   const { t } = useTranslation();
   const theme = selectTheme();
+  const { handleAction, popup: guestPopup } = useGuestActionPopup();
 
   // ── Data loading ───────────────────────────────────────────────────────────
   const [allArtworks, setAllArtworks] = useState([]);
@@ -187,6 +189,7 @@ function MontageWizard({ onSaveSuccess }) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
+    <React.Fragment>
     <ThemeProvider theme={theme}>
       <Box sx={{ maxWidth: 900, mx: 'auto', px: 2, pb: 4 }}>
 
@@ -265,7 +268,7 @@ function MontageWizard({ onSaveSuccess }) {
                     distributedTracks={distributedTracks}
                     namePrefix={namePrefix}
                     saving={saving}
-                    onSave={handleSave}
+                    onSave={() => handleAction(handleSave)}
                   />
                 </>
               )}
@@ -289,6 +292,8 @@ function MontageWizard({ onSaveSuccess }) {
 
       </Box>
     </ThemeProvider>
+    {guestPopup}
+    </React.Fragment>
   );
 }
 

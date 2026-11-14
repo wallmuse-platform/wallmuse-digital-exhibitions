@@ -26,6 +26,7 @@ import Credits from './Credits.js';
 import { useCountries } from '../../components/details/useCountries.js';
 import CustomCheckbox from './CustomCheckbox';
 import { convertDatationText, validateContentData, handleUpload } from './AddContentController.js';
+import useGuestActionPopup from '../../accounts/useGuestActionPopup';
 import LoadingSpinner from './LoadingSpinner.js';
 import { CustomSnackbar, CustomAlert } from '../../CustomComponents';
 import { RequiredFieldIndicator } from './RequiredFieldIndicator';
@@ -43,6 +44,7 @@ export function AddContent({ selectedContent }) {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [loading, setLoading] = useState(false);
   const { isPremium, pluginTier } = useUserContext(); // Get values from context (set in App.js)
+  const { handleAction, popup: guestPopup } = useGuestActionPopup();
 
   const [contentId, setContentId] = useState(''); // Track if we're editing an existing content
 
@@ -972,6 +974,7 @@ export function AddContent({ selectedContent }) {
   };
 
   return (
+    <React.Fragment>
     <Box sx={{ mx: 2, width: 'calc(100% - 32px)' }}>
       <LoadingSpinner loading={loading} />  {/* Add spinner */}
       <Typography variant="h5" component="h2" sx={{ mx: 'auto', mb: 2, color: 'primary.main', textAlign: 'center' }}>
@@ -1545,7 +1548,7 @@ export function AddContent({ selectedContent }) {
           <Button
             variant="contained"
             color="primary"
-            onClick={handleSubmitForm}
+            onClick={() => handleAction(handleSubmitForm)}
             disabled={loading}
           >
             {contentId ? t("Save_Changes_") : t("Add_Content_")}
@@ -1658,6 +1661,8 @@ export function AddContent({ selectedContent }) {
         </CustomAlert>
       </CustomSnackbar>
     </Box>
+    {guestPopup}
+    </React.Fragment>
   );
 }
 export default AddContent;

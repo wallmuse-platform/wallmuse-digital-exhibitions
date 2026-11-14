@@ -93,7 +93,7 @@ function App() {
         {/* Wrap the app with UserContext.Provider and provide isUserLoggedIn */}
         <UserContext.Provider value={{ isDemo, isPremium, pluginTier }}>
             {/* TODO: place window.innerWidth < 1080 only for CreateMontage */}
-          {(isDemo) && <TrialAccountOrNotWideSnackbar isDemo={isDemo} theme={currentTheme()} />}
+          {(isDemo) && <TrialAccountOrNotWideSnackbar isDemo={isDemo} theme={currentTheme()} isPlugin={root.dataset.plugin === 'true'} />}
           {/* Render the TabButtons component */}
           <TabButtons t={t} setSection={setSection} wpLoggedIn={wpLoggedIn} />
 

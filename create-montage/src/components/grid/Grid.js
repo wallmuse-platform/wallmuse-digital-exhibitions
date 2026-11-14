@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import Box from '@mui/material/Box';
 import SearchArea from "../searchArea/SearchArea";
 import {
@@ -13,6 +13,7 @@ import {
 import ArtworkList from "../artworks/ArtworkList";
 import Details from "../details/Details";
 import { Alert, CircularProgress, Snackbar } from "@mui/material";
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import "./Grid.css"
 import Tracks from "../tracks/Tracks";
 import { DndProvider } from 'react-dnd'
@@ -40,6 +41,7 @@ import { Literals } from "../constants/Literals";
 import AlphaChannelInsertsDialog from "../tools/alphaChannelInserts/AlphaChannelInsertsDialog";
 import { selectTheme, currentTheme } from "../../theme/ThemeUtils";
 import { useTranslation } from 'react-i18next';
+import useGuestActionPopup from '../../accounts/useGuestActionPopup';
 
 ErrorDialog.propTypes = {
     errors: PropTypes.arrayOf(PropTypes.any),
@@ -50,7 +52,42 @@ ErrorDialog.propTypes = {
 export default function BasicGrid({ pendingEdit, clearPendingEdit }) {
 
     const { t } = useTranslation();
+    const { handleAction, popup: guestPopup } = useGuestActionPopup();
 
+    const [leftWidth, setLeftWidth] = useState(() => {
+        try { const s = localStorage.getItem('wm-grid-left-width'); return s ? parseInt(s, 10) : 280; }
+        catch (e) { return 280; }
+    });
+    const dragging = useRef(false);
+    const dragStartX = useRef(0);
+    const dragStartWidth = useRef(0);
+    const leftWidthRef = useRef(leftWidth);
+
+    useEffect(() => { leftWidthRef.current = leftWidth; }, [leftWidth]);
+
+    const handleDragStart = (e) => {
+        dragging.current = true;
+        dragStartX.current = e.clientX;
+        dragStartWidth.current = leftWidthRef.current;
+        e.preventDefault();
+    };
+
+    useEffect(() => {
+        const onMove = (e) => {
+            if (!dragging.current) return;
+            const w = Math.max(220, Math.min(dragStartWidth.current + e.clientX - dragStartX.current, window.innerWidth - 500));
+            setLeftWidth(w);
+            leftWidthRef.current = w;
+        };
+        const onUp = () => {
+            if (!dragging.current) return;
+            dragging.current = false;
+            try { localStorage.setItem('wm-grid-left-width', String(leftWidthRef.current)); } catch (e) {}
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    }, []);
 
     const [currentUser, setCurrentUser] = useState({});
     const [artworks, setArtworks] = useState([]);
@@ -271,10 +308,12 @@ export default function BasicGrid({ pendingEdit, clearPendingEdit }) {
 
 
     const save = (saveNew) => {
-        if (validate(name, thumbnail, trackArtworks, setErrors) && errors.length === 0) {
-            setSaveDialogOpen(true)
-            setSaveNew(saveNew)
-        }
+        handleAction(() => {
+            if (validate(name, thumbnail, trackArtworks, setErrors) && errors.length === 0) {
+                setSaveDialogOpen(true);
+                setSaveNew(saveNew);
+            }
+        });
     }
 
     const cancelSave = () => setSaveDialogOpen(false)
@@ -438,6 +477,7 @@ export default function BasicGrid({ pendingEdit, clearPendingEdit }) {
     const themeName = currentTheme();
 
     return (
+    <React.Fragment>
         <DndProvider backend={HTML5Backend}>
         <Box
             className="create-montage-grid"
@@ -508,9 +548,18 @@ export default function BasicGrid({ pendingEdit, clearPendingEdit }) {
                 </Snackbar>
             )}
 
-            {/* Top row: natural content height, no vh */}
-            <Box sx={{ display: 'flex', flexShrink: 0 }}>
-                <Box sx={{ width: '20.833%' }}>
+            {/* CSS grid: 2 columns, drag handle overlaid absolutely */}
+            <Box sx={{
+                display: 'grid',
+                gridTemplateColumns: `${leftWidth}px 1fr`,
+                gridTemplateRows: 'auto 1fr',
+                flex: '1 1 0',
+                minHeight: 0,
+                position: 'relative',
+            }}>
+
+                {/* SearchArea — row 1, col 1 */}
+                <Box sx={{ gridColumn: 1, gridRow: 1, minWidth: 0 }}>
                     <SearchArea
                         operation={operation}
                         handleOperationChange={ handleOperationChange }
@@ -530,7 +579,9 @@ export default function BasicGrid({ pendingEdit, clearPendingEdit }) {
                         currentlyEditingMontage={ currentlyEditingMontage }
                     />
                 </Box>
-                <Box sx={{ width: '79.167%' }}>
+
+                {/* Details — row 1, col 2 */}
+                <Box sx={{ gridColumn: 2, gridRow: 1, minWidth: 0 }}>
                     <Details
                         thumbnail={thumbnail}
                         name={name}
@@ -564,16 +615,14 @@ export default function BasicGrid({ pendingEdit, clearPendingEdit }) {
                         editMontageReady={ editMontageReady() }
                     />
                 </Box>
-            </Box>
 
-            {/* Bottom row: fills all remaining height */}
-            <Box sx={{ display: 'flex', flex: '1 1 0', minHeight: 0 }}>
+                {/* ArtworkList — row 2, col 1 */}
                 <Box sx={{
-                    width: '20.833%',
-                    overflow: 'auto',
-                    border: 1, borderTop: 0,
+                    gridColumn: 1, gridRow: 2,
+                    overflow: 'auto', minHeight: 0,
+                    border: 1, borderTop: 0, borderRight: 0,
                     borderColor: theme.palette.primary.main,
-                    borderRadius: "0 0 0 5px"
+                    borderRadius: '0 0 0 5px',
                 }}>
                     {
                         loading
@@ -585,15 +634,18 @@ export default function BasicGrid({ pendingEdit, clearPendingEdit }) {
                                 artworks={element === BinTypes.ARTWORK ? artworks : montages}
                                 setThumbnail={setThumbnail}
                                 type={element}
+                                binWidth={leftWidth}
                             />)
                     }
                 </Box>
+
+                {/* Tracks — row 2, col 2 */}
                 <Box sx={{
-                    width: '79.167%',
-                    overflow: 'auto',
+                    gridColumn: 2, gridRow: 2,
+                    overflow: 'auto', minHeight: 0,
                     border: 1, borderTop: 0, borderLeft: 0,
                     borderColor: theme.palette.primary.main,
-                    borderRadius: "0 0 5px 0",
+                    borderRadius: '0 0 5px 0',
                 }}>
                     <Tracks
                         artworks={ trackArtworks }
@@ -605,8 +657,48 @@ export default function BasicGrid({ pendingEdit, clearPendingEdit }) {
                         handleEditMontageDrop={ handleEditMontageDrop }
                     />
                 </Box>
+
+                {/* Drag handle — absolutely positioned, centered on the column boundary */}
+                <Box
+                    onMouseDown={handleDragStart}
+                    sx={{
+                        position: 'absolute',
+                        top: 0, bottom: 0,
+                        left: leftWidth - 12,
+                        width: 24,
+                        cursor: 'col-resize',
+                        zIndex: 20,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'center',
+                    }}
+                >
+                    <Box sx={{
+                        position: 'absolute', top: 0, left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: '1px', height: '100%',
+                        backgroundColor: theme.palette.primary.light,
+                        zIndex: 1,
+                    }} />
+                    <Box sx={{
+                        position: 'absolute', top: '40px', left: '50%',
+                        transform: 'translate(-50%, 0) rotate(90deg)',
+                        backgroundColor: theme.palette.primary.main,
+                        color: theme.palette.primary.contrastText,
+                        borderRadius: '50%',
+                        width: 24, height: 24,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        zIndex: 10, userSelect: 'none',
+                    }}>
+                        <DragIndicatorIcon sx={{ fontSize: '16px' }} />
+                    </Box>
+                </Box>
+
             </Box>
         </Box>
         </DndProvider>
+        {guestPopup}
+    </React.Fragment>
     );
 }
