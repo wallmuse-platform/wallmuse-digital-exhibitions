@@ -305,7 +305,9 @@ export class WsTools {
             // Standalone app: also receives the artworks that are not streamable
             this.ws.send('<standalone/>');
         }
-        this.ws.send(`<registration environ="${this.environ!.environId}" key="${this.environ!.key}" version="2"/>`);
+        // screen: the manager keeps one socket per environment + screen (PC player: one window per screen)
+        const screenAttr = this.screenId ? ` screen="${this.screenId}"` : '';
+        this.ws.send(`<registration environ="${this.environ!.environId}" key="${this.environ!.key}"${screenAttr} version="2"/>`);
         
         // Silent registration - assume success immediately
         setTimeout(() => {
@@ -317,6 +319,15 @@ export class WsTools {
     // SIMPLIFIED: Direct message handling
     private handleMessage(event: MessageEvent) {
         console.log('[WS-TOOLS] Message received:', event.data.substring(0, 200));
+
+        // Unmissable marker for now_showing specifically, independent of JSON/XML format —
+        // lets us tell apart "never arrived" from "arrived as raw XML and got dropped below"
+        // (the client only parses messages starting with '{'; an unconverted XML relay from
+        // the server — the json-flag bug flagged for the server-side now_showing patch —
+        // would land here and be silently discarded as "Non-JSON message").
+        if (typeof event.data === 'string' && event.data.includes('now_showing')) {
+            console.log('[WS-TOOLS] 📡 now_showing payload arrived on the socket, raw:', event.data);
+        }
         
         try {
             if (typeof event.data === 'string' && event.data.trim().startsWith('{')) {
@@ -334,6 +345,11 @@ export class WsTools {
     // SIMPLIFIED: Direct message processing
     private processMessage(data: any) {
         console.log('[WS-TOOLS] processMessage called with tag_name:', data.tag_name, 'has montages:', !!data.montages);
+
+        // Keep the screen → track associations even when the montages are already cached
+        if (Array.isArray(data.montages)) {
+            data.montages.forEach((m: any) => Montage.recordScreens(m));
+        }
 
         // Handle commands
         if (data.cmds && Array.isArray(data.cmds)) {
@@ -363,6 +379,27 @@ export class WsTools {
                     }
                 }
             });
+            return;
+        }
+
+        // "Now showing" relay from another screen/window of this same environment (see
+        // video.tsx's onPlaying handler, which sends this; docs/now-showing-signal-design-brief.md
+        // for the full design). montage_id is the montage's real database id, not a playlist
+        // position (the sender's playlist ordering may differ from ours) — resolve it back to
+        // OUR local positional index before dispatching the event App.js already listens for.
+        if (data.tag_name === "now_showing") {
+            const montageId = Number(data.montage_id);
+            const track = Number(data.track);
+            const currentPlaylist = Sequencer.getCurrentPlaylist();
+            const montageIndex = currentPlaylist?.getMontageIndexById(montageId);
+            if (montageIndex !== undefined && montageIndex >= 0) {
+                console.log('[WS-TOOLS] now_showing received, dispatching webplayer-montage-changed', { montageId, montageIndex, track });
+                window.dispatchEvent(new CustomEvent('webplayer-montage-changed', {
+                    detail: { montageIndex, track }
+                }));
+            } else {
+                console.warn('[WS-TOOLS] now_showing: montage_id not found in current playlist', montageId);
+            }
             return;
         }
 
@@ -773,7 +810,9 @@ export class WsTools {
                 if (currentPosition !== undefined) {
                     const track = trackAssignments.get(currentPosition);
                     console.log('[WS-PEER-SYNC] 🔄 Reloading montage', currentPosition, 'with track', track);
-                    Sequencer.goMontage(currentPosition, track);
+                    // isPeerEcho: reconciling a change seen on the WS channel, not this
+                    // screen's own direct parent navigation. See Sequencer.goMontage().
+                    Sequencer.goMontage(currentPosition, track, true);
                 } else {
                     console.log('[WS-PEER-SYNC] ⚠️ Cannot reload - no current position available');
                 }
@@ -784,7 +823,9 @@ export class WsTools {
                 console.log('[WS-PEER-SYNC] 📍 Position change detected - navigating to montage', currentPosition);
                 // Get the track for this montage from current assignments
                 const track = trackAssignments.get(currentPosition);
-                Sequencer.goMontage(currentPosition, track);
+                // isPeerEcho: reconciling a change seen on the WS channel, not this
+                // screen's own direct parent navigation. See Sequencer.goMontage().
+                Sequencer.goMontage(currentPosition, track, true);
             }
 
             // Handle track assignment changes
@@ -802,7 +843,9 @@ export class WsTools {
                 if (currentMontageTrackChanged && currentPosition !== undefined) {
                     const newTrack = trackAssignments.get(currentPosition);
                     console.log('[WS-PEER-SYNC] 🔄 Current montage track changed - reloading with track', newTrack);
-                    Sequencer.goMontage(currentPosition, newTrack);
+                    // isPeerEcho: reconciling a change seen on the WS channel, not this
+                    // screen's own direct parent navigation. See Sequencer.goMontage().
+                    Sequencer.goMontage(currentPosition, newTrack, true);
                 }
             }
 
@@ -835,6 +878,22 @@ export class WsTools {
         
         // Return the ACTUAL state
         return wsActuallyConnected && this.isRegistered;
+    }
+
+    // "Now showing" report (see docs/now-showing-signal-design-brief.md): sent from
+    // video.tsx's onPlaying handler, once per confirmed-rendered montage/track change. The
+    // server relays this to every OTHER screen/window of the same environment (it already
+    // knows not to echo it back to us) — see WebServiceWebSocket.java's now_showing handling.
+    // montageId is the montage's real database id (not a playlist position — other screens
+    // may have a different playlist ordering), track is 1-based to match the seq ids the
+    // server already uses elsewhere (montage.seqs[].id).
+    public sendNowShowing(montageId: number, track: number): void {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.warn('[WS-TOOLS] sendNowShowing: socket not open, dropped', { montageId, track, wsState: this.ws?.readyState });
+            return;
+        }
+        console.log('[WS-TOOLS] sendNowShowing: sent', { montageId, track });
+        this.ws.send(`<now_showing montage_id="${montageId}" track="${track}"/>`);
     }
 
     // CRITICAL FIX: More robust connection checking
@@ -1175,13 +1234,12 @@ export class WsTools {
             
             this.get<any>(envUrl)
                 .then(e => {
-                    console.log('[WS-TOOLS] add_environment raw response:', JSON.stringify(e));
+                    console.log('[WS-TOOLS] add_environment response:', JSON.stringify(e, (k, v) => (k === 'key' || k === 'crypt_key' ? '…' : v)));
                     environ.environ = e;
                     environ.environId = e.id;
                     environ.save();
                     console.log('[WS-TOOLS] House: new environment created:', {
                         environId: environ.environId,
-                        key: environ.key,
                         screensCount: e.screens?.length
                     });
                     this.environ = environ;
@@ -1193,7 +1251,7 @@ export class WsTools {
                         return this.get<any>(screenUrl)
                             .then(() => {
                                 // add_screen returns {} — re-fetch user data to find the new screen ID
-                                return this.get<any>('get_joomla_user');
+                                return this.get<any>('get_wp_user');
                             })
                             .then(u => {
                                 const allHouses: any[] = u?.houses || [];
@@ -1242,7 +1300,7 @@ export class WsTools {
     assumeToken(token: string, retryCount = 0): Promise<boolean> {
         this.token = token;
 
-        // FAST-START: Cache the get_joomla_user response in localStorage so that
+        // FAST-START: Cache the get_wp_user response in localStorage so that
         // on browser reload we can skip the API call (which can take 10-17 seconds
         // on a slow server) and connect to WebSocket immediately. The cache is
         // keyed by token and expires after 10 minutes. A background revalidation
@@ -1279,21 +1337,21 @@ export class WsTools {
 
         const cached = tryCache();
         if (cached) {
-            console.log('[WS-TOOLS] ⚡ Fast-start: using cached user data, skipping get_joomla_user');
+            console.log('[WS-TOOLS] ⚡ Fast-start: using cached user data, skipping get_wp_user');
             applyUser(cached);
             if (!this.user.houses || this.user.houses.length === 0) {
                 // Unusual — fall through to full auth
             } else {
                 this.checkHouse();
                 // Revalidate in background so cache stays fresh
-                this.get<any>('get_joomla_user').then(u => {
+                this.get<any>('get_wp_user').then(u => {
                     if (u && u.tag_name !== 'error') saveCache(u);
                 }).catch(() => {});
                 return Promise.resolve(true);
             }
         }
 
-        return this.get<any>('get_joomla_user')
+        return this.get<any>('get_wp_user')
             .then(u => {
                 // If API returns error, create a mock user for local development
                 if (u.tag_name === 'error') {
@@ -1328,6 +1386,23 @@ export class WsTools {
             });
     }
 
+    /**
+     * Screens reported in master_alive. The manager sets every screen of the environment that is not listed to "off"
+     * (and moves its tracks elsewhere), so a PC player with one window per display passes all its screens in
+     * ?allscreens=id:WxH,… (PC player V4) and each window reports them all, as V3 does. Otherwise: this screen only.
+     */
+    screensXml(screen: { width: number; height: number }): string {
+        const all = new URLSearchParams(window.location.search).get('allscreens');
+        const list = (all || '').split(',')
+            .map(s => /^(\d+):(\d+)x(\d+)$/.exec(s.trim()))
+            .filter((m): m is RegExpExecArray => !!m);
+        if (list.length > 0) {
+            return '<screens>' + list.map(m => '<screen id="' + m[1] + '" w="' + m[2] + '" h="' + m[3] + '"/>').join('') + '</screens>';
+        }
+        return '<screens><screen name="Main" id="' + (this.screenId ? this.screenId : 1)
+            + '" w="' + screen.width + '" h="' + screen.height + '"/></screens>';
+    }
+
     sendMasterAlive(artworkId?: number) {
         // RACE CONDITION FIX: Don't send heartbeat if not authenticated yet
         if (!this.token || !this.environ?.environId || !this.environ?.key) {
@@ -1347,10 +1422,10 @@ export class WsTools {
                 }
             }
         }
+        // Never log the environment key or the session (visible in the console and in log files)
         console.log('[SCREEN-DEBUG] Screen info being sent:', {
             screenId: this.screenId,
             environId: this.environ?.environId,
-            key: this.environ?.key,
             screenWidth: screen.width,
             screenHeight: screen.height,
             isPlaying: Sequencer.isPlaying(),
@@ -1365,8 +1440,7 @@ export class WsTools {
             + (m ? '&montage=' + m : '')
             + '&new=' + (this.firstTime ? '1' : '0')
             + (this.firstTime ? '&content=' + encodeURIComponent('<content size="0" downloaded="0"/>') : '')
-            + '&screens=' + encodeURIComponent('<screens><screen name="Main" id="' + (this.screenId ? this.screenId : 1)
-                + '" w="' + screen.width + '" h="' + screen.height + '"/></screens>')
+            + '&screens=' + encodeURIComponent(this.screensXml(screen))
             + '&time=' + Sequencer.getCurrentOffset()
             + (artworkId ? '&artworks=' + artworkId : '')
             + '&status=' + (Sequencer.isPlaying() ? 'PLAYING' : 'HALTED'))
@@ -1412,9 +1486,15 @@ export class WsTools {
                 return;
             }
         }
-        // If not found in user data, we can't recover — new environment will be needed on next reload
-        console.warn('[WS-TOOLS] Could not recover screenId — environment may be stale. Will create fresh on next reload.');
-        GlobalData.clear();
+        // Not found in user data — this.user.houses can be momentarily stale right after
+        // add_environment/add_screen (server hasn't propagated the new screen into get_wp_user
+        // yet), so a miss here doesn't mean the environment itself is invalid. Leave environId/
+        // key/houseId in localStorage untouched (do NOT GlobalData.clear() — that used to wipe
+        // the whole record on every transient miss, forcing a brand-new "Web player" environment
+        // on the very next load even though the original one was perfectly valid). The session
+        // continues on this environment without a confirmed screenId; the next load gets another
+        // chance to resolve it once the server data has caught up.
+        console.warn('[WS-TOOLS] Could not recover screenId this session — environment kept, will retry recovery on next load.');
     }
 
     // ensureScreenActivation is a no-op: master_alive (fired by setupAliveTimer on WS open)
@@ -1490,13 +1570,14 @@ export class WsTools {
 
         let baseUrl = RootUrl.endsWith('/') ? RootUrl : RootUrl + '/';
         
-        // FIXED: Correct both domain and port in base URL, but avoid double 'manager.'
-        if (baseUrl.includes('manager.wallmuse.com:8443')) {
-            baseUrl = baseUrl.replace('manager.wallmuse.com:8443', 'manager.wallmuse.com:8444');
-            console.log('🔧 [URL-FIX] Corrected base URL port from 8443 to 8444:', baseUrl);
-        } else if (baseUrl.includes('wallmuse.com:8443')) {
-            baseUrl = baseUrl.replace('wallmuse.com:8443', 'manager.wallmuse.com:8444');
-            console.log('🔧 [URL-FIX] Corrected base URL from wallmuse.com:8443 to manager.wallmuse.com:8444:', baseUrl);
+        // FIXED (2026-11-15, ported from webplayer2B): this used to force port 8444 for
+        // REST calls (get_wp_user, add_house, add_environment, add_screen, master_alive —
+        // never media). :8443 is actually the correct front door for these; forcing 8444 was
+        // based on the same wrong premise as a separate media-URL bug. Now only fixes the
+        // bare host (adding the missing 'manager.' prefix) and never forces the port.
+        if (baseUrl.includes('wallmuse.com:8443') && !baseUrl.includes('manager.wallmuse.com:8443')) {
+            baseUrl = baseUrl.replace('wallmuse.com:8443', 'manager.wallmuse.com:8443');
+            console.log('🔧 [URL-FIX] Corrected base URL host to manager.wallmuse.com:8443:', baseUrl);
         }
 
         return fetch(baseUrl + finalUrl, {

@@ -1,3 +1,5 @@
+// Must stay first: masks keys and sessions in all console output
+import './manager/LogMask';
 import React, { useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
@@ -6,6 +8,12 @@ import { setHouse, start, startAuthenticated } from './manager/start';
 import { Debug } from './ws/ws-tools';
 import { CircularProgress } from '@mui/material';
 import { Sequencer } from './manager/Sequencer';
+
+// Standalone page (PC player window): apply body.wm-player (margin 0). Without it the browser's default 8px body
+// margin shifted the player right and down: black band on the left and top, 8px cut on the right and bottom.
+if (new URLSearchParams(window.location.search).get('player') === 'standalone') {
+  document.body.classList.add('wm-player');
+}
 
 // Initialize the operations queue FIRST to ensure storage mechanism works during remounts
 if (!window.PENDING_APP_OPERATIONS) {
@@ -848,9 +856,16 @@ function setupNavigationListener() {
             const currentMontageIndex = currentPos?.getMontageIndex();
             const currentTrackIndex = currentPos?.getTrackIndex();
 
+            // PARENT PREVAILS: position can already match purely because a WS-echoed peer
+            // call (own broadcast bouncing back, or WS-PEER-SYNC) got here first and only
+            // preloaded in the background without switching/playing — see
+            // Sequencer.wasLastGoMontagePeerEcho(). Don't let that cancel this screen's own
+            // direct navigation; only treat it as a real duplicate when the position was last
+            // confirmed by a direct call like this one.
             const isDuplicate =
               currentMontageIndex === resolvedPosition &&
-              (trackOverride === undefined || trackOverride === currentTrackIndex);
+              (trackOverride === undefined || trackOverride === currentTrackIndex) &&
+              !Sequencer.wasLastGoMontagePeerEcho();
 
             if (isDuplicate && Sequencer.isPlaying()) {
               console.log('[React] ⏭️ SKIPPING DUPLICATE NAVIGATION: Already at montage', resolvedPosition, 'track', currentTrackIndex);
@@ -1155,12 +1170,12 @@ if (canWork) {
   } else {
     const parent = document.getElementById('root');
     if (parent && parent.dataset.user) {
-      console.log('Session (#3): ' + parent.dataset.user);
+      console.log('Session (#3): present');
       startAuthenticated(parent.dataset.user);
     } else {
       // const token = zone!.dataset.user;
       const params = new URLSearchParams(window.location.search);
-      console.log('Session: ' + params.get('session'));
+      console.log('Session: ' + (params.get('session') ? 'present' : 'missing'));
       const environId = parseInt(params.get('environ') || '0', 10);
       const envKey = params.get('key');
       if (params.get('house') && environId > 0 && envKey) {

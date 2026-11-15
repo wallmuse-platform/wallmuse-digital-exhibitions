@@ -37,8 +37,7 @@ export class Artwork {
             this.codecs = this.web_codecs || this.codecs;
         }
 
-        // FIXED: Correct the port in URLs from 8443 to 8444
-        this.correctUrlPort();
+        this.correctUrlHost();
     }
 
     private static standalone?: boolean;
@@ -50,26 +49,32 @@ export class Artwork {
         return Artwork.standalone;
     }
 
-    // FIXED: Method to correct both domain and port in URLs, but avoid double 'manager.'
-    private correctUrlPort(): void {
-        if (this.url) {
-            if (this.url.includes('manager.wallmuse.com:8443')) {
-                this.url = this.url.replace('manager.wallmuse.com:8443', 'manager.wallmuse.com:8444');
-                console.log('🔧 [URL-FIX] Corrected artwork URL port from 8443 to 8444:', this.url);
-            } else if (this.url.includes('wallmuse.com:8443')) {
-                this.url = this.url.replace('wallmuse.com:8443', 'manager.wallmuse.com:8444');
-                console.log('🔧 [URL-FIX] Corrected artwork URL from wallmuse.com:8443 to manager.wallmuse.com:8444:', this.url);
-            }
+    // Media/subtitle URLs must be on :8443 (the front door for REST and media), never
+    // :8444 (Tomcat direct over HTTP/2, whose write timeout closes the connection once
+    // the browser has buffered ahead on a long/idle video) — see docs/media-port-8444-brief.md.
+    // The server is not always consistent about this (observed a field coming back already
+    // on :8444, not just missing the 'manager.' prefix), so normalize unconditionally rather
+    // than only patching the host. Signed URLs (exp/k/sig) don't cover host/port, so this
+    // rewrite stays valid either way.
+    private correctUrlHost(): void {
+        this.url = Artwork.normalizeMediaHost(this.url, 'artwork') ?? this.url;
+        this.subtitle_url = Artwork.normalizeMediaHost(this.subtitle_url, 'subtitle');
+    }
+
+    private static normalizeMediaHost(url: string | undefined, label: string): string | undefined {
+        if (!url) return url;
+        let fixed = url;
+        if (fixed.includes('manager.wallmuse.com:8444')) {
+            fixed = fixed.replace('manager.wallmuse.com:8444', 'manager.wallmuse.com:8443');
+        } else if (fixed.includes('wallmuse.com:8444')) {
+            fixed = fixed.replace('wallmuse.com:8444', 'manager.wallmuse.com:8443');
+        } else if (fixed.includes('wallmuse.com:8443') && !fixed.includes('manager.wallmuse.com:8443')) {
+            fixed = fixed.replace('wallmuse.com:8443', 'manager.wallmuse.com:8443');
         }
-        if (this.subtitle_url) {
-            if (this.subtitle_url.includes('manager.wallmuse.com:8443')) {
-                this.subtitle_url = this.subtitle_url.replace('manager.wallmuse.com:8443', 'manager.wallmuse.com:8444');
-                console.log('🔧 [URL-FIX] Corrected subtitle URL port from 8443 to 8444:', this.subtitle_url);
-            } else if (this.subtitle_url.includes('wallmuse.com:8443')) {
-                this.subtitle_url = this.subtitle_url.replace('wallmuse.com:8443', 'manager.wallmuse.com:8444');
-                console.log('🔧 [URL-FIX] Corrected subtitle URL from wallmuse.com:8443 to manager.wallmuse.com:8444:', this.subtitle_url);
-            }
+        if (fixed !== url) {
+            console.log(`🔧 [URL-FIX] Corrected ${label} URL to manager.wallmuse.com:8443:`, fixed);
         }
+        return fixed;
     }
 
 }

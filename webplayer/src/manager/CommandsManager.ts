@@ -1,3 +1,4 @@
+import { LocalCache } from './LocalCache';
 import { Montage } from '../dao/Montage';
 import { Playlist } from '../dao/Playlist';
 import { myParseFloat, myParseInt } from './Helper';
@@ -48,6 +49,8 @@ export class CommandsManager {
 
   private unload(inst: any) {
     LogHelper.log('CommandsManager.unload', 'Unload command received:', inst);
+    // PC player V4.1: the app removes the downloaded files (permanent) or moves them to its trash
+    LocalCache.unload(inst);
     // NB: nothing is loaded, so there is nothing to unload
     // for(const m of inst.montages) {
     //     // unloadMontage(m.id);
@@ -206,7 +209,10 @@ export class CommandsManager {
           const montageIndex = parseInt(cmd.param);
           if (!isNaN(montageIndex)) {
             LogHelper.log('CommandsManager.vlc', `Navigating to montage: ${montageIndex}`);
-            Sequencer.goMontage(montageIndex);
+            // isPeerEcho: this command arrives over the house's WebSocket channel — either
+            // this screen's own broadcast bouncing back, or another screen's change — not
+            // this screen's own direct parent navigation. See Sequencer.goMontage().
+            Sequencer.goMontage(montageIndex, undefined, true);
           } else {
             LogHelper.error('CommandsManager.vlc', 'Invalid montage parameter:', cmd.param);
           }

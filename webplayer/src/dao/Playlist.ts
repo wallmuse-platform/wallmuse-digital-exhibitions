@@ -57,6 +57,16 @@ export class Playlist {
     return this.montages.length;
   }
 
+  /**
+   * Resolves a montage's real database id back to its position in THIS playlist (-1 if not
+   * found). Needed because cross-window/cross-screen signals (see ws-tools.ts's now_showing
+   * handler) only carry the id — a positional index from another screen's playlist could point
+   * at the wrong montage if screen-specific track assignments ever reorder things.
+   */
+  getMontageIndexById(montageId: number): number {
+    return this.montages.findIndex(m => m.id === montageId);
+  }
+
   getMontage(i: number) {
     // CRITICAL FIX: Check bounds before accessing montage
     if (i < 0 || i >= this.montages.length || !this.montages[i]) {

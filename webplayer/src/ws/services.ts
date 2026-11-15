@@ -11,8 +11,8 @@ export class Webservices {
       .then(r => r.playlists?.map(p => new Playlist(p)));
   }
 
-  public getJoomlaUser() {
-    return this.wstools.get<User>('get_joomla_user');
+  public getWpUser() {
+    return this.wstools.get<User>('get_wp_user');
   }
 
   // public getCommands() {

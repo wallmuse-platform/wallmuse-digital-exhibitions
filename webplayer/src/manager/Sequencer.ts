@@ -12,6 +12,7 @@ import { MessageDTO } from './MessageDTO';
 import { setCurrentPlaylist } from './Globals';
 import { VideoMediaFile } from '../media/VideoMediaFile';
 import { ImageMediaFile } from '../media/ImageMediaFile';
+import { LocalCache } from './LocalCache';
 
 enum SequencerStatus {
   Stopped,
@@ -37,12 +38,40 @@ export class Sequencer {
   // This ensures track assignments persist across montage reordering
   private static montageTrackOverrides: Map<string, number> = new Map();
 
+  // Callback set by the player container to receive montage/track changes as they happen.
+  // Deliberately NOT fired from here (showMedia/load=true) — that's the scheduler's decision
+  // point, which can run seconds before the new video actually paints anything (network
+  // stall, cold connection — see docs/video-freeze-server-connection-stall.md). Firing it here
+  // reproduces the exact "title says Panathenaic, screen still shows the previous montage"
+  // bug this callback exists to fix, just relocated onto a new transport. It is fired instead
+  // from component/video.tsx's onPlaying handler (native HTML5 event, confirmed the new
+  // content actually started rendering, gated on the slot being visible) — see that handler's
+  // comment for the full reasoning.
+  public static onNowShowing?: (montageIndex: number, trackIndex: number) => void;
+
   // TEMPORARY: Store overrides by position when montages aren't loaded yet
   // These get converted to ID-based once montages load
   private static pendingPositionOverrides: Map<number, number> = new Map();
 
   // ESSENTIAL: Navigation state (for benchmark 4)
   private static pendingMontageIndex = 0;
+
+  // Tracks whether the last goMontage() came from a WebSocket echo (CommandsManager.vlc's
+  // own broadcast bouncing back, or WS-PEER-SYNC reconciling another device's change) rather
+  // than this screen's own direct parent navigation. player.getPosition() updates synchronously
+  // on every goMontage() call regardless of whether App.showVideo() actually switched the
+  // visible slot or only preloaded in the background — so index.tsx's duplicate-navigation
+  // guard can't tell "already showing" from "a peer echo just requested this, but nothing
+  // switched yet" from position alone. The parent's own direct call must always be allowed
+  // to finish the job (switch + play) even if a peer echo already set this same position.
+  private static lastGoMontageWasPeerEcho = false;
+
+  // PC player V4.1: the current item is not downloaded yet ("Downloading…" screen). run() must then let
+  // the item's clock run instead of calling showMedia() again on every tick (nothing is on screen).
+  private static waitingDownload = false;
+  public static wasLastGoMontagePeerEcho() {
+    return this.lastGoMontageWasPeerEcho;
+  }
 
   // Public getters for integration
   public static getStatus() {
@@ -250,12 +279,13 @@ export class Sequencer {
   }
 
   // goMontage command (Benchmark 4)
-  public static goMontage(montageIndex: number, trackIndex?: number) {
+  public static goMontage(montageIndex: number, trackIndex?: number, isPeerEcho = false) {
     // Both defined playlists and undefined (default) playlists are valid
     LogHelper.log(
       'Sequencer.goMontage',
       `Going to montage ${montageIndex}, track ${trackIndex} (playlist: ${this._playlist?.id || 'default'})`
     );
+    this.lastGoMontageWasPeerEcho = isPeerEcho;
 
     // PARENT PREVAILS: if trackIndex is supplied (from parent-app navigation params),
     // it takes priority and is stored as the override for this montage.
@@ -517,7 +547,8 @@ export class Sequencer {
         TheApp &&
         TheApp.state &&
         TheApp.state.videoShown === 0 &&
-        TheApp.state.imageShown === 0
+        TheApp.state.imageShown === 0 &&
+        !this.waitingDownload
       ) {
         this.showMedia(currentPosition, true);
         return;
@@ -671,6 +702,10 @@ export class Sequencer {
     const item = track.items[position.getItemIndex()];
     if (!item) return false;
 
+    // NOTE: onNowShowing is intentionally NOT called here. See its declaration above —
+    // it fires from video.tsx's onPlaying handler once the new content is confirmed
+    // rendered, not from this scheduler decision point.
+
     const artwork = item.artwork;
 
     // Title-only items: no artwork, display as image with shapes/background
@@ -683,6 +718,8 @@ export class Sequencer {
       );
 
       if (load && TheApp?.showImage) {
+        this.waitingDownload = false;
+        LocalCache.downloading(false);
         // TEMPORARY: Client-side text fill until server implements Option A
         // (see docs/features/TITLE_TEXT_FILL.md)
         const shapes = item.shapes ? item.shapes.map((s: any) => ({ ...s })) : [];
@@ -740,12 +777,32 @@ export class Sequencer {
       `${load ? 'Loading' : 'Preloading'} ${artwork.filename} from montage ${position.getMontageIndex()}`
     );
 
+    // PC player V4.1: play only downloaded media. Not downloaded yet: the app shows "Downloading…"
+    // for this item's duration (the Sequencer clock runs as usual), then the next item is tried.
+    LocalCache.reportWanted(this._playlist);
+    const mediaUrl = LocalCache.urlFor(artwork);
+    if (mediaUrl === null) {
+      if (load) {
+        this.waitingDownload = true;
+        LogHelper.log('Sequencer.showMedia', `Not downloaded yet: ${artwork.filename}`);
+        LocalCache.downloading(true);
+        this.startTime = Date.now();
+        this.startOffset = 0;
+        this.offset = 0;
+      }
+      return true;
+    }
+    if (load) {
+      this.waitingDownload = false;
+      LocalCache.downloading(false);
+    }
+
     if (load) {
       if (artwork.type === 'VID' && TheApp) {
         const videoFile = new VideoMediaFile(
           artwork.artwork_id || 0,
           `video-${artwork.artwork_id || 'unknown'}`,
-          artwork.url,
+          mediaUrl,
           artwork.codecs || '',
           artwork.filename || 'unknown',
           0,
@@ -761,7 +818,7 @@ export class Sequencer {
         const imageFile = ImageMediaFile.getImage(
           artwork.artwork_id || 0,
           `image-${artwork.artwork_id || 'unknown'}`,
-          artwork.url,
+          mediaUrl,
           artwork.filename || 'unknown',
           0,
           artwork.duration || 30,
@@ -782,7 +839,7 @@ export class Sequencer {
         const videoFile = new VideoMediaFile(
           artwork.artwork_id || 0,
           `video-${artwork.artwork_id || 'unknown'}`,
-          artwork.url,
+          mediaUrl,
           artwork.codecs || '',
           artwork.filename || 'unknown',
           0,
@@ -796,7 +853,7 @@ export class Sequencer {
         const imageFile = ImageMediaFile.getImage(
           artwork.artwork_id || 0,
           `image-${artwork.artwork_id || 'unknown'}`,
-          artwork.url,
+          mediaUrl,
           artwork.filename || 'unknown',
           0,
           artwork.duration || 30,
