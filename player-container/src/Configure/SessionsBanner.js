@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Typography, Button } from "@mui/material";
 import { Close as CloseIcon } from "@mui/icons-material";
-import { checkMultipleActiveEnvironments } from "../utils/environmentUtils";
+import { checkDuplicateWebPlayerEnvironments } from "../utils/environmentUtils";
 
 const SessionsBanner = ({ environments, handleDeactivateEnvironment }) => {
   const [show, setShow] = useState(false);
@@ -16,7 +16,9 @@ const SessionsBanner = ({ environments, handleDeactivateEnvironment }) => {
       return;
     }
 
-    const activeInfo = checkMultipleActiveEnvironments(environments);
+    // Duplicate-artifact check only (see checkDuplicateWebPlayerEnvironments) — a PC player
+    // and a web player, or two web players on different browsers, must never trigger this.
+    const activeInfo = checkDuplicateWebPlayerEnvironments(environments);
     setMultipleActiveInfo(activeInfo);
 
     // Show banner if multiple environments are active and user hasn't dismissed it

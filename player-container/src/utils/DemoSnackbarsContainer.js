@@ -7,6 +7,7 @@ import ProfessionalServicesSnackbar from './ProfessionalServicesSnackbar.js';
 const DemoSnackbarsContainer = ({ isDemo, theme: themeName }) => {
     const muiTheme = useTheme();
     const isMobile = useMediaQuery(muiTheme.breakpoints.down('md')); // Mobile/tablet breakpoint
+    const isPlugin = document.getElementById('root')?.dataset?.plugin === 'true';
 
     if (!isDemo) {
         return null;
@@ -36,12 +37,14 @@ const DemoSnackbarsContainer = ({ isDemo, theme: themeName }) => {
                 <TrialAccountSnackbar
                     isDemo={isDemo}
                     theme={themeName}
+                    isPlugin={isPlugin}
                     containerMode={true}
                 />
             </Box>
 
 
-            {/* Professional Services Snackbar */}
+            {/* Professional Services Snackbar — hidden in plugin mode */}
+            {!isPlugin && (
             <Box sx={{
                 order: isMobile ? 2 : 2,
                 width: isMobile ? '100%' : 'auto',
@@ -55,6 +58,7 @@ const DemoSnackbarsContainer = ({ isDemo, theme: themeName }) => {
                     containerMode={true}
                 />
             </Box>
+            )}
         </Box>
     );
 };

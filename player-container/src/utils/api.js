@@ -403,7 +403,11 @@ export const createDefaultEnvironment = async (houseId) => {
         version: 1,
         house: houseId,
         name: environmentName,
-        keys: environmentName,
+        // Random device key: a fixed key ("Web player") would let anyone act as this environment.
+        // Nobody reads it back: the child WebPlayer registers its own key.
+        keys: Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+          b.toString(16).padStart(2, "0"),
+        ).join(""),
         ip: "127.0.0.1", // Common value for web players
         session: sessionId,
       },
@@ -576,7 +580,7 @@ const generateEnvironmentKeyFromCryptKey = (cryptKey) => {
     hex.substring(20, 32),
   ].join("-");
 
-  console.log("[api] Generated environment key from crypt_key:", uuid);
+  console.log("[api] Generated environment key from crypt_key: …");
   return uuid;
 };
 
@@ -807,43 +811,59 @@ export const activateScreenWithParams = async (
  * @param {string|number} screenId - The screen ID
  * @param {number} enabled - Whether the screen is enabled (1) or disabled (0)
  * @param {string} [sessionIdParam] - Optional session ID (will use global sessionId if not provided)
+ * @param {boolean} [writeParams] - Whether to also write this browser's own window.screen
+ *   dimensions into the screen's `params` (type:"web", browserScreen:true). Only ever true
+ *   for the browser's OWN "Web player" screen — a PC player (V3/V4) reports its own real
+ *   screens and dimensions itself; overwriting them with the browser's window.screen size
+ *   is the bug documented in play-c-pc-player-screens-brief.md. Defaults to true to keep
+ *   existing callers (which all operate on the browser's own screen) unchanged; callers that
+ *   can't guarantee that — like a generic Configure toggle — must pass this explicitly.
  * @returns {Promise} - Promise resolving to the API response
  */
 
-export const activateScreen = async (screenId, enabled = 1, sessionIdParam) => {
+export const activateScreen = async (
+  screenId,
+  enabled = 1,
+  sessionIdParam,
+  writeParams = true,
+) => {
   const activeSessionId = sessionIdParam || sessionId;
 
   try {
     console.log(
-      "[api] activateScreen with screenId, enabled, sessionId:",
+      "[api] activateScreen with screenId, enabled, sessionId, writeParams:",
       screenId,
       enabled,
       activeSessionId,
+      writeParams,
     );
 
-    // Get the user's screen dimensions
-    const screenWidth = window.screen.width || 1920;
-    const screenHeight = window.screen.height || 1080;
+    const requestParams = {
+      version: 1,
+      screen: screenId,
+      enabled: parseInt(enabled, 10),
+      session: activeSessionId,
+    };
 
-    // Create screen parameters with dimensions and on status
-    const screenParams = JSON.stringify({
-      width: screenWidth,
-      height: screenHeight,
-      type: "web",
-      browserScreen: true,
-      on: 1, // Explicitly set on status to 1
-    });
+    if (writeParams) {
+      // Get the user's screen dimensions
+      const screenWidth = window.screen.width || 1920;
+      const screenHeight = window.screen.height || 1080;
 
-    // Activate the screen with dimensions
+      // Create screen parameters with dimensions and on status
+      requestParams.params = JSON.stringify({
+        width: screenWidth,
+        height: screenHeight,
+        type: "web",
+        browserScreen: true,
+        on: 1, // Explicitly set on status to 1
+      });
+    }
+
+    // Activate the screen, with dimensions only when writeParams is true
     const response = await axios.get(`${baseURL}/upd_screen`, {
       headers: { Accept: "text/x-json" },
-      params: {
-        version: 1,
-        screen: screenId,
-        enabled: parseInt(enabled, 10),
-        params: screenParams, // Include screen parameters
-        session: activeSessionId,
-      },
+      params: requestParams,
     });
 
     console.log("[api] activateScreen response:", response.data);

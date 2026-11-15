@@ -29,6 +29,7 @@ import {
 import {
   isEnvironmentActive,
   isScreenActive,
+  isScreenEnabled,
   hasValidDimensions,
   getAllScreens,
   validateScreenSetup,
@@ -133,16 +134,20 @@ export function ConfigureEnvironmentScreen({
       return true;
     });
 
-  const handleScreenToggle = async (screen) => {
+  const handleScreenToggle = async (screen, environment) => {
     console.log("[Configure] handleScreenToggle called for screen:", screen.id);
+    const isDemo = isDemoAccount(getUserId());
     console.log(
       "[Configure] About to call handleAction, userId:",
       getUserId(),
       "isDemo:",
-      isDemoAccount(getUserId()),
+      isDemo,
     );
-    // Close modal before showing popup
-    if (onClose) {
+    // Close modal before showing GuestActionPopup — two overlapping modals is confusing.
+    // Only close for demo users; logged-in users execute the toggle directly below with no
+    // popup in the way, so there's no reason to close (and, now that Configure's open state
+    // lives in ConfigureModalContext, no need to reopen it afterward either).
+    if (onClose && isDemo) {
       console.log("[Configure] Closing modal");
       onClose();
     }
@@ -153,7 +158,11 @@ export function ConfigureEnvironmentScreen({
         console.log(
           "[Configure] Inside handleAction callback - executing screen toggle",
         );
-        const isCurrentlyActive = isScreenActive(screen);
+        // isScreenEnabled (enabled), not isScreenActive (on) — this decides which of
+        // activateScreen/deactivateScreen to call next, so it must track the field those
+        // two actually write, not the server-computed live status. See isScreenActive's
+        // comment in environmentUtils.js for the full explanation.
+        const isCurrentlyActive = isScreenEnabled(screen);
         console.log(
           `[ConfigureEnvironmentScreen] Toggling screen ${screen.id} from ${isCurrentlyActive ? "on" : "off"} to ${isCurrentlyActive ? "off" : "on"}`,
         );
@@ -163,17 +172,23 @@ export function ConfigureEnvironmentScreen({
             // Turn screen off
             await deactivateScreen(screen.id);
           } else {
-            // Turn screen on
-            await activateScreen(screen.id, 1);
+            // Turn screen on. Only write this browser's own window.screen dimensions
+            // into the screen's params for the browser's own "Web player" environment —
+            // a PC player (V3/V4) reports its real screens/dimensions itself, and
+            // overwriting them here was the bug in play-c-pc-player-screens-brief.md.
+            const writeParams = environment?.name === "Web player";
+            await activateScreen(screen.id, 1, undefined, writeParams);
           }
 
-          // Update local state immediately for responsive UI
+          // Update local state immediately for responsive UI. Write `enabled`, not `on` —
+          // the Switch's checked state reads isScreenEnabled (enabled), and `on` is
+          // server-computed anyway (this toggle never actually changes it).
           const updatedEnvironmentGroup = environmentGroup.map(
             ({ environment, screens }) => ({
               environment,
               screens: screens.map((s) =>
                 s.id === screen.id
-                  ? { ...s, on: isCurrentlyActive ? "0" : "1" }
+                  ? { ...s, enabled: isCurrentlyActive ? "0" : "1" }
                   : s,
               ),
             }),
@@ -198,8 +213,10 @@ export function ConfigureEnvironmentScreen({
   };
 
   const handleEnvironmentToggle = async (environment) => {
-    // Close modal before showing popup
-    if (onClose) {
+    // Close modal before showing GuestActionPopup — only for demo users, same reasoning as
+    // handleScreenToggle above (no popup to avoid overlapping with otherwise, and Configure's
+    // open state now survives remounts via ConfigureModalContext so there's nothing to restore).
+    if (onClose && isDemoAccount(getUserId())) {
       onClose();
     }
     // Use handleAction to check for demo account
@@ -401,8 +418,8 @@ export function ConfigureEnvironmentScreen({
                     <Switch
                       size={isMobile ? "small" : "medium"}
                       style={{ alignSelf: "center" }}
-                      checked={isScreenActive(screen)}
-                      onChange={() => handleScreenToggle(screen)}
+                      checked={isScreenEnabled(screen)}
+                      onChange={() => handleScreenToggle(screen, environment)}
                       classes={{
                         thumb: {
                           boxShadow: "none",
@@ -536,8 +553,9 @@ export function ConfigureEnvironmentScreen({
                   <Tooltip title={t("action.delete")}>
                     <IconButton
                       onClick={() => {
-                        // Close modal before showing popup
-                        if (onClose) {
+                        // Close modal before showing GuestActionPopup — demo users only,
+                        // see handleScreenToggle's comment above for the full reasoning.
+                        if (onClose && isDemoAccount(getUserId())) {
                           onClose();
                         }
                         // Use handleAction to check for demo account
@@ -693,8 +711,9 @@ export function ConfigureEnvironmentScreen({
                   >
                     <IconButton
                       onClick={() => {
-                        // Close modal before showing popup
-                        if (onClose) {
+                        // Close modal before showing GuestActionPopup — demo users only,
+                        // see handleScreenToggle's comment above for the full reasoning.
+                        if (onClose && isDemoAccount(getUserId())) {
                           onClose();
                         }
                         // Use handleAction to check for demo account

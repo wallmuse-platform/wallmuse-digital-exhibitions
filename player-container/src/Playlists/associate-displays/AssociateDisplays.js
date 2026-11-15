@@ -266,7 +266,7 @@ const AssociateDisplays = ({
             house,
             seqNumberInt,
             screenId,
-            session,
+            session ? 'present' : 'missing',
           );
 
           const response = await setTrackScreen(

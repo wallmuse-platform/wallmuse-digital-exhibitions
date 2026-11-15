@@ -2,6 +2,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import * as Sentry from "@sentry/react";
+import { installLogMask } from "./utils/LogMask";
 import "./index.css";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
@@ -9,7 +10,7 @@ import "./i18n";
 
 // Initialize Sentry with performance monitoring
 Sentry.init({
-  dsn: "",
+  dsn: "", // Set your Sentry DSN here — omitted from public repository
   environment: process.env.NODE_ENV,
   sendDefaultPii: true,
   tracesSampleRate: 0.3, // 30% sampling for performance
@@ -20,6 +21,10 @@ Sentry.init({
     },
   },
 });
+
+// Must run AFTER Sentry.init() above — see LogMask.js's own comment for why the order
+// matters here specifically (Sentry's Breadcrumbs integration + sendDefaultPii: true).
+installLogMask();
 
 // Track app loading state
 let appMounted = false;

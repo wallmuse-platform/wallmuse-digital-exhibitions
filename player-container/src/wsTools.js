@@ -25,7 +25,7 @@ export const sendCommand = (house, command, complete = () => { }) => {
         return;
     }
     
-    console.log('[wsTools] Sending command to session:' + session + ', house:' + house + ', command:' + command);
+    console.log('[wsTools] Sending command to session:' + (session ? 'present' : 'missing') + ', house:' + house + ', command:' + command);
     fetch(RootUrl + 'send_command?'
         + 'version=2'
         + '&session=' + session

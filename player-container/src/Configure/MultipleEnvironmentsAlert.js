@@ -13,7 +13,7 @@ import {
   Warning as WarningIcon,
   Close as CloseIcon,
 } from "@mui/icons-material";
-import { checkMultipleActiveEnvironments } from "../utils/environmentUtils";
+import { checkDuplicateWebPlayerEnvironments } from "../utils/environmentUtils";
 
 const MultipleEnvironmentsAlert = ({
   environments,
@@ -30,7 +30,9 @@ const MultipleEnvironmentsAlert = ({
       return;
     }
 
-    const activeInfo = checkMultipleActiveEnvironments(environments);
+    // Duplicate-artifact check only (see checkDuplicateWebPlayerEnvironments) — a PC player
+    // and a web player, or two web players on different browsers, must never trigger this.
+    const activeInfo = checkDuplicateWebPlayerEnvironments(environments);
     setMultipleActiveInfo(activeInfo);
 
     // Show alert if multiple environments are active and user hasn't dismissed it

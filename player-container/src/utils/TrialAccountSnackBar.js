@@ -7,7 +7,7 @@ import i18n from 'i18next';
 import { useTheme } from '@mui/material/styles'; // Import the theme hook from MUI
 
 // Use the theme passed from parent component rather than detecting it independently
-const TrialAccountSnackbar = ({ isDemo, theme: themeName, transitionDuration = 300, containerMode = false }) => {
+const TrialAccountSnackbar = ({ isDemo, theme: themeName, isPlugin = false, transitionDuration = 300, containerMode = false }) => {
     const { t } = useTranslation();
     const [open, setOpen] = React.useState(isDemo);
     // Use MUI's useTheme hook instead of context
@@ -26,7 +26,13 @@ const TrialAccountSnackbar = ({ isDemo, theme: themeName, transitionDuration = 3
     const language = i18n.language; // e.g., "en"
     const langParam = language !== 'en' ? `?lang=${language}` : '';
         
-    if (themeName === "wallmuse") {
+    if (isPlugin) {
+        // Plugin mode: use the URL passed via data-signup-url (auto-detected or explicit).
+        // If not set, the admin has no subscription page — hide the snackbar.
+        const signupUrl = document.getElementById('root')?.dataset?.signupUrl;
+        if (!signupUrl) return null;
+        link = signupUrl;
+    } else if (themeName === "wallmuse") {
         link = 'https://wallmuse.com/sign-up/';
     } else if (themeName === "ooo2") {
         // Special case for ooo2 theme

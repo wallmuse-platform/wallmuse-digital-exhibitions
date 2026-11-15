@@ -18,6 +18,7 @@ import { ConfigureDisplays } from "../Configure/Configure.js";
 import Descriptions from "../Descriptions/Descriptions.js";
 import { useTVNavigation } from "../utils/useTVNavigation";
 import useGuestActionPopup from "../accounts/useGuestActionPopup";
+import { useConfigureModal } from "../contexts/ConfigureModalContext";
 
 // Style and Utilities
 import "../App.css";
@@ -41,11 +42,9 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
   const { handleAction: guestHandleAction, isDemo, popup } = useGuestActionPopup();
 
   // Close Configure before showing GuestActionPopup — two overlapping modals is confusing.
-  // The guest flow ends in a page reload so Configure doesn't need to reopen after.
   // Only close Configure for demo users — logged-in users execute the action directly.
   const handleAction = (action, isPremium = false) => {
     if (isDemo) {
-      window._configureWasOpen = false;
       setOpenConfigureDisplays(false);
     }
     guestHandleAction(action, isPremium);
@@ -88,15 +87,12 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
 
   // Configure Displays
   const [tooltipOpen, setTooltipOpen] = useState(false);
-  const [openConfigureDisplays, setOpenConfigureDisplays] = useState(false);
-
-  // Reopen Configure if handleRemoveEnvironment signalled it before setEnvironments re-rendered
-  useEffect(() => {
-    if (window._configureWasOpen) {
-      window._configureWasOpen = false;
-      setOpenConfigureDisplays(true);
-    }
-  });
+  // Lives in ConfigureModalContext (above DontStartBefore in App.js), not local useState —
+  // see that file for why: TabButtons gets unmounted/remounted whenever DontStartBefore's
+  // gating re-runs (e.g. on routine Configure actions like toggling a screen or removing an
+  // environment), which would otherwise silently close this modal mid-action.
+  const { isConfigureOpen: openConfigureDisplays, setIsConfigureOpen: setOpenConfigureDisplays } =
+    useConfigureModal();
 
   const handleTooltipClose = () => {
     setTooltipOpen(false);
@@ -110,7 +106,6 @@ function TabButtons({ currentTheme, t, responsiveProps }) {
   };
 
   const handleCloseConfigureDisplays = () => {
-    window._configureWasOpen = false;
     setOpenConfigureDisplays(false);
   };
 

@@ -251,6 +251,31 @@ const WebPlayer = React.memo(function WebPlayer({
           setInternalLoading(false);
           setIsChildPlayerReady(true);
 
+          // Wire onNowShowing here — window.Sequencer is USUALLY set by the time
+          // onWebPlayerReady fires, but webplayer2 loads as multiple chunks, so chunk
+          // execution order isn't guaranteed. If window.Sequencer isn't ready yet on the
+          // first check, retry briefly instead of giving up — a lost one-shot race here
+          // means onNowShowing stays unwired for the rest of the session (confirmed via
+          // console trace in Play C 3/webplayer2B: title overlay permanently stuck once
+          // this race is lost — ported here with the fix already built in).
+          const wireOnNowShowing = (attemptsLeft = 20) => {
+            if (window.Sequencer) {
+              console.log('[WebPlayer] onNowShowing WIRED (in onWebPlayerReady) at', new Date().toISOString());
+              window.Sequencer.onNowShowing = (montageIndex, trackIndex) => {
+                console.log('[WebPlayer] onNowShowing fired, dispatching webplayer-montage-changed', { montageIndex, track: trackIndex + 1 });
+                window.dispatchEvent(new CustomEvent('webplayer-montage-changed', {
+                  detail: { montageIndex, track: trackIndex + 1 }
+                }));
+              };
+            } else if (attemptsLeft > 0) {
+              console.warn('[WebPlayer] onNowShowing: window.Sequencer still missing in onWebPlayerReady, retrying...', attemptsLeft, 'attempts left');
+              setTimeout(() => wireOnNowShowing(attemptsLeft - 1), 100);
+            } else {
+              console.error('[WebPlayer] onNowShowing: window.Sequencer never became available — title overlay will not update this session');
+            }
+          };
+          wireOnNowShowing();
+
           // CRITICAL FIX: Notify NavigationManager that WebPlayer is ready AFTER React app initializes
           if (window.navigationManager) {
             window.navigationManager.setPlayerReady(true);
@@ -354,8 +379,31 @@ const WebPlayer = React.memo(function WebPlayer({
       const isPlaying = event.detail?.isPlaying ?? window.Sequencer?.isPlaying() ?? false;
       console.log('[WebPlayer] wmScreenReady - syncing isPlaying:', isPlaying);
       setGlobalIsPlaying(isPlaying);
+
+      // Persist the environment ID the child just confirmed, so getEnvironmentId()
+      // can find a real value on the NEXT load instead of always falling back to
+      // environ=0. Nothing else in the parent ever wrote this — SessionContext's
+      // updateHouseInDOM() only persists houseId into wm-house, never environId,
+      // so this was previously dead data every single load relied on server-side
+      // fingerprint matching (known fragile) to avoid minting a duplicate
+      // "Web player" environment. screenId is deliberately NOT persisted here —
+      // the child WebPlayer always owns screen creation/attachment (see
+      // getScreenId() above), that split is unchanged.
+      const environId = event.detail?.environId;
+      if (environId) {
+        try {
+          const existingWmHouse = JSON.parse(localStorage.getItem('wm-house') || '{}');
+          localStorage.setItem('wm-house', JSON.stringify({ ...existingWmHouse, environId: String(environId) }));
+          logInfo('Persisted environId to wm-house:', environId);
+        } catch (error) {
+          logError('Error persisting environId to wm-house:', error);
+        }
+      }
     };
     window.addEventListener('wmScreenReady', handleScreenReady);
+
+    // onNowShowing is wired inside window.onWebPlayerReady above, where window.Sequencer
+    // is guaranteed to exist. Wiring here (before scripts execute) always failed.
 
     return () => {
       clearTimeout(t1);

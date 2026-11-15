@@ -53,6 +53,7 @@ import { BASE_THUMBNAIL_URL } from "./contexts/MontagesContext";
 import { UIProvider } from "./Playlists/contexts/UIContext";
 import { useSession, SessionProvider } from "./contexts/SessionContext";
 import { PlaylistsProvider, usePlaylists } from "./contexts/PlaylistsContext";
+import { ConfigureModalProvider } from "./contexts/ConfigureModalContext";
 import { PlaylistProvider } from "./Playlists/contexts/PlaylistContext";
 
 // Other utilities and components
@@ -156,9 +157,13 @@ function App({ onAppReady }) {
     <SessionProvider>
       <EnvironmentsProvider>
         <PlaylistsProvider>
-          <div className="App">
-            <DontStartBefore volumeRef={volumeRef} playModeRef={playModeRef} />
-          </div>
+          {/* Above DontStartBefore so Configure's open/closed state survives its remounts
+              — see contexts/ConfigureModalContext.js for why this is needed. */}
+          <ConfigureModalProvider>
+            <div className="App">
+              <DontStartBefore volumeRef={volumeRef} playModeRef={playModeRef} />
+            </div>
+          </ConfigureModalProvider>
         </PlaylistsProvider>
       </EnvironmentsProvider>
     </SessionProvider>
@@ -408,6 +413,28 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
   const selectedPlaylistPositionForWebPlayerRef = useRef(null);
   const currentMontageIndexRef = useRef(0); //  ADD: Current montage index ref
   const [currentMontageIndexState, setCurrentMontageIndexState] = useState(0);
+  // Target of the most recent MANUAL navigation (onFwd/onRew/handleMontageNavigation) that
+  // hasn't yet been confirmed by a "webplayer-montage-changed" event (see handleMontageChange
+  // below). Needed because manual nav updates the title optimistically, immediately on click —
+  // but the webplayer2's own confirmed-render report for the PREVIOUS target can still
+  // be in flight and arrive after a second click already moved the optimistic target further.
+  // Without this guard, that late confirmation would flip the title back to the stale montage.
+  // null whenever there is no manual nav awaiting confirmation (e.g. during hands-off autoplay,
+  // where every confirmed report must be accepted unconditionally — that's the whole point of
+  // the onPlaying-sourced signal, see video.tsx).
+  const pendingManualMontageTargetRef = useRef(null);
+  // Set right before updateCurrentMontageIndex() is called from handleMontageChange (the
+  // webplayer-montage-changed echo — same-window onNowShowing OR cross-browser websocket
+  // now_showing relay). That echo means the player ALREADY confirmed rendering this montage;
+  // it must only update overlay/UI state, never cause a navigation command to be sent back to
+  // the player. Without this guard, the AUTO_TRACK effect (currentMontageIndexState ->
+  // selectedPlaylistPositionForWebPlayer) feeds the track-change effect below, which calls
+  // NavigationManager.addCommand() and re-triggers Sequencer.goMontage()/showMedia() for the
+  // montage the player just confirmed — causing a visible re-seek-to-0 flicker on every
+  // confirmed render (reproduced 2026-11-15 in Play C 3: once onNowShowing wiring became
+  // reliable, this fired on every autoplay transition, not just manual nav — ported here with
+  // the fix since webplayer2's video.tsx will eventually get the same onPlaying hook).
+  const suppressNextNavCommandRef = useRef(false);
   const playlistChangeInProgressRef = useRef(false); // Track playlist changes in progress
   const [accountCreatedSuccess, setAccountCreatedSuccess] = useState(false);
   const [accountSetupPhase, setAccountSetupPhase] = useState("initial");
@@ -874,6 +901,10 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
       setSelectedPlaylistPositionForWebPlayer(normalizedPosition);
       selectedPlaylistPositionForWebPlayerRef.current = normalizedPosition;
       setWebPlayerOverlayInfo(overlayInfo);
+      // This manual nav just set the title optimistically above — remember the target so a
+      // late confirmed-render report for whatever montage was playing before this click can't
+      // flip the title back (see pendingManualMontageTargetRef's declaration).
+      pendingManualMontageTargetRef.current = normalizedPosition;
       updateCurrentMontageIndex(normalizedPosition);
 
       // Update global refs
@@ -899,15 +930,49 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
     ],
   );
 
-  //  5. Optional: Listen for playback events to update current montage index
+  //  5. Listen for playback events to update current montage index
+  //
+  // STATUS (2026-11-15): live. webplayer2's video.tsx will dispatch "webplayer-montage-
+  // changed" from its onPlaying handler — deliberately only once the new content has actually
+  // started rendering (native `playing` event, gated on the video slot being visible), NOT at
+  // the moment the player's Sequencer merely decides to move on (goNext()/showMedia()). See
+  // webplayer2/webplayer2B's now-showing-signal-design-brief for why that distinction matters:
+  // an earlier wiring attempt fed this from the scheduler's decision instead and reproduced
+  // the original bug (a caption naming content the screen wasn't showing yet) over the new
+  // channel.
+  //
+  // Guard below: this confirmed signal and manual nav (handleMontageNavigation/onRew/onFwd)
+  // both drive the same title state, and manual nav updates it optimistically on click, before
+  // any confirmation arrives. If two clicks happen before the first click's confirmation comes
+  // back, that stale confirmation (still describing the montage we already navigated away from)
+  // must not be allowed to flip the title back. pendingManualMontageTargetRef (set by manual
+  // nav, cleared here once satisfied) tracks that; it stays null during hands-off autoplay, so
+  // every confirmed report is accepted unconditionally there, which is the whole reason this
+  // channel exists.
   useEffect(() => {
     const handleMontageChange = (event) => {
       const { montageIndex } = event.detail;
       if (montageIndex !== undefined && montageIndex !== null) {
+        const pendingTarget = pendingManualMontageTargetRef.current;
+        if (pendingTarget !== null && montageIndex !== pendingTarget) {
+          console.log(
+            "[App PlayerIntegration PLAYBACK NAV] Dropping stale confirmation for index:",
+            montageIndex,
+            "— manual nav already moved on to:",
+            pendingTarget,
+          );
+          return;
+        }
+        if (pendingTarget !== null && montageIndex === pendingTarget) {
+          pendingManualMontageTargetRef.current = null;
+        }
         console.log(
           "[App PlayerIntegration PLAYBACK NAV] Montage changed to index:",
           montageIndex,
         );
+        // This is a confirmed-render echo, not a navigation request — suppress the
+        // resulting track-change effect's NavigationManager command (see declaration above).
+        suppressNextNavCommandRef.current = true;
         updateCurrentMontageIndex(montageIndex);
       }
     };
@@ -970,7 +1035,11 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
       const pluginTier = document.getElementById('root')?.dataset?.pluginTier;
       if (pluginTier === 'free') return;
 
-      // Show only when 2+ environments are alive (same check as before).
+      // Show only when 2+ environments are alive — deliberately generic (PC players
+      // included): this confirms the command reached every device on the house, which is
+      // not the same thing as the duplicate-session warning in SessionsBanner.js. See
+      // checkMultipleActiveEnvironments's own comment in environmentUtils.js before
+      // changing this — do not swap in checkDuplicateWebPlayerEnvironments here.
       const { hasMultiple: hasMultipleActiveEnv, count } =
         checkMultipleActiveEnvironments(environmentsRef.current);
       if (!hasMultipleActiveEnv) return;
@@ -1155,6 +1224,18 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
       currentPlaylist &&
       selectedPlaylistPositionForWebPlayer !== null
     ) {
+      // Guard: don't echo a confirmed-render report back to the player as a navigation
+      // command — see suppressNextNavCommandRef's declaration for why this loop is harmful.
+      if (suppressNextNavCommandRef.current) {
+        suppressNextNavCommandRef.current = false;
+        console.log(
+          "[App] Track-change effect: suppressing command — this update came from the " +
+            "player's own confirmed-render echo, not a navigation request:",
+          { montage: selectedPlaylistPositionForWebPlayer, track: selectedTrackForScreen },
+        );
+        return;
+      }
+
       // Guard: suppress stale commands during a cross-playlist navigation.
       // handlePlaylistChange updates currentPlaylist before handleMontageNavigation has a
       // chance to set selectedPlaylistPositionForWebPlayer to the intended destination. If
@@ -1233,6 +1314,9 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
         ? lastIndex
         : currentMontageIndexRef.current - 1;
     handleSendCommand(`<vlc><cmd action="montage" param="${prevIndex}"/></vlc>`, house);
+    // See pendingManualMontageTargetRef's declaration: without this, a late confirmed-render
+    // report for the montage we're leaving could flip the title back after this click.
+    pendingManualMontageTargetRef.current = prevIndex;
     updateCurrentMontageIndex(prevIndex);
   }, [house, montages, updateCurrentMontageIndex]);
   const onFwd = useCallback(() => {
@@ -1242,6 +1326,7 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
         ? 0
         : currentMontageIndexRef.current + 1;
     handleSendCommand(`<vlc><cmd action="montage" param="${nextIndex}"/></vlc>`, house);
+    pendingManualMontageTargetRef.current = nextIndex;
     updateCurrentMontageIndex(nextIndex);
   }, [house, montages, updateCurrentMontageIndex]);
 

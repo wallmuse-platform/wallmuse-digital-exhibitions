@@ -14,7 +14,7 @@ import { ConfigureHeaderGrid } from "./ConfigureHeaderGrid";
 import { ConfigureEnvironmentScreen } from "./ConfigureEnvironmentScreen";
 import SessionsBanner from "./SessionsBanner";
 import {
-  checkMultipleActiveEnvironments,
+  checkDuplicateWebPlayerEnvironments,
   isEnvironmentActive,
   isScreenActive,
 } from "../utils/environmentUtils";
@@ -44,7 +44,9 @@ export function ConfigureDisplays({ t, onClose, handleAction }) {
     }));
 
     // Log multiple active environments
-    const multipleCheck = checkMultipleActiveEnvironments(environments);
+    // Duplicate-artifact check (see checkDuplicateWebPlayerEnvironments) — same one
+    // SessionsBanner.js uses; this just logs/reserves grid space ahead of it rendering.
+    const multipleCheck = checkDuplicateWebPlayerEnvironments(environments);
     if (multipleCheck.hasMultiple) {
       console.warn(
         "[Configure] Multiple active environments detected:",
@@ -148,9 +150,10 @@ export function ConfigureDisplays({ t, onClose, handleAction }) {
       "[Configure] After filtering, newEnvironments:",
       newEnvironments,
     );
-    // Signal TabButtons to reopen Configure and restore toggle state after the re-render.
+    // Configure's own open state now lives in ConfigureModalContext (survives the
+    // DontStartBefore remount this setEnvironments triggers on its own — see that context
+    // file), so it no longer needs to be told to reopen here.
     // showOnlyActive must have been OFF (only inactive envs are removable), so restore it.
-    window._configureWasOpen = true;
     window._configureShowOnlyActive = false;
     setEnvironments(newEnvironments);
     try {
@@ -257,7 +260,9 @@ export function ConfigureDisplays({ t, onClose, handleAction }) {
     let totalRows = 16; // Base rows + header
 
     // Add extra row if multiple environments are active (for alert at top)
-    const multipleCheck = checkMultipleActiveEnvironments(environments);
+    // Duplicate-artifact check (see checkDuplicateWebPlayerEnvironments) — same one
+    // SessionsBanner.js uses; this just logs/reserves grid space ahead of it rendering.
+    const multipleCheck = checkDuplicateWebPlayerEnvironments(environments);
     if (multipleCheck.hasMultiple) {
       totalRows += 2; // Extra space for alert at top
     }
@@ -275,7 +280,9 @@ export function ConfigureDisplays({ t, onClose, handleAction }) {
 
   // Validation and logging
   React.useEffect(() => {
-    const multipleCheck = checkMultipleActiveEnvironments(environments);
+    // Duplicate-artifact check (see checkDuplicateWebPlayerEnvironments) — same one
+    // SessionsBanner.js uses; this just logs/reserves grid space ahead of it rendering.
+    const multipleCheck = checkDuplicateWebPlayerEnvironments(environments);
     if (multipleCheck.hasMultiple) {
       console.warn("[Configure] Multiple active environments detected:", {
         count: multipleCheck.count,
