@@ -2,6 +2,20 @@ import { VideoMediaFile } from '../media/VideoMediaFile';
 import React from 'react';
 import { wsTools } from '../manager/start';
 import { Sequencer } from '../manager/Sequencer';
+import { datetimeToString } from '../manager/Helper';
+
+// Same "[YYYY-MM-DD HH:MM:SS.mmm]" format LogHelper uses, so these diagnostic lines line
+// up directly against the Sequencer's own timestamped transition logs when comparing a
+// pasted console capture — our console.warn/error calls below don't get DevTools' own
+// timestamp column once copied as plain text, so without this there's no way to tell how
+// much real time separated e.g. "switching to show it" from a PAUSE/WAITING event.
+const logTimestamp = () => `[${datetimeToString(new Date())}]`;
+
+// TEMPORARY (2026-11-15): counts every real "visible and confirmed-rendered" transition
+// across BOTH video slots, module-scoped (not per-component) so it's a single running
+// sequence number regardless of which slot fires. Strip once the "now showing" channel is
+// built and verified — see the onPlaying handler below.
+let visibleTransitionCounter = 0;
 
 // --- GLOBAL INTERFACES (Preserved) ---
 interface WallmuseInit {
@@ -441,14 +455,135 @@ export const Video = React.forwardRef<HTMLVideoElement, VideoProps>(
           left: 0
           // opacity and visibility now controlled by CSS classes
         }}
-        autoPlay={wsTools.getHouseAutostart()}
+        // Deliberately always false — NOT gated on hidden. Native autoPlay doesn't care
+        // whether this slot is currently visible: once `src` has enough data, the browser
+        // starts playing it regardless of CSS visibility. For the PRELOADING/hidden slot,
+        // that means it plays through to completion (or just keeps running) silently in the
+        // background, long before the Sequencer ever decides to show it — confirmed via the
+        // onPause/onPlaying diagnostics added 2026-11-15 (see docs/video-freeze-server-
+        // connection-stall.md's appendix). Two concrete things this broke:
+        //   1. By the time a slot is actually switched to visible, it can already be
+        //      mid-playback or `ended` — frozen on a stale frame the instant it's shown.
+        //   2. The native `playing` event (used as the "now actually rendering, tell the
+        //      title/websocket" signal — see the onPlaying hook below) fires once, while
+        //      still hidden, and never fires again at the real visible-transition moment
+        //      (calling .play() on an element that's already playing is a no-op, no new
+        //      event) — so the "now showing" report silently stops working from the second
+        //      montage onward.
+        // App.tsx's showVideo() already calls .play() explicitly at every point it actually
+        // wants a video to start (every branch — "already showing", and both "switching to
+        // show it" cases), so native autoPlay was always redundant for the cases we want, and
+        // actively harmful for the one we don't (the hidden/preloading slot).
+        autoPlay={false}
         loop={media?.loop || false}
         playsInline
         muted
         preload="auto"
         crossOrigin="anonymous"
-        onStalled={() => console.warn(`🎬 [Video #${index}] Stalled - Buffer empty?`)}
-        onLoadedData={() => console.log(`🎬 [Video #${index}] Data Loaded (Ready)`)}
+        onStalled={() => console.warn(`${logTimestamp()} 🎬 [Video #${index}] Stalled - Buffer empty?`)}
+        onLoadedData={() => console.log(`${logTimestamp()} 🎬 [Video #${index}] Data Loaded (Ready)`)}
+        // DIAGNOSTIC (video-freeze-autoplay-pause-brief.md): the browser's actual media
+        // pipeline state (buffering stalls, native pause, decode errors) was previously
+        // invisible to us — none of these events were listened for, so a frozen video with
+        // no JS error looked identical to one that was simply never asked to do anything.
+        // readyState: 0=HAVE_NOTHING 1=HAVE_METADATA 2=HAVE_CURRENT_DATA 3=HAVE_FUTURE_DATA
+        // 4=HAVE_ENOUGH_DATA. networkState: 0=EMPTY 1=IDLE 2=LOADING 3=NO_SOURCE.
+        onWaiting={() => {
+          const el = ref && typeof ref === 'object' ? ref.current : null;
+          console.warn(`${logTimestamp()} 🎬 [Video #${index}] WAITING - playback stalled, browser wants more data`, {
+            filename: media?.filename,
+            currentTime: el?.currentTime,
+            readyState: el?.readyState,
+            networkState: el?.networkState,
+            bufferedRange: el && el.buffered.length > 0
+              ? `${el.buffered.start(0).toFixed(1)}-${el.buffered.end(el.buffered.length - 1).toFixed(1)}`
+              : 'none',
+          });
+        }}
+        onPause={() => {
+          const el = ref && typeof ref === 'object' ? ref.current : null;
+          // The useLayoutEffect above legitimately pauses this element every time it
+          // becomes the HIDDEN slot during a transition — that pause event is expected and
+          // harmless. What we're hunting for is this event firing while `hidden` is false,
+          // i.e. the SHOWN video silently pausing itself (Chrome's autoplay-gesture pause,
+          // or anything else) — the Sequencer's clock-based scheduler never notices this,
+          // which is how a paused/frozen frame still hands off to the next montage on time.
+          // NOTE: a stack trace captured here would NOT show who called .pause() — the
+          // browser fires this event as a queued task, not synchronously inside the
+          // original .pause() call, so the stack only ever shows dispatch internals. To
+          // find the real caller, check the wider log around this line for one of the
+          // app's own pre-pause markers instead: "[App] Playback timer paused" (App.tsx
+          // pausePlaybackTimer, reached from Sequencer.pause()/ItemPlayer.pause()/
+          // VideoMediaFile.pause()) or "CommandsManager.pausePlayback" (a server-sent VLC
+          // pause command). If NEITHER appears right before this, nothing in our own code
+          // asked for a pause — it's the browser itself (autoplay policy, tab/system
+          // intervention, etc.).
+          console.warn(`${logTimestamp()} 🎬 [Video #${index}] PAUSE event fired`, {
+            filename: media?.filename,
+            hidden,
+            currentTime: el?.currentTime,
+            readyState: el?.readyState,
+            networkState: el?.networkState,
+            ended: el?.ended,
+          });
+        }}
+        onError={() => {
+          const el = ref && typeof ref === 'object' ? ref.current : null;
+          console.error(`${logTimestamp()} 🎬 [Video #${index}] ERROR event`, {
+            filename: media?.filename,
+            code: el?.error?.code,
+            message: el?.error?.message,
+          });
+        }}
+        // HOOK POINT for the "now showing" websocket message (not yet implemented — this is
+        // only the correctly-timed trigger point for it, added 2026-11-15 per discussion).
+        //
+        // THE PROBLEM THIS SOLVES: Play C's "now playing" title/caption (driven by
+        // webPlayerOverlayInfo.montageName in App.js) currently has no live feedback channel
+        // from the player at all — see App.js's own comment near its dead
+        // "webplayer-montage-changed" listener ("no feedback channel exists from the embedded
+        // webplayer back to App.js... nothing dispatches it"). The caption only ever changes on
+        // explicit manual navigation. Separately, and just as importantly: even a fixed/future
+        // feedback channel must NOT be fed from Sequencer.goNext()/showMedia() — those fire the
+        // instant the SCHEDULER decides to move on, regardless of whether the new video has
+        // actually painted anything yet. We directly observed this producing a false caption:
+        // title said "Panathenaic Stadium Athens" while the screen was still showing the
+        // previous montage's frozen last frame, because the new video was stuck in a 3.6s+
+        // network stall (see docs/video-freeze-server-connection-stall.md). Firing a "now
+        // showing" message from the scheduler would just relocate that same lie onto a
+        // websocket instead of fixing it.
+        //
+        // THE FIX: report "now showing" only from here — `onPlaying`, native HTML5 event,
+        // fires when the browser actually RESUMES/BEGINS real playback after having enough
+        // data (distinct from `canplay`, which can fire while still paused/hidden). Gated on
+        // `!hidden` so it only reports for the slot the viewer can actually see, never the
+        // background/preloading one. This guarantees whatever consumes the message — a future
+        // websocket send here, and whatever Play C does with it — only ever describes content
+        // that is genuinely on screen, never merely scheduled. If a load stalls, this event
+        // simply doesn't fire yet, so the OLD "now showing" message (still accurate) stands
+        // until the real one does — exactly the "never show faulty info" behavior we want.
+        onPlaying={() => {
+          if (!hidden) {
+            visibleTransitionCounter += 1;
+            const position = Sequencer.getCurrentPosition();
+            const montage = position?.getMontage();
+            console.log(`${logTimestamp()} 🎬 [Video #${index}] PLAYING #${visibleTransitionCounter} (visible, confirmed-rendered) — hook point for "now showing" report`, {
+              filename: media?.filename,
+              montageId: montage?.id,
+              montageName: montage?.name,
+              montageIndex: position?.getMontageIndex(),
+              trackIndex: position?.getTrackIndex(),
+              itemIndex: position?.getItemIndex(),
+            });
+            console.log(`${logTimestamp()} 🔔 [Video #${index}] Sequencer.onNowShowing is`, typeof Sequencer.onNowShowing === 'function' ? 'WIRED — calling it' : 'MISSING — title will not update');
+            if (position) {
+              Sequencer.onNowShowing?.(position.getMontageIndex(), position.getTrackIndex());
+            }
+            if (montage) {
+              wsTools.sendNowShowing(montage.id, position!.getTrackIndex() + 1);
+            }
+          }
+        }}
       />
     );
   }

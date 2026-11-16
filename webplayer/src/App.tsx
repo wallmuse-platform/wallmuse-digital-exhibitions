@@ -514,6 +514,21 @@ export default class WallmusePlayer extends React.Component {
 
     if (isSameVideoInTargetSlot) {
       console.log('[App.preloadVideo] ✅ Video already loaded in target slot', videoIndex, '- reusing existing instance:', media.filename);
+      // Rewind now, while still hidden — ported from webplayer2 commit 16c50c1 (PC player
+      // session, 2026-11-15). This slot already played this file through to the end on its
+      // last loop (the DOM element is never unmounted/reused across montage repeats), so
+      // showing it again means re-fetching from byte 0 — see docs/video-freeze-server-
+      // connection-stall.md for why that re-fetch can stall for seconds on a cold connection.
+      // Doing the rewind HERE, ~1.5s before the Sequencer actually switches to show it,
+      // starts that re-fetch earlier and while hidden, instead of at the exact moment the
+      // viewer is looking at it — the stall becomes far less likely to be visible. Pausing
+      // first avoids racing the seek against any in-flight playback state (autoPlay is now
+      // always false — see video.tsx — so this won't fight a background autoplay either).
+      const targetVideoRef = videoIndex === 1 ? this.video1Ref : this.video2Ref;
+      if (targetVideoRef?.current) {
+        targetVideoRef.current.pause();
+        targetVideoRef.current.currentTime = 0;
+      }
       return;
     }
 
@@ -705,11 +720,52 @@ export default class WallmusePlayer extends React.Component {
           videoReady: isVideoReady
         });
 
+        // This slot may have been muted/zeroed the last time it was the OTHER (hidden)
+        // slot — see the "pause and mute the other slot" cleanup below. Only the
+        // "switching to show it" branches used to restore volume/mute, so a video that
+        // lands here instead (already marked as the shown slot, e.g. via the pending/
+        // onVideoLoaded re-entry just below) could stay silent until the volume was
+        // touched manually. Apply it here too, regardless of readyState.
+        const normalizedVolume = Math.max(0, Math.min(1, this.state.volume / 100));
+        // Only unmute when there's actually something to hear. Unmuting at volume 0 is
+        // pointless (silent either way) but still asks Chrome's autoplay-gesture check to
+        // bless it — if that check doesn't like the timing, Chrome pauses the video instead
+        // of just ignoring the unmute, which froze playback mid-montage (see
+        // docs/video-freeze-autoplay-pause-brief.md). Staying muted is always permitted.
+        if (normalizedVolume > 0) {
+          currentVideoRef.current.muted = false;
+        }
+        currentVideoRef.current.volume = normalizedVolume;
+
         // CRITICAL FIX: If video not ready yet, store as pending and wait for onVideoLoaded
         if (currentVideoRef.current.readyState === 0 && !isVideoReady) {
           console.log('[App.showVideo] ⏳ Video not ready yet (readyState: 0), setting as pending:', media.filename);
           this.pendingShowVideo = media;
           return;
+        }
+
+        // Ported from webplayer2 (PC player session, 2026-11-15): this branch means the
+        // Sequencer asked to show media that, per our own state, is ALREADY the shown slot —
+        // so historically we only ever called play() here and left currentTime alone. That's
+        // wrong whenever the Sequencer's own clock has restarted independently of this video
+        // element's real position — e.g. a "next"/"montage N" command re-targeting the montage
+        // that's already on screen: Sequencer.goMontage() resets ITS clock to 0, but this
+        // branch doesn't know that and just resumes playback from wherever the video already
+        // was. Observed result: the video reaches ITS real end early (per its own unmoved
+        // currentTime), then sits frozen on the last frame for tens of seconds until the
+        // Sequencer's independently-running clock finally catches up and moves on. Also covers
+        // the video having simply reached `ended` on its own. Re-seek whenever either is true.
+        if (
+          currentVideoRef.current.ended ||
+          Math.abs(currentVideoRef.current.currentTime - media.offset) > 2
+        ) {
+          console.log('[App.showVideo] Re-seeking already-shown video to Sequencer offset:', {
+            filename: media.filename,
+            was: currentVideoRef.current.currentTime,
+            ended: currentVideoRef.current.ended,
+            target: media.offset,
+          });
+          currentVideoRef.current.currentTime = media.offset;
         }
 
         currentVideoRef.current.play().catch(err => {
@@ -726,9 +782,31 @@ export default class WallmusePlayer extends React.Component {
         if (this.video1Ref?.current) {
           // CRITICAL FIX: Unmute and set volume BEFORE playing
           const normalizedVolume = Math.max(0, Math.min(1, this.state.volume / 100));
-          this.video1Ref.current.muted = false;
+          // See the matching comment above in the "already showing" branch: don't call
+          // .muted = false when there's nothing to hear — it risks Chrome's autoplay-pause.
+          if (normalizedVolume > 0) {
+            this.video1Ref.current.muted = false;
+          }
           this.video1Ref.current.volume = normalizedVolume;
           console.log(`[App.showVideo] Unmuted video-1, volume set to ${normalizedVolume}`);
+
+          // Same re-seek guard as the "already showing" branch above (ported from
+          // webplayer2, PC player session 2026-11-15) — belt-and-suspenders alongside
+          // preloadVideo's own rewind-while-hidden fix: covers any case where this slot's
+          // currentTime still doesn't match where the Sequencer actually wants to start
+          // (e.g. ended, or drifted) by the time we're about to show it.
+          if (
+            this.video1Ref.current.ended ||
+            Math.abs(this.video1Ref.current.currentTime - media.offset) > 2
+          ) {
+            console.log('[App.showVideo] Re-seeking video-1 to Sequencer offset:', {
+              filename: media.filename,
+              was: this.video1Ref.current.currentTime,
+              ended: this.video1Ref.current.ended,
+              target: media.offset,
+            });
+            this.video1Ref.current.currentTime = media.offset;
+          }
 
           this.video1Ref.current.play().catch(err => {
             console.log('[App.showVideo] Play failed after switch:', err.message);
@@ -750,9 +828,31 @@ export default class WallmusePlayer extends React.Component {
         if (this.video2Ref?.current) {
           // CRITICAL FIX: Unmute and set volume BEFORE playing
           const normalizedVolume = Math.max(0, Math.min(1, this.state.volume / 100));
-          this.video2Ref.current.muted = false;
+          // See the matching comment above in the "already showing" branch: don't call
+          // .muted = false when there's nothing to hear — it risks Chrome's autoplay-pause.
+          if (normalizedVolume > 0) {
+            this.video2Ref.current.muted = false;
+          }
           this.video2Ref.current.volume = normalizedVolume;
           console.log(`[App.showVideo] Unmuted video-2, volume set to ${normalizedVolume}`);
+
+          // Same re-seek guard as the "already showing" branch above (ported from
+          // webplayer2, PC player session 2026-11-15) — belt-and-suspenders alongside
+          // preloadVideo's own rewind-while-hidden fix: covers any case where this slot's
+          // currentTime still doesn't match where the Sequencer actually wants to start
+          // (e.g. ended, or drifted) by the time we're about to show it.
+          if (
+            this.video2Ref.current.ended ||
+            Math.abs(this.video2Ref.current.currentTime - media.offset) > 2
+          ) {
+            console.log('[App.showVideo] Re-seeking video-2 to Sequencer offset:', {
+              filename: media.filename,
+              was: this.video2Ref.current.currentTime,
+              ended: this.video2Ref.current.ended,
+              target: media.offset,
+            });
+            this.video2Ref.current.currentTime = media.offset;
+          }
 
           this.video2Ref.current.play().catch(err => {
             console.log('[App.showVideo] Play failed after switch:', err.message);

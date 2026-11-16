@@ -1,11 +1,26 @@
 import { ImageMediaFile } from '../media/ImageMediaFile';
 import React from 'react';
+import { wsTools } from '../manager/start';
+import { Sequencer } from '../manager/Sequencer';
+import { datetimeToString } from '../manager/Helper';
 import { ZoomAndPanParams } from '../dao/ZoomAndPan';
 import {
   calculateTranslateForPosition,
   mapAnimationType,
   hashZoomAndPanParams,
 } from '../utils/kenBurnsGenerator';
+
+// Same "[YYYY-MM-DD HH:MM:SS.mmm]" format LogHelper/video.tsx use, so these lines line up
+// against the Sequencer's own timestamped transition logs when comparing a pasted capture.
+const logTimestamp = () => `[${datetimeToString(new Date())}]`;
+
+// TEMPORARY (2026-11-16, ported from webplayer2B): mirrors video.tsx's
+// visibleTransitionCounter, but counts confirmed IMAGE fade-ins instead. Kept separate from
+// video's counter (rather than sharing one) so a pasted log makes clear from the prefix alone
+// ("SHOWING #" vs "PLAYING #") which media type produced a given now-showing report.
+// Module-scoped like video.tsx's, for the same reason: a single running sequence number
+// across all Image slots/instances, not reset per re-render.
+let visibleImageTransitionCounter = 0;
 
 // Track injected keyframes to avoid duplicates
 const injectedKeyframes = new Set<string>();
@@ -95,12 +110,66 @@ export const Image = React.forwardRef<HTMLImageElement, ImageProps>(
       }
     }, [zoomAndPan, media, index]);
 
-    // Track visibility changes for cross-fade transitions
+    // Track visibility changes for cross-fade transitions, and — on the fade-in (SHOWING)
+    // transition only — report "now showing" exactly like video.tsx's onPlaying handler does.
+    //
+    // WHY THIS IS NEEDED: the "now showing" signal (Sequencer.onNowShowing + wsTools.
+    // sendNowShowing — see video.tsx's onPlaying handler for the full design rationale: fire
+    // only from confirmed-rendered content, never from the scheduler's decision point) was
+    // originally wired ONLY from <video>'s native `playing` event. That left a gap: whenever a
+    // montage transition lands on an IMAGE first (not a video), nothing fires a confirmed-render
+    // report at all, so the title/overlay stays stuck on the PREVIOUS montage's name until — if
+    // ever — a video item later in that same montage's track happens to play.
+    //
+    // Reproduced 2026-11-16 (test repo, ported here) with a 2-montage test playlist (montage 1:
+    // a single video; montage 0, track 2: image, image, video, image, image). Going 0→1 updated
+    // the title immediately, because montage 1 starts with its video, so onPlaying fired right
+    // away. Going 1→0 left the title reading montage 1's OLD name for the two leading images'
+    // full ~60s, only correcting once track 0's embedded video (the 3rd item) finally played. An
+    // all-image montage would never correct at all. This SHOWING branch closes that gap the same
+    // way video.tsx does: report only on the actual fade-in (confirmed on screen, `hidden` just
+    // became false), never when showMedia() first schedules the image — that's the same
+    // "scheduler's decision, not confirmed render" trap the video side already avoids.
     React.useEffect(() => {
       if (media) {
+        const isShowing = !hidden;
         console.log(
-          `[Image #${index}] 🎭 TRANSITION: ${hidden ? 'HIDING (fade out)' : 'SHOWING (fade in)'} - ${media.filename}`
+          `[Image #${index}] 🎭 TRANSITION: ${isShowing ? 'SHOWING (fade in)' : 'HIDING (fade out)'} - ${media.filename}`
         );
+
+        if (isShowing) {
+          visibleImageTransitionCounter += 1;
+          const position = Sequencer.getCurrentPosition();
+          const montage = position?.getMontage();
+          console.log(
+            `${logTimestamp()} 🖼️ [Image #${index}] SHOWING #${visibleImageTransitionCounter} (visible, confirmed-rendered) — hook point for "now showing" report`,
+            {
+              filename: media.filename,
+              montageId: montage?.id,
+              montageName: montage?.name,
+              montageIndex: position?.getMontageIndex(),
+              trackIndex: position?.getTrackIndex(),
+              itemIndex: position?.getItemIndex(),
+            }
+          );
+
+          // THE actual "now showing" report, per the comment on Sequencer.onNowShowing's
+          // declaration: fired here (confirmed rendered), not from showMedia (merely scheduled).
+          console.log(
+            `${logTimestamp()} 🔔 [Image #${index}] Sequencer.onNowShowing is`,
+            typeof Sequencer.onNowShowing === 'function' ? 'WIRED — calling it' : 'MISSING — title will not update'
+          );
+          if (position) {
+            Sequencer.onNowShowing?.(position.getMontageIndex(), position.getTrackIndex());
+          }
+
+          // Same report, over the websocket, for OTHER screens/windows of this environment —
+          // see video.tsx's identical call for why only the montage's real id (not
+          // montageIndex) survives the trip.
+          if (montage) {
+            wsTools.sendNowShowing(montage.id, position!.getTrackIndex() + 1);
+          }
+        }
       }
     }, [hidden, media, index]);
 
