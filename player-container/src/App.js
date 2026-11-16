@@ -1219,9 +1219,24 @@ function PlayerIntegration({ theme, volumeRef, playModeRef }) {
 
   // Send navigation command when track changes
   useEffect(() => {
+    // NOTE: currentPlaylist is intentionally NOT required to be truthy here. The default
+    // playlist (the one used when nothing else is selected) has id === undefined by design —
+    // see the same convention documented at calculateOverlayInfo above. A `currentPlaylist &&`
+    // guard here would silently skip this whole effect, including the useNavigationManager()
+    // call below that actually drives the local embedded player (via navigationManager's
+    // same-window "webplayer-navigate" event — no network round trip involved). That's exactly
+    // what was happening: on a default-playlist house, onFwd/onRew updated the index/overlay
+    // state optimistically, but the player itself never moved, because this effect bailed out
+    // before ever calling useNavigationManager(), with no log and no error. Confirmed 2026-11-16
+    // (ported from Play C 3) via a house (576, free plan, default playlist) where Next updated
+    // the overlay but not the video, versus a house (619, named playlist) where the identical
+    // code path worked — the only difference was this guard's truthiness check on
+    // currentPlaylist, not anything server side. useNavigationManager/navigationManager.
+    // addCommand already accept playlist: undefined (handleMontageNavigation sends that shape
+    // unconditionally too), so there is nothing below that actually requires currentPlaylist to
+    // be set.
     if (
       selectedTrackForScreen &&
-      currentPlaylist &&
       selectedPlaylistPositionForWebPlayer !== null
     ) {
       // Guard: don't echo a confirmed-render report back to the player as a navigation
