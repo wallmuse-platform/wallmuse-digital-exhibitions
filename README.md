@@ -41,7 +41,7 @@ Traditional solutions fall short on either security or user experience. WallMuse
 │   Companion App (descriptions-app)  │  CreateMontage (Exhibition Planner)│
 │   Real-time metadata on handhelds   │  Timeline editor, rights, tools   │
 ├─────────────────────────────────────┴───────────────────────────────────┤
-│                      Backend Server (Proprietary)                       │
+│                      Backend Server (Dual Licence)                      │
 │         REST API · WebSocket · DRM Encryption · MySQL · Storage         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -285,15 +285,13 @@ This project uses a dual-licensing model:
 
 All frontend code in this repository is licensed under the **MIT License**, allowing free use, modification, and distribution.
 
-### Backend Server (Proprietary)
-- **Backend API & Services** - Proprietary License
+### Backend Server (Dual Licence)
+- **Backend API & Services**
 
-The backend server code is **not publicly available** and remains proprietary to protect our core infrastructure and commercial services.
+The backend is available under two terms:
 
-**Why this model?**
-- **Frontend:** Maximum freedom for developers and integrators
-- **Backend:** Protected as trade secret, ensuring competitive advantage
-- **Enterprise options:** Custom licensing available for organizations requiring on-premise deployment
+- **Research and teaching use:** accessible on request to academic institutions for non-commercial research and educational deployment
+- **Commercial use:** proprietary licence for professional and enterprise deployment
 
 See [LICENSE](./LICENSE) for full details.
 
