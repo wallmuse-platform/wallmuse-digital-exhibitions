@@ -2,21 +2,15 @@
 
 ![WallMuse Platform](https://wallmuse.com/wp-content/uploads/wallmuse-logo.png)
 
-**WallMuse** is a comprehensive platform for creating, managing, and displaying interactive digital exhibitions across multiple devices - from museum video walls to personal smartphones.
+**WallMuse** is a digital exhibitions and structured creative participation platform. Open-source core with enterprise and research deployments.
 
 ## 🎯 Platform Overview
 
-After years of development in the cultural tech space, WallMuse provides a complete ecosystem for digital content display and exhibition management.
+WallMuse serves two overlapping use cases on the same platform:
 
-### 🏗️ Solved Challenges
+**Cultural and educational deployment** — museums, libraries, universities and cultural institutions displaying synchronised exhibitions across screens, with visitor companion apps, QR codes per artwork, and multi-language metadata.
 
-Cultural institutions, artists, and content creators need to:
-- Protect copyrighted content with enterprise-grade DRM
-- Deliver synchronized, immersive experiences across multiple devices and screens
-- Create professional multi-track compositions with custom interactive tools
-- Support everything from single-screen exhibitions to complex multi-room installations
-
-Traditional solutions fall short on either security or user experience. WallMuse solves both.
+**Organisational deployment** — enterprises, public sector bodies and research institutions running structured creative participation: workshops, innovation programmes and audience engagement where the goal is more differentiated input through collective participation.
 
 ### Display Targets
 
@@ -306,10 +300,10 @@ For backend licensing inquiries, contact: support[at]wallmuse.com
 ## 🏛️ Use Cases
 
 WallMuse is designed for:
-- **Museums and Galleries** - Digital exhibitions and interactive displays
+- **Museums and Libraries** - Digital exhibitions and interactive displays
 - **Educational Institutions** - Classroom presentations and learning content
 - **Corporate Environments** - Digital signage and information displays
-- **Personal Use** - Home media galleries and photo/video collections
+- **Personal Use** - Home media collections and photo/video displays
 - **Cultural Events** - Temporary exhibitions and festival installations
 
 ---
